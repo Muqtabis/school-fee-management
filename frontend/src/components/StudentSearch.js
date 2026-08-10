@@ -1,43 +1,95 @@
 import { useState } from "react";
 
 function StudentSearch({ onSearch }) {
-  const [keyword, setKeyword] = useState("");
 
-  const handleChange = (e) => {
-    const value = e.target.value;
+    const [keyword, setKeyword] = useState("");
 
-    setKeyword(value);
 
-    onSearch(value);
-  };
+    /*
+    ====================================================
+    HANDLE SEARCH
+    ====================================================
+    */
 
-  const clearSearch = () => {
-    setKeyword("");
-    onSearch("");
-  };
+    const handleChange = (e) => {
 
-  return (
-    <div className="search-container">
+        const value = e.target.value;
 
-      <input
-        type="text"
-        placeholder="Search by Student Name, Class or Father Name..."
-        value={keyword}
-        onChange={handleChange}
-        className="search-input"
-      />
+        setKeyword(value);
 
-      {keyword && (
-        <button
-          className="clear-btn"
-          onClick={clearSearch}
-        >
-          Clear
-        </button>
-      )}
+        onSearch(value);
 
-    </div>
-  );
+    };
+
+
+    /*
+    ====================================================
+    CLEAR SEARCH
+    ====================================================
+    */
+
+    const clearSearch = () => {
+
+        setKeyword("");
+
+        onSearch("");
+
+    };
+
+
+    /*
+    ====================================================
+    RENDER
+    ====================================================
+    */
+
+    return (
+
+        <div className="student-search">
+
+            <div className="search-input-wrapper">
+
+                {/* Search Icon */}
+
+                <span className="search-icon">
+                    🔍
+                </span>
+
+
+                {/* Search Input */}
+
+                <input
+                    type="text"
+                    value={keyword}
+                    onChange={handleChange}
+                    placeholder="Search by name, roll number, class, father name or contact..."
+                    className="search-input"
+                />
+
+
+                {/* Clear Button */}
+
+                {keyword && (
+
+                    <button
+                        type="button"
+                        className="clear-search-btn"
+                        onClick={clearSearch}
+                        title="Clear search"
+                    >
+
+                        ✕
+
+                    </button>
+
+                )}
+
+            </div>
+
+        </div>
+
+    );
+
 }
 
 export default StudentSearch;

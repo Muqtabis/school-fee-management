@@ -1,181 +1,672 @@
 function SummaryTable({
-  payments = [],
-  onEdit,
-  onDelete
+    payments = [],
+    onEdit,
+    onDelete
 }) {
 
-  const formatDate = (date) => {
 
-    if (!date) return "-";
+    const formatDate = (date) => {
 
-    return new Date(date).toLocaleDateString("en-IN");
+        if (!date) return "-";
 
-  };
+        return new Date(
+            date
+        ).toLocaleDateString(
+            "en-IN"
+        );
 
-  const getModeClass = (mode) => {
+    };
 
-    switch (mode?.toLowerCase()) {
 
-      case "cash":
-        return "mode-cash";
+    const getModeClass = (mode) => {
 
-      case "upi":
-        return "mode-upi";
+        switch (
+            mode?.toLowerCase()
+        ) {
 
-      case "card":
-        return "mode-card";
+            case "cash":
+                return "mode-cash";
 
-      case "bank transfer":
-        return "mode-bank";
+            case "upi":
+                return "mode-upi";
 
-      default:
-        return "mode-default";
+            case "card":
+                return "mode-card";
 
-    }
+            case "bank transfer":
+                return "mode-bank";
 
-  };
+            default:
+                return "mode-default";
 
-  return (
+        }
 
-    <div className="table-container">
+    };
 
-      <table>
 
-        <thead>
+    const printReceipt = async (paymentId) => {
 
-          <tr>
+        try {
 
-            <th>#</th>
+            const res =
+                await fetch(
+                    `http://localhost:5000/payments/receipt/${paymentId}`
+                );
 
-            <th>Student</th>
 
-            <th>Amount</th>
+            if (!res.ok) {
 
-            <th>Date</th>
+                throw new Error(
+                    "Receipt could not be loaded."
+                );
 
-            <th>Mode</th>
+            }
 
-            <th>Remarks</th>
 
-            <th>Actions</th>
+            const payment =
+                await res.json();
 
-          </tr>
 
-        </thead>
+            const receiptWindow =
+                window.open(
+                    "",
+                    "_blank",
+                    "width=800,height=900"
+                );
 
-        <tbody>
 
-          {
+            if (!receiptWindow) {
 
-            payments.length === 0 ?
+                alert(
+                    "Please allow popups to print the receipt."
+                );
 
-              (
+                return;
 
-                <tr>
+            }
 
-                  <td
-                    colSpan="7"
-                    className="empty-row"
-                  >
 
-                    No payment records found.
+            receiptWindow.document.write(`
 
-                  </td>
+                <!DOCTYPE html>
 
-                </tr>
+                <html>
 
-              )
+                <head>
 
-              :
+                    <title>
+                        Fee Receipt
+                    </title>
 
-              payments.map((payment, index) => (
+                    <style>
 
-                <tr key={payment.id}>
+                        body {
 
-                  <td>{index + 1}</td>
+                            font-family:
+                                Arial,
+                                sans-serif;
 
-                  <td>
+                            padding: 40px;
 
-                    {payment.studentName}
+                            color: #111;
 
-                  </td>
+                        }
 
-                  <td>
+                        .receipt {
 
-                    ₹ {Number(payment.amount).toLocaleString()}
+                            max-width:
+                                650px;
 
-                  </td>
+                            margin:
+                                auto;
 
-                  <td>
+                            border:
+                                1px solid #ddd;
 
-                    {formatDate(payment.paymentDate)}
+                            padding:
+                                30px;
 
-                  </td>
+                        }
 
-                  <td>
+                        .school {
 
-                    <span
-                      className={`payment-badge ${getModeClass(payment.paymentMode)}`}
-                    >
+                            text-align:
+                                center;
 
-                      {payment.paymentMode}
+                            border-bottom:
+                                2px solid #111;
 
-                    </span>
+                            padding-bottom:
+                                15px;
 
-                  </td>
+                            margin-bottom:
+                                20px;
 
-                  <td>
+                        }
 
-                    {payment.remarks || "-"}
+                        .school h1 {
 
-                  </td>
+                            margin:
+                                0;
 
-                  <td>
+                        }
 
-                    <div className="action-buttons">
+                        .school p {
 
-                      <button
+                            margin:
+                                5px 0;
 
-                        className="edit-btn"
+                        }
 
-                        onClick={() => onEdit(payment)}
+                        .receipt-title {
 
-                      >
+                            text-align:
+                                center;
 
-                        Edit
+                            margin:
+                                20px 0;
 
-                      </button>
+                        }
 
-                      <button
+                        .details {
 
-                        className="delete-btn"
+                            width:
+                                100%;
 
-                        onClick={() => onDelete(payment.id)}
+                            border-collapse:
+                                collapse;
 
-                      >
+                        }
 
-                        Delete
+                        .details td {
 
-                      </button>
+                            padding:
+                                10px;
+
+                            border-bottom:
+                                1px solid #eee;
+
+                        }
+
+                        .label {
+
+                            font-weight:
+                                bold;
+
+                            width:
+                                40%;
+
+                        }
+
+                        .amount {
+
+                            font-size:
+                                24px;
+
+                            font-weight:
+                                bold;
+
+                        }
+
+                        .footer {
+
+                            margin-top:
+                                30px;
+
+                            text-align:
+                                center;
+
+                            font-size:
+                                13px;
+
+                        }
+
+                        @media print {
+
+                            body {
+
+                                padding:
+                                    0;
+
+                            }
+
+                            .receipt {
+
+                                border:
+                                    none;
+
+                            }
+
+                        }
+
+                    </style>
+
+                </head>
+
+
+                <body>
+
+                    <div class="receipt">
+
+                        <div class="school">
+
+                            <h1>
+                                THE AGE SCHOOL
+                            </h1>
+
+                            <p>
+                                School Fee Receipt
+                            </p>
+
+                        </div>
+
+
+                        <h2
+                            class="receipt-title"
+                        >
+                            PAYMENT RECEIPT
+                        </h2>
+
+
+                        <table
+                            class="details"
+                        >
+
+                            <tr>
+
+                                <td class="label">
+                                    Receipt No.
+                                </td>
+
+                                <td>
+                                    REC-${payment.id}
+                                </td>
+
+                            </tr>
+
+
+                            <tr>
+
+                                <td class="label">
+                                    Date
+                                </td>
+
+                                <td>
+                                    ${formatDate(
+                                        payment.paymentDate
+                                    )}
+                                </td>
+
+                            </tr>
+
+
+                            <tr>
+
+                                <td class="label">
+                                    Student Name
+                                </td>
+
+                                <td>
+                                    ${payment.studentName || "-"}
+                                </td>
+
+                            </tr>
+
+
+                            <tr>
+
+                                <td class="label">
+                                    Roll Number
+                                </td>
+
+                                <td>
+                                    ${payment.rollNumber || "-"}
+                                </td>
+
+                            </tr>
+
+
+                            <tr>
+
+                                <td class="label">
+                                    Class
+                                </td>
+
+                                <td>
+                                    ${payment.className || "-"}
+                                </td>
+
+                            </tr>
+
+
+                            <tr>
+
+                                <td class="label">
+                                    Father Name
+                                </td>
+
+                                <td>
+                                    ${payment.fatherName || "-"}
+                                </td>
+
+                            </tr>
+
+
+                            <tr>
+
+                                <td class="label">
+                                    Payment Mode
+                                </td>
+
+                                <td>
+                                    ${payment.paymentMode || "-"}
+                                </td>
+
+                            </tr>
+
+
+                            <tr>
+
+                                <td class="label">
+                                    Remarks
+                                </td>
+
+                                <td>
+                                    ${payment.remarks || "-"}
+                                </td>
+
+                            </tr>
+
+
+                            <tr>
+
+                                <td class="label">
+                                    Amount Paid
+                                </td>
+
+                                <td class="amount">
+                                    ₹ ${Number(
+                                        payment.amount || 0
+                                    ).toLocaleString("en-IN")}
+                                </td>
+
+                            </tr>
+
+                        </table>
+
+
+                        <div class="footer">
+
+                            <p>
+                                Thank you for your payment.
+                            </p>
+
+                            <p>
+                                This is a computer-generated receipt.
+                            </p>
+
+                        </div>
 
                     </div>
 
-                  </td>
+                </body>
 
-                </tr>
+                </html>
 
-              ))
+            `);
 
-          }
 
-        </tbody>
+            receiptWindow.document.close();
 
-      </table>
 
-    </div>
+            receiptWindow.focus();
 
-  );
+
+            setTimeout(() => {
+
+                receiptWindow.print();
+
+            }, 500);
+
+        } catch (error) {
+
+            console.error(error);
+
+            alert(
+                "Unable to generate receipt."
+            );
+
+        }
+
+    };
+
+
+    return (
+
+        <div className="table-container">
+
+            <table>
+
+                <thead>
+
+                    <tr>
+
+                        <th>#</th>
+
+                        <th>
+                            Student
+                        </th>
+
+                        <th>
+                            Roll No.
+                        </th>
+
+                        <th>
+                            Class
+                        </th>
+
+                        <th>
+                            Amount
+                        </th>
+
+                        <th>
+                            Date
+                        </th>
+
+                        <th>
+                            Mode
+                        </th>
+
+                        <th>
+                            Remarks
+                        </th>
+
+                        <th>
+                            Actions
+                        </th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    {payments.length === 0 ? (
+
+                        <tr>
+
+                            <td
+                                colSpan="9"
+                                className="empty-row"
+                            >
+
+                                No payment records found.
+
+                            </td>
+
+                        </tr>
+
+                    ) : (
+
+                        payments.map(
+                            (payment, index) => (
+
+                                <tr
+                                    key={
+                                        payment.id
+                                    }
+                                >
+
+                                    <td>
+                                        {index + 1}
+                                    </td>
+
+
+                                    <td>
+                                        {
+                                            payment.studentName ||
+                                            "-"
+                                        }
+                                    </td>
+
+
+                                    <td>
+                                        {
+                                            payment.rollNumber ||
+                                            "-"
+                                        }
+                                    </td>
+
+
+                                    <td>
+                                        {
+                                            payment.className ||
+                                            "-"
+                                        }
+                                    </td>
+
+
+                                    <td>
+
+                                        <strong>
+                                            ₹{" "}
+                                            {Number(
+                                                payment.amount ||
+                                                0
+                                            ).toLocaleString(
+                                                "en-IN"
+                                            )}
+                                        </strong>
+
+                                    </td>
+
+
+                                    <td>
+                                        {
+                                            formatDate(
+                                                payment.paymentDate
+                                            )
+                                        }
+                                    </td>
+
+
+                                    <td>
+
+                                        <span
+                                            className={
+                                                `payment-badge ${
+                                                    getModeClass(
+                                                        payment.paymentMode
+                                                    )
+                                                }`
+                                            }
+                                        >
+
+                                            {
+                                                payment.paymentMode
+                                            }
+
+                                        </span>
+
+                                    </td>
+
+
+                                    <td>
+                                        {
+                                            payment.remarks ||
+                                            "-"
+                                        }
+                                    </td>
+
+
+                                    <td>
+
+                                        <div
+                                            className="action-buttons"
+                                        >
+
+                                            <button
+                                                className="receipt-btn"
+                                                onClick={() =>
+                                                    printReceipt(
+                                                        payment.id
+                                                    )
+                                                }
+                                            >
+
+                                                Receipt
+
+                                            </button>
+
+
+                                            <button
+                                                className="edit-btn"
+                                                onClick={() =>
+                                                    onEdit(
+                                                        payment
+                                                    )
+                                                }
+                                            >
+
+                                                Edit
+
+                                            </button>
+
+
+                                            <button
+                                                className="delete-btn"
+                                                onClick={() =>
+                                                    onDelete(
+                                                        payment.id
+                                                    )
+                                                }
+                                            >
+
+                                                Delete
+
+                                            </button>
+
+                                        </div>
+
+                                    </td>
+
+                                </tr>
+
+                            )
+                        )
+
+                    )}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    );
 
 }
+
 
 export default SummaryTable;

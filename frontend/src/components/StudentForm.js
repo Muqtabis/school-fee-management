@@ -1,18 +1,44 @@
 import { useEffect, useState } from "react";
+
 import api from "../services/api";
+
 
 function StudentForm({ student, onClose }) {
 
     const [formData, setFormData] = useState({
+
         studentName: "",
+        rollNumber: "",
         className: "",
         fatherName: "",
         contact1: "",
         previousDues: "",
         tuitionFee: ""
+
     });
 
-    const [loading, setLoading] = useState(false);
+
+    const [loading, setLoading] =
+        useState(false);
+
+
+    const classes = [
+
+        "LKG",
+        "UKG",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10"
+
+    ];
+
 
     useEffect(() => {
 
@@ -20,17 +46,26 @@ function StudentForm({ student, onClose }) {
 
             setFormData({
 
-                studentName: student.studentName || "",
+                studentName:
+                    student.studentName || "",
 
-                className: student.className || "",
+                rollNumber:
+                    student.rollNumber || "",
 
-                fatherName: student.fatherName || "",
+                className:
+                    student.className || "",
 
-                contact1: student.contact1 || "",
+                fatherName:
+                    student.fatherName || "",
 
-                previousDues: student.previousDues || "",
+                contact1:
+                    student.contact1 || "",
 
-                tuitionFee: student.tuitionFee || ""
+                previousDues:
+                    student.previousDues || "",
+
+                tuitionFee:
+                    student.tuitionFee || ""
 
             });
 
@@ -38,25 +73,29 @@ function StudentForm({ student, onClose }) {
 
     }, [student]);
 
+
     const handleChange = (e) => {
 
         setFormData({
 
             ...formData,
 
-            [e.target.name]: e.target.value
+            [e.target.name]:
+                e.target.value
 
         });
 
     };
 
+
     const handleSubmit = async (e) => {
 
         e.preventDefault();
 
-        try {
+        setLoading(true);
 
-            setLoading(true);
+
+        try {
 
             if (student) {
 
@@ -74,29 +113,24 @@ function StudentForm({ student, onClose }) {
 
             }
 
+
             onClose();
 
-        }
-
-        catch (error) {
+        } catch (error) {
 
             alert(
-
                 error.response?.data?.message ||
-
-                "Operation Failed"
-
+                "Unable to save student."
             );
 
-        }
-
-        finally {
+        } finally {
 
             setLoading(false);
 
         }
 
     };
+
 
     return (
 
@@ -108,28 +142,16 @@ function StudentForm({ student, onClose }) {
 
                     <h2>
 
-                        {
-
-                            student
-
-                                ?
-
-                                "Edit Student"
-
-                                :
-
-                                "Add Student"
-
-                        }
+                        {student
+                            ? "Edit Student"
+                            : "Add Student"}
 
                     </h2>
 
+
                     <button
-
                         className="close-btn"
-
                         onClick={onClose}
-
                     >
 
                         ✕
@@ -138,201 +160,203 @@ function StudentForm({ student, onClose }) {
 
                 </div>
 
+
                 <form
-
-                    onSubmit={handleSubmit}
-
                     className="student-form"
-
+                    onSubmit={handleSubmit}
                 >
 
                     <div className="form-group">
 
                         <label>
-
                             Student Name
-
                         </label>
 
                         <input
-
                             type="text"
-
                             name="studentName"
-
-                            value={formData.studentName}
-
+                            value={
+                                formData.studentName
+                            }
                             onChange={handleChange}
-
                             required
-
                         />
 
                     </div>
 
+
                     <div className="form-group">
 
                         <label>
+                            Roll Number
+                        </label>
 
+                        <input
+                            type="text"
+                            name="rollNumber"
+                            value={
+                                formData.rollNumber
+                            }
+                            onChange={handleChange}
+                            placeholder="Example: 101"
+                            required
+                        />
+
+                    </div>
+
+
+                    <div className="form-group">
+
+                        <label>
                             Class
-
                         </label>
 
-                        <input
-
-                            type="text"
-
+                        <select
                             name="className"
-
-                            value={formData.className}
-
+                            value={
+                                formData.className
+                            }
                             onChange={handleChange}
-
                             required
+                        >
 
-                        />
+                            <option value="">
+                                Select Class
+                            </option>
+
+
+                            {classes.map(
+                                (className) => (
+
+                                    <option
+                                        key={className}
+                                        value={className}
+                                    >
+
+                                        {className === "1" ||
+                                        className === "2" ||
+                                        className === "3" ||
+                                        className === "4" ||
+                                        className === "5" ||
+                                        className === "6" ||
+                                        className === "7" ||
+                                        className === "8" ||
+                                        className === "9" ||
+                                        className === "10"
+                                            ? `${className} Standard`
+                                            : className}
+
+                                    </option>
+
+                                )
+                            )}
+
+                        </select>
 
                     </div>
+
 
                     <div className="form-group">
 
                         <label>
-
                             Father Name
-
                         </label>
 
                         <input
-
                             type="text"
-
                             name="fatherName"
-
-                            value={formData.fatherName}
-
+                            value={
+                                formData.fatherName
+                            }
                             onChange={handleChange}
-
                             required
-
                         />
 
                     </div>
 
+
                     <div className="form-group">
 
                         <label>
-
                             Contact Number
-
                         </label>
 
                         <input
-
                             type="text"
-
                             name="contact1"
-
-                            value={formData.contact1}
-
+                            value={
+                                formData.contact1
+                            }
                             onChange={handleChange}
-
                             required
-
                         />
 
                     </div>
 
+
                     <div className="form-group">
 
                         <label>
-
                             Previous Dues
-
                         </label>
 
                         <input
-
                             type="number"
-
+                            min="0"
                             name="previousDues"
-
-                            value={formData.previousDues}
-
+                            value={
+                                formData.previousDues
+                            }
                             onChange={handleChange}
-
                         />
 
                     </div>
+
 
                     <div className="form-group">
 
                         <label>
-
                             Tuition Fee
-
                         </label>
 
                         <input
-
                             type="number"
-
+                            min="0"
                             name="tuitionFee"
-
-                            value={formData.tuitionFee}
-
+                            value={
+                                formData.tuitionFee
+                            }
                             onChange={handleChange}
-
                             required
-
                         />
 
                     </div>
+
 
                     <div className="modal-actions">
 
                         <button
-
                             type="button"
-
                             className="cancel-btn"
-
                             onClick={onClose}
-
                         >
 
                             Cancel
 
                         </button>
 
+
                         <button
-
                             type="submit"
-
                             className="save-btn"
-
+                            disabled={loading}
                         >
 
-                            {
-
-                                loading
-
-                                    ?
-
-                                    "Saving..."
-
-                                    :
-
-                                    student
-
-                                        ?
-
-                                        "Update Student"
-
-                                        :
-
-                                        "Save Student"
-
-                            }
+                            {loading
+                                ? "Saving..."
+                                : student
+                                    ? "Update Student"
+                                    : "Save Student"}
 
                         </button>
 

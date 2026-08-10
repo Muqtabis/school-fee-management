@@ -7,13 +7,52 @@ import SummaryTable from "../components/SummaryTable";
 
 import api from "../services/api";
 
+
 function PaymentsPage() {
 
-    const [payments, setPayments] = useState([]);
+    const [payments, setPayments] =
+        useState([]);
 
-    const [showForm, setShowForm] = useState(false);
+    const [showForm, setShowForm] =
+        useState(false);
 
-    const [selectedPayment, setSelectedPayment] = useState(null);
+    const [selectedPayment, setSelectedPayment] =
+        useState(null);
+
+
+    const [filters, setFilters] =
+        useState({
+
+            search: "",
+
+            className: "All",
+
+            paymentMode: "All",
+
+            dateFrom: "",
+
+            dateTo: ""
+
+        });
+
+
+    const classes = [
+
+        "LKG",
+        "UKG",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10"
+
+    ];
+
 
     useEffect(() => {
 
@@ -21,23 +60,122 @@ function PaymentsPage() {
 
     }, []);
 
-    const fetchPayments = async () => {
+
+    const fetchPayments = async (
+        customFilters = filters
+    ) => {
 
         try {
 
-            const res = await api.get("/payments");
+            const params = {};
+
+
+            if (customFilters.search) {
+
+                params.search =
+                    customFilters.search;
+
+            }
+
+
+            if (
+                customFilters.className !==
+                "All"
+            ) {
+
+                params.className =
+                    customFilters.className;
+
+            }
+
+
+            if (
+                customFilters.paymentMode !==
+                "All"
+            ) {
+
+                params.paymentMode =
+                    customFilters.paymentMode;
+
+            }
+
+
+            if (customFilters.dateFrom) {
+
+                params.dateFrom =
+                    customFilters.dateFrom;
+
+            }
+
+
+            if (customFilters.dateTo) {
+
+                params.dateTo =
+                    customFilters.dateTo;
+
+            }
+
+
+            const res =
+                await api.get(
+                    "/payments",
+                    { params }
+                );
+
 
             setPayments(res.data);
 
-        }
+        } catch (error) {
 
-        catch (err) {
-
-            console.log(err);
+            console.error(error);
 
         }
 
     };
+
+
+    const handleFilterChange = (e) => {
+
+        const newFilters = {
+
+            ...filters,
+
+            [e.target.name]:
+                e.target.value
+
+        };
+
+
+        setFilters(newFilters);
+
+        fetchPayments(newFilters);
+
+    };
+
+
+    const clearFilters = () => {
+
+        const cleared = {
+
+            search: "",
+
+            className: "All",
+
+            paymentMode: "All",
+
+            dateFrom: "",
+
+            dateTo: ""
+
+        };
+
+
+        setFilters(cleared);
+
+        fetchPayments(cleared);
+
+    };
+
 
     const addPayment = () => {
 
@@ -47,6 +185,7 @@ function PaymentsPage() {
 
     };
 
+
     const editPayment = (payment) => {
 
         setSelectedPayment(payment);
@@ -55,29 +194,37 @@ function PaymentsPage() {
 
     };
 
+
     const deletePayment = async (id) => {
 
-        const confirmDelete = window.confirm(
-            "Delete this payment?"
-        );
+        const confirmDelete =
+            window.confirm(
+                "Delete this payment?"
+            );
+
 
         if (!confirmDelete) return;
 
+
         try {
 
-            await api.delete(`/payments/${id}`);
+            await api.delete(
+                `/payments/${id}`
+            );
 
             fetchPayments();
 
-        }
+        } catch (error) {
 
-        catch (err) {
-
-            console.log(err);
+            alert(
+                error.response?.data?.message ||
+                "Unable to delete payment."
+            );
 
         }
 
     };
+
 
     return (
 
@@ -85,24 +232,176 @@ function PaymentsPage() {
 
             <Sidebar />
 
+
             <div className="main-content">
 
                 <Navbar />
+
 
                 <div className="page-content">
 
                     <div className="page-header">
 
-                        <h2>Payments</h2>
+                        <div>
+
+                            <h2>
+                                Payments
+                            </h2>
+
+                            <p>
+                                Manage and track
+                                school fee collections.
+                            </p>
+
+                        </div>
+
 
                         <button
                             className="primary-btn"
                             onClick={addPayment}
                         >
+
                             + Collect Fee
+
                         </button>
 
                     </div>
+
+
+                    <div className="payment-filters">
+
+                        <input
+                            type="text"
+                            name="search"
+                            value={
+                                filters.search
+                            }
+                            onChange={
+                                handleFilterChange
+                            }
+                            placeholder="Search student, roll number or class..."
+                            className="search-input"
+                        />
+
+
+                        <select
+                            name="className"
+                            value={
+                                filters.className
+                            }
+                            onChange={
+                                handleFilterChange
+                            }
+                            className="filter-select"
+                        >
+
+                            <option value="All">
+                                All Classes
+                            </option>
+
+
+                            {classes.map(
+                                (className) => (
+
+                                    <option
+                                        key={
+                                            className
+                                        }
+                                        value={
+                                            className
+                                        }
+                                    >
+
+                                        {
+                                            className ===
+                                            "LKG" ||
+                                            className ===
+                                            "UKG"
+                                                ? className
+                                                : `${className} Standard`
+                                        }
+
+                                    </option>
+
+                                )
+                            )}
+
+                        </select>
+
+
+                        <select
+                            name="paymentMode"
+                            value={
+                                filters.paymentMode
+                            }
+                            onChange={
+                                handleFilterChange
+                            }
+                            className="filter-select"
+                        >
+
+                            <option value="All">
+                                All Modes
+                            </option>
+
+                            <option value="Cash">
+                                Cash
+                            </option>
+
+                            <option value="UPI">
+                                UPI
+                            </option>
+
+                            <option value="Card">
+                                Card
+                            </option>
+
+                            <option value="Bank Transfer">
+                                Bank Transfer
+                            </option>
+
+                        </select>
+
+
+                        <input
+                            type="date"
+                            name="dateFrom"
+                            value={
+                                filters.dateFrom
+                            }
+                            onChange={
+                                handleFilterChange
+                            }
+                            className="filter-date"
+                        />
+
+
+                        <input
+                            type="date"
+                            name="dateTo"
+                            value={
+                                filters.dateTo
+                            }
+                            onChange={
+                                handleFilterChange
+                            }
+                            className="filter-date"
+                        />
+
+
+                        <button
+                            className="clear-btn"
+                            onClick={
+                                clearFilters
+                            }
+                        >
+
+                            Clear
+
+                        </button>
+
+                    </div>
+
 
                     <SummaryTable
                         payments={payments}
@@ -114,13 +413,14 @@ function PaymentsPage() {
 
             </div>
 
-            {
 
-                showForm &&
+            {showForm && (
 
                 <PaymentForm
 
-                    payment={selectedPayment}
+                    payment={
+                        selectedPayment
+                    }
 
                     onClose={() => {
 
@@ -132,12 +432,13 @@ function PaymentsPage() {
 
                 />
 
-            }
+            )}
 
         </div>
 
     );
 
 }
+
 
 export default PaymentsPage;
