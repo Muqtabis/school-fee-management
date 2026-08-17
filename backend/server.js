@@ -9,23 +9,56 @@ app.use(cors());
 
 app.use(express.json());
 
-app.use("/auth", require("./routes/auth"));
 
-app.use("/students", require("./routes/students"));
+// =====================================================
+// ROUTES
+// =====================================================
 
-app.use("/payments", require("./routes/payments"));
+app.use(
+    "/auth",
+    require("./routes/auth")
+);
 
-app.use("/notifications", require("./routes/notifications"));
+app.use(
+    "/students",
+    require("./routes/students")
+);
 
+app.use(
+    "/payments",
+    require("./routes/payments")
+);
+
+app.use(
+    "/notifications",
+    require("./routes/notifications")
+);
+
+app.use(
+    "/expenses",
+    require("./routes/expenses")
+);
+
+
+// =====================================================
+// HOME
+// =====================================================
 
 app.get("/", (req, res) => {
 
     res.json({
-        status: "THE AGE SCHOOL API Running"
+
+        status:
+            "THE AGE SCHOOL API Running"
+
     });
 
 });
 
+
+// =====================================================
+// SERVER
+// =====================================================
 
 app.listen(5000, () => {
 

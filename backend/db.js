@@ -27,6 +27,7 @@ db.serialize(() => {
         )
     `);
 
+
     // =====================================================
     // PAYMENTS TABLE
     // =====================================================
@@ -43,6 +44,7 @@ db.serialize(() => {
         )
     `);
 
+
     // =====================================================
     // USERS TABLE
     // =====================================================
@@ -57,6 +59,7 @@ db.serialize(() => {
             createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `);
+
 
     // =====================================================
     // NOTIFICATIONS TABLE
@@ -90,6 +93,34 @@ db.serialize(() => {
         )
     `);
 
+
+    // =====================================================
+    // EXPENSES TABLE
+    // =====================================================
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS expenses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            expenseName TEXT NOT NULL,
+
+            category TEXT NOT NULL,
+
+            amount REAL NOT NULL,
+
+            expenseDate TEXT NOT NULL,
+
+            paymentMode TEXT NOT NULL,
+
+            paidTo TEXT,
+
+            description TEXT,
+
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
 });
+
 
 module.exports = db;

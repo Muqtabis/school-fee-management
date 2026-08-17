@@ -2647,7 +2647,274 @@ tbody tr:hover {
         font-size: 14px;
     }
 }
+/* =========================================================
+   FINANCIAL CHART
+========================================================= */
 
+.section-title {
+    margin: 22px 0 12px;
+
+    color: var(--navy);
+
+    font-size: 15px;
+    font-weight: 650;
+}
+
+
+/* =========================================================
+   FINANCIAL CHART PANEL
+========================================================= */
+
+.financial-chart-panel {
+    margin-bottom: 20px;
+}
+
+
+.financial-chart {
+    padding: 22px 25px 25px;
+}
+
+
+/* =========================================================
+   CHART VALUE
+========================================================= */
+
+.chart-value {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    margin-bottom: 18px;
+
+    padding-bottom: 14px;
+
+    border-bottom: 1px solid var(--border-light);
+}
+
+.chart-value span {
+    color: var(--text-secondary);
+
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.chart-value strong {
+    color: var(--navy);
+
+    font-size: 18px;
+}
+
+
+/* =========================================================
+   BAR AREA
+========================================================= */
+
+.chart-area {
+    height: 240px;
+
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+
+    gap: 80px;
+
+    padding: 10px 30px 0;
+
+    border-bottom: 1px solid var(--border);
+}
+
+
+.chart-column {
+    height: 100%;
+
+    display: flex;
+    flex-direction: column;
+
+    align-items: center;
+    justify-content: flex-end;
+
+    gap: 9px;
+}
+
+
+.chart-bar-wrapper {
+    width: 75px;
+
+    height: 190px;
+
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+
+    background:
+        repeating-linear-gradient(
+            to top,
+            transparent,
+            transparent 46px,
+            #eef1f3 47px
+        );
+
+    border-radius: 6px 6px 0 0;
+}
+
+
+.chart-bar {
+    width: 55px;
+
+    min-height: 3px;
+
+    border-radius: 6px 6px 0 0;
+
+    transition:
+        height 0.5s ease;
+}
+
+
+.collection-bar {
+    background: var(--success);
+}
+
+
+.expense-bar {
+    background: var(--danger);
+}
+
+
+.chart-column > span {
+    color: var(--text-secondary);
+
+    font-size: 11px;
+    font-weight: 600;
+}
+
+
+/* =========================================================
+   CHART LEGEND
+========================================================= */
+
+.chart-legend {
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    gap: 25px;
+
+    margin-top: 18px;
+}
+
+
+.chart-legend > div {
+    display: flex;
+
+    align-items: center;
+
+    gap: 7px;
+
+    color: var(--text-secondary);
+
+    font-size: 11px;
+}
+
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+
+    display: inline-block;
+
+    border-radius: 50%;
+}
+
+
+.collection-dot {
+    background: var(--success);
+}
+
+
+.expense-dot {
+    background: var(--danger);
+}
+
+
+/* =========================================================
+   NET BALANCE
+========================================================= */
+
+.positive-balance {
+    color: var(--success) !important;
+}
+
+
+.negative-balance {
+    color: var(--danger) !important;
+}
+
+
+/* =========================================================
+   FINANCIAL CHART MOBILE
+========================================================= */
+
+@media (max-width: 768px) {
+
+    .financial-chart {
+        padding: 18px;
+    }
+
+
+    .chart-area {
+        height: 210px;
+
+        gap: 45px;
+
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+
+
+    .chart-bar-wrapper {
+        width: 60px;
+
+        height: 165px;
+    }
+
+
+    .chart-bar {
+        width: 45px;
+    }
+
+}
+
+
+@media (max-width: 480px) {
+
+    .chart-area {
+        gap: 25px;
+    }
+
+
+    .chart-bar-wrapper {
+        width: 52px;
+
+        height: 150px;
+    }
+
+
+    .chart-bar {
+        width: 40px;
+    }
+
+
+    .chart-legend {
+        gap: 15px;
+    }
+
+
+    .chart-value strong {
+        font-size: 16px;
+    }
+
+}
 
 /* =========================================================
    END OF THE AGE SCHOOL CLASSIC INSTITUTIONAL UI
