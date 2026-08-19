@@ -1,22 +1,25 @@
 const db = require("../db");
 
+const logAudit =
+    require("../utils/auditLogger");
 
-/*
-====================================================
-GET PAYMENTS
 
-Supports:
+const activePaymentCondition = `
+    (
+        status IS NULL
+        OR status != 'reversed'
+    )
+`;
 
-search
-studentId
-className
-paymentMode
-dateFrom
-dateTo
-====================================================
-*/
 
-exports.getPayments = (req, res) => {
+// =====================================================
+// GET PAYMENTS
+// =====================================================
+
+exports.getPayments = (
+    req,
+    res
+) => {
 
     const {
         search,
@@ -30,17 +33,35 @@ exports.getPayments = (req, res) => {
 
     let sql = `
         SELECT
+
             payments.*,
+
             students.studentName,
             students.rollNumber,
             students.className,
-            students.fatherName
+            students.fatherName,
+
+            ay.name AS academicYearName
+
         FROM payments
 
         LEFT JOIN students
-        ON payments.studentId = students.id
+            ON payments.studentId =
+               students.id
 
-        WHERE 1=1
+        LEFT JOIN student_fee_accounts sfa
+            ON payments.feeAccountId =
+               sfa.id
+
+        LEFT JOIN student_enrollments se
+            ON sfa.enrollmentId =
+               se.id
+
+        LEFT JOIN academic_years ay
+            ON se.academicYearId =
+               ay.id
+
+        WHERE 1 = 1
     `;
 
 
@@ -51,13 +72,23 @@ exports.getPayments = (req, res) => {
 
         sql += `
             AND (
-                LOWER(students.studentName) LIKE LOWER(?)
-                OR LOWER(students.rollNumber) LIKE LOWER(?)
-                OR LOWER(students.className) LIKE LOWER(?)
+                LOWER(
+                    students.studentName
+                ) LIKE LOWER(?)
+
+                OR LOWER(
+                    students.rollNumber
+                ) LIKE LOWER(?)
+
+                OR LOWER(
+                    students.className
+                ) LIKE LOWER(?)
             )
         `;
 
-        const value = `%${search}%`;
+        const value =
+            `%${search}%`;
+
 
         params.push(
             value,
@@ -74,7 +105,9 @@ exports.getPayments = (req, res) => {
             AND payments.studentId = ?
         `;
 
-        params.push(studentId);
+        params.push(
+            studentId
+        );
 
     }
 
@@ -88,18 +121,25 @@ exports.getPayments = (req, res) => {
             AND students.className = ?
         `;
 
-        params.push(className);
+        params.push(
+            className
+        );
 
     }
 
 
-    if (paymentMode && paymentMode !== "All") {
+    if (
+        paymentMode &&
+        paymentMode !== "All"
+    ) {
 
         sql += `
             AND payments.paymentMode = ?
         `;
 
-        params.push(paymentMode);
+        params.push(
+            paymentMode
+        );
 
     }
 
@@ -110,7 +150,9 @@ exports.getPayments = (req, res) => {
             AND payments.paymentDate >= ?
         `;
 
-        params.push(dateFrom);
+        params.push(
+            dateFrom
+        );
 
     }
 
@@ -121,27 +163,37 @@ exports.getPayments = (req, res) => {
             AND payments.paymentDate <= ?
         `;
 
-        params.push(dateTo);
+        params.push(
+            dateTo
+        );
 
     }
 
 
     sql += `
-        ORDER BY payments.paymentDate DESC,
-        payments.id DESC
+        ORDER BY
+            payments.paymentDate DESC,
+            payments.id DESC
     `;
 
 
     db.all(
         sql,
         params,
-        (err, rows) => {
+        (
+            err,
+            rows
+        ) => {
 
             if (err) {
 
                 return res.status(500).json({
+
                     success: false,
-                    message: err.message
+
+                    message:
+                        err.message
+
                 });
 
             }
@@ -155,39 +207,110 @@ exports.getPayments = (req, res) => {
 };
 
 
-/*
-====================================================
-GET SINGLE PAYMENT
-====================================================
-*/
+// =====================================================
+// ACTIVE ACADEMIC YEAR
+// =====================================================
 
-exports.getPayment = (req, res) => {
+function getActiveYear() {
+
+    return new Promise(
+        (
+            resolve,
+            reject
+        ) => {
+
+            db.get(
+                `
+                SELECT *
+                FROM academic_years
+                WHERE status = 'active'
+                LIMIT 1
+                `,
+                [],
+                (
+                    err,
+                    year
+                ) => {
+
+                    if (err) {
+
+                        reject(err);
+
+                        return;
+
+                    }
+
+                    resolve(year);
+
+                }
+            );
+
+        }
+    );
+
+}
+
+
+// =====================================================
+// GET SINGLE PAYMENT
+// =====================================================
+
+exports.getPayment = (
+    req,
+    res
+) => {
 
     db.get(
         `
         SELECT
+
             payments.*,
+
             students.studentName,
             students.rollNumber,
             students.className,
             students.fatherName,
-            students.contact1
+            students.contact1,
+
+            ay.name AS academicYearName
 
         FROM payments
 
         LEFT JOIN students
-        ON payments.studentId = students.id
+            ON payments.studentId =
+               students.id
+
+        LEFT JOIN student_fee_accounts sfa
+            ON payments.feeAccountId =
+               sfa.id
+
+        LEFT JOIN student_enrollments se
+            ON sfa.enrollmentId =
+               se.id
+
+        LEFT JOIN academic_years ay
+            ON se.academicYearId =
+               ay.id
 
         WHERE payments.id = ?
         `,
-        [req.params.id],
-        (err, payment) => {
+        [
+            req.params.id
+        ],
+        (
+            err,
+            payment
+        ) => {
 
             if (err) {
 
                 return res.status(500).json({
+
                     success: false,
-                    message: err.message
+
+                    message:
+                        err.message
+
                 });
 
             }
@@ -196,8 +319,12 @@ exports.getPayment = (req, res) => {
             if (!payment) {
 
                 return res.status(404).json({
+
                     success: false,
-                    message: "Payment not found."
+
+                    message:
+                        "Payment not found."
+
                 });
 
             }
@@ -211,13 +338,14 @@ exports.getPayment = (req, res) => {
 };
 
 
-/*
-====================================================
-ADD PAYMENT
-====================================================
-*/
+// =====================================================
+// ADD PAYMENT
+// =====================================================
 
-exports.addPayment = (req, res) => {
+exports.addPayment = async (
+    req,
+    res
+) => {
 
     const {
         studentId,
@@ -227,287 +355,473 @@ exports.addPayment = (req, res) => {
         remarks
     } = req.body;
 
-
-    /*
-    ================================================
-    VALIDATION
-    ================================================
-    */
 
     if (
         !studentId ||
         !paymentDate ||
-        !amount ||
+        amount === undefined ||
         !paymentMode
     ) {
 
         return res.status(400).json({
+
             success: false,
+
             message:
                 "Student, date, amount and payment mode are required."
+
         });
 
     }
 
 
-    const paymentAmount = Number(amount);
+    const paymentAmount =
+        Number(
+            amount
+        );
 
 
-    if (paymentAmount <= 0) {
+    if (
+        !Number.isFinite(
+            paymentAmount
+        ) ||
+        paymentAmount <= 0
+    ) {
 
         return res.status(400).json({
+
             success: false,
+
             message:
                 "Payment amount must be greater than zero."
+
         });
 
     }
 
 
-    /*
-    ================================================
-    GET STUDENT
-    ================================================
-    */
+    try {
 
-    db.get(
-        `
-        SELECT
-            id,
-            studentName,
-            rollNumber,
-            className,
-            fatherName,
-            contact1,
-            previousDues,
-            tuitionFee
+        // =================================================
+        // ONLY ACTIVE YEAR
+        // =================================================
 
-        FROM students
-
-        WHERE id = ?
-        `,
-        [studentId],
-        (studentErr, student) => {
-
-            if (studentErr) {
-
-                return res.status(500).json({
-                    success: false,
-                    message: studentErr.message
-                });
-
-            }
+        const activeYear =
+            await getActiveYear();
 
 
-            if (!student) {
+        if (!activeYear) {
 
-                return res.status(404).json({
-                    success: false,
-                    message:
-                        "Student not found."
-                });
+            return res.status(409).json({
 
-            }
+                success: false,
+
+                message:
+                    "No active academic year is configured."
+
+            });
+
+        }
 
 
-            /*
-            ========================================
-            INSERT PAYMENT
-            ========================================
-            */
+        // =================================================
+        // STUDENT
+        // =================================================
 
-            db.run(
-                `
-                INSERT INTO payments
+        const student =
+            await new Promise(
                 (
-                    studentId,
-                    paymentDate,
-                    amount,
-                    paymentMode,
-                    remarks
-                )
-                VALUES (?, ?, ?, ?, ?)
-                `,
-                [
-                    studentId,
-                    paymentDate,
-                    paymentAmount,
-                    paymentMode,
-                    remarks || ""
-                ],
-                function (paymentErr) {
+                    resolve,
+                    reject
+                ) => {
 
-                    if (paymentErr) {
+                    db.get(
+                        `
+                        SELECT *
+                        FROM students
+                        WHERE id = ?
+                        `,
+                        [
+                            studentId
+                        ],
+                        (
+                            err,
+                            row
+                        ) => {
 
-                        return res.status(500).json({
-                            success: false,
-                            message: paymentErr.message
-                        });
+                            if (err) {
 
-                    }
+                                reject(err);
+
+                                return;
+
+                            }
+
+                            resolve(row);
+
+                        }
+                    );
+
+                }
+            );
 
 
-                    const paymentId = this.lastID;
+        if (!student) {
+
+            return res.status(404).json({
+
+                success: false,
+
+                message:
+                    "Student not found."
+
+            });
+
+        }
 
 
-                    /*
-                    ====================================
-                    GET TOTAL PAID INCLUDING NEW PAYMENT
-                    ====================================
-                    */
+        if (
+            student.status ===
+            "archived"
+        ) {
+
+            return res.status(409).json({
+
+                success: false,
+
+                message:
+                    "Archived students cannot receive payments."
+
+            });
+
+        }
+
+
+        // =================================================
+        // STUDENT FEE ACCOUNT
+        // =================================================
+
+        const feeAccount =
+            await new Promise(
+                (
+                    resolve,
+                    reject
+                ) => {
 
                     db.get(
                         `
                         SELECT
-                            IFNULL(SUM(amount), 0)
-                            AS totalPaid
+
+                            sfa.id,
+
+                            se.className,
+
+                            se.rollNumber,
+
+                            ay.name AS academicYearName
+
+                        FROM student_fee_accounts sfa
+
+                        INNER JOIN student_enrollments se
+                            ON se.id =
+                               sfa.enrollmentId
+
+                        INNER JOIN academic_years ay
+                            ON ay.id =
+                               se.academicYearId
+
+                        WHERE se.studentId = ?
+
+                        AND se.academicYearId = ?
+
+                        LIMIT 1
+                        `,
+                        [
+                            studentId,
+                            activeYear.id
+                        ],
+                        (
+                            err,
+                            row
+                        ) => {
+
+                            if (err) {
+
+                                reject(err);
+
+                                return;
+
+                            }
+
+                            resolve(row);
+
+                        }
+                    );
+
+                }
+            );
+
+
+        if (!feeAccount) {
+
+            return res.status(409).json({
+
+                success: false,
+
+                message:
+                    "This student does not have a fee account for the active academic year."
+
+            });
+
+        }
+
+
+        // =================================================
+        // CURRENT FEE
+        // =================================================
+
+        const feeItems =
+            await new Promise(
+                (
+                    resolve,
+                    reject
+                ) => {
+
+                    db.all(
+                        `
+                        SELECT
+                            sfi.amount,
+                            fc.componentKey,
+                            fc.componentName
+
+                        FROM student_fee_items sfi
+
+                        INNER JOIN fee_components fc
+                            ON fc.id =
+                               sfi.componentId
+
+                        WHERE sfi.feeAccountId = ?
+                        `,
+                        [
+                            feeAccount.id
+                        ],
+                        (
+                            err,
+                            rows
+                        ) => {
+
+                            if (err) {
+
+                                reject(err);
+
+                                return;
+
+                            }
+
+                            resolve(rows);
+
+                        }
+                    );
+
+                }
+            );
+
+
+        const totalFee =
+            feeItems.reduce(
+                (
+                    total,
+                    item
+                ) =>
+                    total +
+                    Number(
+                        item.amount ||
+                        0
+                    ),
+                0
+            );
+
+
+        const previousPaid =
+            await new Promise(
+                (
+                    resolve,
+                    reject
+                ) => {
+
+                    db.get(
+                        `
+                        SELECT
+
+                            COALESCE(
+                                SUM(amount),
+                                0
+                            ) AS total
 
                         FROM payments
 
-                        WHERE studentId = ?
+                        WHERE feeAccountId = ?
+
+                        AND ${activePaymentCondition}
                         `,
-                        [studentId],
-                        (totalErr, paymentSummary) => {
+                        [
+                            feeAccount.id
+                        ],
+                        (
+                            err,
+                            row
+                        ) => {
 
-                            if (totalErr) {
+                            if (err) {
 
-                                return res.status(500).json({
-                                    success: false,
-                                    message: totalErr.message
-                                });
+                                reject(err);
+
+                                return;
 
                             }
 
-
-                            /*
-                            ==================================
-                            CALCULATE FEES
-                            ==================================
-                            */
-
-                            const totalFee =
-                                Number(student.previousDues || 0) +
-                                Number(student.tuitionFee || 0);
-
-
-                            const totalPaid =
+                            resolve(
                                 Number(
-                                    paymentSummary.totalPaid || 0
-                                );
+                                    row.total ||
+                                    0
+                                )
+                            );
+
+                        }
+                    );
+
+                }
+            );
 
 
-                            const balance =
-                                Math.max(
-                                    0,
-                                    totalFee - totalPaid
-                                );
+        const totalPaid =
+            previousPaid +
+            paymentAmount;
 
 
-                            /*
-                            ==================================
-                            CREATE SMS MESSAGE
-                            ==================================
-                            */
-
-                            const message =
-
-                                `Dear Parent, ` +
-                                `₹${paymentAmount.toFixed(2)} fee has been received ` +
-                                `for ${student.studentName}. ` +
-                                `Payment Mode: ${paymentMode}. ` +
-                                `Total Fee: ₹${totalFee.toFixed(2)}. ` +
-                                `Total Paid: ₹${totalPaid.toFixed(2)}. ` +
-                                `Remaining Fee: ₹${balance.toFixed(2)}. ` +
-                                `Thank you, THE AGE SCHOOL.`;
+        const balance =
+            Math.max(
+                0,
+                totalFee -
+                totalPaid
+            );
 
 
-                            /*
-                            ==================================
-                            CREATE NOTIFICATION
-                            ==================================
-                            */
+        // =================================================
+        // INSERT PAYMENT
+        // =================================================
 
-                            if (student.contact1) {
+        const result =
+            await new Promise(
+                (
+                    resolve,
+                    reject
+                ) => {
 
-                                db.run(
-                                    `
-                                    INSERT INTO notifications
-                                    (
-                                        studentId,
-                                        paymentId,
-                                        phoneNumber,
-                                        message,
-                                        notificationType,
-                                        status,
-                                        provider
-                                    )
-                                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                                    `,
-                                    [
-                                        student.id,
-                                        paymentId,
-                                        student.contact1,
-                                        message,
-                                        "SMS",
-                                        "pending",
-                                        "MSG91"
-                                    ],
-                                    function (notificationErr) {
+                    db.run(
+                        `
+                        INSERT INTO payments
+                        (
+                            studentId,
+                            feeAccountId,
+                            paymentDate,
+                            amount,
+                            paymentMode,
+                            remarks,
+                            status
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, 'completed')
+                        `,
+                        [
+                            studentId,
 
-                                        if (notificationErr) {
+                            feeAccount.id,
 
-                                            console.error(
-                                                "Notification creation failed:",
-                                                notificationErr.message
-                                            );
+                            paymentDate,
 
-                                        }
+                            paymentAmount,
 
-                                    }
-                                );
+                            paymentMode,
+
+                            remarks || ""
+
+                        ],
+                        function (
+                            err
+                        ) {
+
+                            if (err) {
+
+                                reject(err);
+
+                                return;
 
                             }
 
+                            resolve(
+                                this
+                            );
 
-                            /*
-                            ==================================
-                            RESPONSE
-                            ==================================
-                            */
+                        }
+                    );
 
-                            res.status(201).json({
+                }
+            );
 
-                                success: true,
 
-                                id: paymentId,
+        const paymentId =
+            result.lastID;
 
-                                message:
-                                    "Payment added successfully.",
 
-                                notification:
-                                    student.contact1
-                                        ? {
-                                            status: "pending",
-                                            phoneNumber:
-                                                student.contact1
-                                        }
-                                        : {
-                                            status: "not_created",
-                                            message:
-                                                "Student has no mobile number."
-                                        },
+        // =================================================
+        // NOTIFICATION
+        // =================================================
 
-                                feeSummary: {
+        if (
+            student.contact1
+        ) {
 
-                                    totalFee,
+            const message =
+                `Dear Parent, ` +
+                `₹${paymentAmount.toFixed(2)} fee has been received ` +
+                `for ${student.studentName}. ` +
+                `Academic Year: ${activeYear.name}. ` +
+                `Payment Mode: ${paymentMode}. ` +
+                `Total Fee: ₹${totalFee.toFixed(2)}. ` +
+                `Total Paid: ₹${totalPaid.toFixed(2)}. ` +
+                `Remaining Fee: ₹${balance.toFixed(2)}. ` +
+                `Thank you, THE AGE SCHOOL.`;
 
-                                    totalPaid,
 
-                                    balance
+            await new Promise(
+                resolve => {
 
-                                }
+                    db.run(
+                        `
+                        INSERT INTO notifications
+                        (
+                            studentId,
+                            paymentId,
+                            phoneNumber,
+                            message,
+                            notificationType,
+                            status,
+                            provider
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        `,
+                        [
+                            student.id,
+                            paymentId,
+                            student.contact1,
+                            message,
+                            "SMS",
+                            "pending",
+                            "MSG91"
+                        ],
+                        () => {
 
-                            });
+                            resolve();
 
                         }
                     );
@@ -516,380 +830,284 @@ exports.addPayment = (req, res) => {
             );
 
         }
-    );
+
+
+        await logAudit({
+
+            userId:
+                req.user.id,
+
+            action:
+                "PAYMENT_CREATED",
+
+            entityType:
+                "payment",
+
+            entityId:
+                paymentId,
+
+            details: {
+
+                studentId:
+                    student.id,
+
+                studentName:
+                    student.studentName,
+
+                academicYear:
+                    activeYear.name,
+
+                feeAccountId:
+                    feeAccount.id,
+
+                amount:
+                    paymentAmount,
+
+                paymentDate,
+
+                paymentMode,
+
+                remarks:
+                    remarks || ""
+
+            }
+
+        });
+
+
+        res.status(201).json({
+
+            success: true,
+
+            id:
+                paymentId,
+
+            message:
+                "Payment added successfully.",
+
+            academicYear:
+                activeYear.name,
+
+            feeSummary: {
+
+                totalFee,
+
+                totalPaid,
+
+                balance
+
+            }
+
+        });
+
+    } catch (error) {
+
+        console.error(
+            "Add Payment Error:",
+            error
+        );
+
+        res.status(500).json({
+
+            success: false,
+
+            message:
+                "Unable to add payment."
+
+        });
+
+    }
 
 };
 
 
-/*
-====================================================
-UPDATE PAYMENT
-====================================================
-*/
+// =====================================================
+// REVERSE PAYMENT
+// =====================================================
 
-exports.updatePayment = (req, res) => {
+exports.reversePayment = (
+    req,
+    res
+) => {
 
-    const {
-        studentId,
-        paymentDate,
-        amount,
-        paymentMode,
-        remarks
-    } = req.body;
+    const paymentId =
+        Number(
+            req.params.id
+        );
 
 
-    db.run(
+    const reason =
+        String(
+            req.body?.reason ||
+            ""
+        ).trim();
+
+
+    if (!reason) {
+
+        return res.status(400).json({
+
+            success: false,
+
+            message:
+                "A reversal reason is required."
+
+        });
+
+    }
+
+
+    db.get(
         `
-        UPDATE payments
+        SELECT *
 
-        SET
-            studentId = ?,
-            paymentDate = ?,
-            amount = ?,
-            paymentMode = ?,
-            remarks = ?
+        FROM payments
 
         WHERE id = ?
         `,
         [
-            studentId,
-            paymentDate,
-            Number(amount),
-            paymentMode,
-            remarks || "",
-            req.params.id
+            paymentId
         ],
-        function (err) {
+        (
+            err,
+            payment
+        ) => {
 
             if (err) {
 
                 return res.status(500).json({
+
                     success: false,
-                    message: err.message
+
+                    message:
+                        "Unable to find payment."
+
                 });
 
             }
 
 
-            res.json({
-
-                success: true,
-
-                message:
-                    "Payment updated successfully."
-
-            });
-
-        }
-    );
-
-};
-
-
-/*
-====================================================
-DELETE PAYMENT
-====================================================
-*/
-
-exports.deletePayment = (req, res) => {
-
-    db.run(
-        `
-        DELETE FROM payments
-        WHERE id = ?
-        `,
-        [req.params.id],
-        function (err) {
-
-            if (err) {
-
-                return res.status(500).json({
-                    success: false,
-                    message: err.message
-                });
-
-            }
-
-
-            res.json({
-
-                success: true,
-
-                message:
-                    "Payment deleted successfully."
-
-            });
-
-        }
-    );
-
-};
-
-
-/*
-====================================================
-DASHBOARD SUMMARY
-====================================================
-*/
-
-exports.dashboardSummary = (req, res) => {
-
-    db.get(
-        `
-        SELECT
-            COUNT(*) AS totalPayments,
-            IFNULL(SUM(amount), 0) AS totalCollection
-        FROM payments
-        `,
-        [],
-        (paymentErr, paymentData) => {
-
-            if (paymentErr) {
-
-                return res.status(500).json({
-                    success: false,
-                    message: paymentErr.message
-                });
-
-            }
-
-
-            db.get(
-                `
-                SELECT
-                    COUNT(*) AS totalStudents
-                FROM students
-                `,
-                [],
-                (studentErr, studentData) => {
-
-                    if (studentErr) {
-
-                        return res.status(500).json({
-                            success: false,
-                            message: studentErr.message
-                        });
-
-                    }
-
-
-                    db.get(
-                        `
-                        SELECT
-                            IFNULL(
-                                SUM(
-                                    previousDues +
-                                    tuitionFee
-                                ),
-                                0
-                            )
-                            -
-                            IFNULL(
-                                (
-                                    SELECT SUM(amount)
-                                    FROM payments
-                                ),
-                                0
-                            )
-                            AS pendingFees
-
-                        FROM students
-                        `,
-                        [],
-                        (pendingErr, pendingData) => {
-
-                            if (pendingErr) {
-
-                                return res.status(500).json({
-                                    success: false,
-                                    message: pendingErr.message
-                                });
-
-                            }
-
-
-                            res.json({
-
-                                totalStudents:
-                                    studentData.totalStudents,
-
-                                totalPayments:
-                                    paymentData.totalPayments || 0,
-
-                                totalCollection:
-                                    paymentData.totalCollection || 0,
-
-                                pendingFees:
-                                    Math.max(
-                                        0,
-                                        pendingData.pendingFees || 0
-                                    )
-
-                            });
-
-                        }
-                    );
-
-                }
-            );
-
-        }
-    );
-
-};
-
-
-/*
-====================================================
-MONTHLY COLLECTION
-
-Returns last 12 months.
-====================================================
-*/
-
-exports.monthlyCollection = (req, res) => {
-
-    db.all(
-        `
-        SELECT
-            strftime('%Y-%m', paymentDate) AS month,
-            IFNULL(SUM(amount), 0) AS collection
-
-        FROM payments
-
-        WHERE paymentDate >=
-            date('now', '-11 months', 'start of month')
-
-        GROUP BY strftime('%Y-%m', paymentDate)
-
-        ORDER BY month ASC
-        `,
-        [],
-        (err, rows) => {
-
-            if (err) {
-
-                return res.status(500).json({
-                    success: false,
-                    message: err.message
-                });
-
-            }
-
-
-            res.json(rows);
-
-        }
-    );
-
-};
-
-
-/*
-====================================================
-STUDENT FEE HISTORY
-====================================================
-*/
-
-exports.studentFeeHistory = (req, res) => {
-
-    const studentId = req.params.studentId;
-
-
-    db.get(
-        `
-        SELECT
-            id,
-            studentName,
-            rollNumber,
-            className,
-            fatherName,
-            previousDues,
-            tuitionFee
-
-        FROM students
-
-        WHERE id = ?
-        `,
-        [studentId],
-        (studentErr, student) => {
-
-            if (studentErr) {
-
-                return res.status(500).json({
-                    success: false,
-                    message: studentErr.message
-                });
-
-            }
-
-
-            if (!student) {
+            if (!payment) {
 
                 return res.status(404).json({
+
                     success: false,
-                    message: "Student not found."
+
+                    message:
+                        "Payment not found."
+
                 });
 
             }
 
 
-            db.all(
+            if (
+                payment.status ===
+                "reversed"
+            ) {
+
+                return res.status(409).json({
+
+                    success: false,
+
+                    message:
+                        "Payment is already reversed."
+
+                });
+
+            }
+
+
+            const reversedAt =
+                new Date().toISOString();
+
+
+            db.run(
                 `
-                SELECT *
-                FROM payments
+                UPDATE payments
 
-                WHERE studentId = ?
+                SET
 
-                ORDER BY paymentDate DESC,
-                id DESC
+                    status = 'reversed',
+
+                    voidedAt = ?,
+
+                    voidedBy = ?,
+
+                    voidReason = ?
+
+                WHERE id = ?
+
+                AND (
+                    status IS NULL
+                    OR status != 'reversed'
+                )
                 `,
-                [studentId],
-                (paymentErr, payments) => {
+                [
+                    reversedAt,
+                    req.user.id,
+                    reason,
+                    paymentId
+                ],
+                function (
+                    updateErr
+                ) {
 
-                    if (paymentErr) {
+                    if (updateErr) {
 
                         return res.status(500).json({
+
                             success: false,
-                            message: paymentErr.message
+
+                            message:
+                                "Unable to reverse payment."
+
                         });
 
                     }
 
 
-                    const totalPaid =
-                        payments.reduce(
-                            (total, payment) =>
-                                total +
-                                Number(payment.amount || 0),
-                            0
-                        );
+                    logAudit({
 
+                        userId:
+                            req.user.id,
 
-                    const totalFee =
-                        Number(student.previousDues || 0) +
-                        Number(student.tuitionFee || 0);
+                        action:
+                            "PAYMENT_REVERSED",
 
+                        entityType:
+                            "payment",
 
-                    const balance =
-                        Math.max(
-                            0,
-                            totalFee - totalPaid
-                        );
+                        entityId:
+                            paymentId,
 
+                        details: {
 
-                    res.json({
+                            amount:
+                                payment.amount,
 
-                        student,
+                            studentId:
+                                payment.studentId,
 
-                        payments,
+                            feeAccountId:
+                                payment.feeAccountId,
 
-                        totalFee,
+                            reason,
 
-                        totalPaid,
+                            reversedAt
 
-                        balance
+                        }
+
+                    }).then(() => {
+
+                        res.json({
+
+                            success: true,
+
+                            message:
+                                "Payment reversed successfully."
+
+                        });
 
                     });
 
@@ -902,17 +1120,704 @@ exports.studentFeeHistory = (req, res) => {
 };
 
 
-/*
-====================================================
-RECEIPT DATA
-====================================================
-*/
+// =====================================================
+// STUDENT FEE HISTORY
+// =====================================================
 
-exports.getReceipt = (req, res) => {
+exports.studentFeeHistory = async (
+    req,
+    res
+) => {
+
+    try {
+
+        const studentId =
+            Number(
+                req.params.studentId
+            );
+
+
+        const year =
+            await getActiveYear();
+
+
+        if (!year) {
+
+            return res.status(404).json({
+
+                success: false,
+
+                message:
+                    "No active academic year."
+
+            });
+
+        }
+
+
+        const account =
+            await new Promise(
+                (
+                    resolve,
+                    reject
+                ) => {
+
+                    db.get(
+                        `
+                        SELECT
+
+                            sfa.id,
+
+                            ay.name AS academicYearName,
+
+                            se.className,
+
+                            se.rollNumber,
+
+                            s.studentName
+
+                        FROM student_fee_accounts sfa
+
+                        INNER JOIN student_enrollments se
+                            ON se.id =
+                               sfa.enrollmentId
+
+                        INNER JOIN academic_years ay
+                            ON ay.id =
+                               se.academicYearId
+
+                        INNER JOIN students s
+                            ON s.id =
+                               se.studentId
+
+                        WHERE se.studentId = ?
+
+                        AND se.academicYearId = ?
+
+                        LIMIT 1
+                        `,
+                        [
+                            studentId,
+                            year.id
+                        ],
+                        (
+                            err,
+                            row
+                        ) => {
+
+                            if (err) {
+
+                                reject(err);
+
+                                return;
+
+                            }
+
+                            resolve(row);
+
+                        }
+                    );
+
+                }
+            );
+
+
+        if (!account) {
+
+            return res.status(404).json({
+
+                success: false,
+
+                message:
+                    "Fee account not found for the active academic year."
+
+            });
+
+        }
+
+
+        const items =
+            await new Promise(
+                (
+                    resolve,
+                    reject
+                ) => {
+
+                    db.all(
+                        `
+                        SELECT
+
+                            sfi.*,
+
+                            fc.componentName,
+                            fc.componentKey,
+                            fc.sortOrder
+
+                        FROM student_fee_items sfi
+
+                        INNER JOIN fee_components fc
+                            ON fc.id =
+                               sfi.componentId
+
+                        WHERE sfi.feeAccountId = ?
+
+                        ORDER BY
+                            fc.sortOrder
+                        `,
+                        [
+                            account.id
+                        ],
+                        (
+                            err,
+                            rows
+                        ) => {
+
+                            if (err) {
+
+                                reject(err);
+
+                                return;
+
+                            }
+
+                            resolve(rows);
+
+                        }
+                    );
+
+                }
+            );
+
+
+        const payments =
+            await new Promise(
+                (
+                    resolve,
+                    reject
+                ) => {
+
+                    db.all(
+                        `
+                        SELECT *
+
+                        FROM payments
+
+                        WHERE feeAccountId = ?
+
+                        ORDER BY
+                            paymentDate DESC,
+                            id DESC
+                        `,
+                        [
+                            account.id
+                        ],
+                        (
+                            err,
+                            rows
+                        ) => {
+
+                            if (err) {
+
+                                reject(err);
+
+                                return;
+
+                            }
+
+                            resolve(rows);
+
+                        }
+                    );
+
+                }
+            );
+
+
+        const totalFee =
+            items.reduce(
+                (
+                    total,
+                    item
+                ) =>
+                    total +
+                    Number(
+                        item.amount ||
+                        0
+                    ),
+                0
+            );
+
+
+        const totalPaid =
+            payments
+                .filter(
+                    payment =>
+                        payment.status !==
+                        "reversed"
+                )
+                .reduce(
+                    (
+                        total,
+                        payment
+                    ) =>
+                        total +
+                        Number(
+                            payment.amount ||
+                            0
+                        ),
+                    0
+                );
+
+
+        res.json({
+
+            student: {
+
+                id:
+                    studentId,
+
+                studentName:
+                    account.studentName,
+
+                className:
+                    account.className,
+
+                rollNumber:
+                    account.rollNumber
+
+            },
+
+            academicYear: {
+
+                id:
+                    year.id,
+
+                name:
+                    year.name,
+
+                status:
+                    year.status
+
+            },
+
+            items,
+
+            payments,
+
+            totalFee,
+
+            totalPaid,
+
+            balance:
+                Math.max(
+                    0,
+                    totalFee -
+                    totalPaid
+                )
+
+        });
+
+    } catch (error) {
+
+        console.error(
+            error
+        );
+
+        res.status(500).json({
+
+            success: false,
+
+            message:
+                "Unable to load fee history."
+
+        });
+
+    }
+
+};
+
+
+// =====================================================
+// DASHBOARD SUMMARY
+// =====================================================
+
+exports.dashboardSummary = async (
+    req,
+    res
+) => {
+
+    try {
+
+        const year =
+            await getActiveYear();
+
+
+        if (!year) {
+
+            return res.status(404).json({
+
+                success: false,
+
+                message:
+                    "No active academic year."
+
+            });
+
+        }
+
+
+        const totalStudents =
+            await new Promise(
+                (
+                    resolve,
+                    reject
+                ) => {
+
+                    db.get(
+                        `
+                        SELECT
+                            COUNT(*) AS total
+
+                        FROM student_enrollments
+
+                        WHERE academicYearId = ?
+
+                        AND status = 'active'
+                        `,
+                        [
+                            year.id
+                        ],
+                        (
+                            err,
+                            row
+                        ) => {
+
+                            if (err) {
+
+                                reject(err);
+
+                                return;
+
+                            }
+
+                            resolve(
+                                Number(
+                                    row.total ||
+                                    0
+                                )
+                            );
+
+                        }
+                    );
+
+                }
+            );
+
+
+        const feeData =
+            await new Promise(
+                (
+                    resolve,
+                    reject
+                ) => {
+
+                    db.get(
+                        `
+                        SELECT
+
+                            COALESCE(
+                                SUM(sfi.amount),
+                                0
+                            ) AS totalFee
+
+                        FROM student_fee_items sfi
+
+                        INNER JOIN student_fee_accounts sfa
+                            ON sfa.id =
+                               sfi.feeAccountId
+
+                        INNER JOIN student_enrollments se
+                            ON se.id =
+                               sfa.enrollmentId
+
+                        WHERE
+                            se.academicYearId = ?
+
+                        AND se.status = 'active'
+                        `,
+                        [
+                            year.id
+                        ],
+                        (
+                            err,
+                            row
+                        ) => {
+
+                            if (err) {
+
+                                reject(err);
+
+                                return;
+
+                            }
+
+                            resolve(
+                                Number(
+                                    row.totalFee ||
+                                    0
+                                )
+                            );
+
+                        }
+                    );
+
+                }
+            );
+
+
+        const paymentData =
+            await new Promise(
+                (
+                    resolve,
+                    reject
+                ) => {
+
+                    db.get(
+                        `
+                        SELECT
+
+                            COUNT(*) AS totalPayments,
+
+                            COALESCE(
+                                SUM(amount),
+                                0
+                            ) AS totalCollection
+
+                        FROM payments
+
+                        WHERE feeAccountId IN (
+
+                            SELECT
+                                sfa.id
+
+                            FROM student_fee_accounts sfa
+
+                            INNER JOIN student_enrollments se
+                                ON se.id =
+                                   sfa.enrollmentId
+
+                            WHERE
+                                se.academicYearId = ?
+                        )
+
+                        AND ${activePaymentCondition}
+                        `,
+                        [
+                            year.id
+                        ],
+                        (
+                            err,
+                            row
+                        ) => {
+
+                            if (err) {
+
+                                reject(err);
+
+                                return;
+
+                            }
+
+                            resolve(row);
+
+                        }
+                    );
+
+                }
+            );
+
+
+        res.json({
+
+            academicYear: {
+
+                id:
+                    year.id,
+
+                name:
+                    year.name
+
+            },
+
+            totalStudents,
+
+            totalPayments:
+                Number(
+                    paymentData.totalPayments ||
+                    0
+                ),
+
+            totalCollection:
+                Number(
+                    paymentData.totalCollection ||
+                    0
+                ),
+
+            totalFee:
+                feeData,
+
+            pendingFees:
+                Math.max(
+                    0,
+                    feeData -
+                    Number(
+                        paymentData.totalCollection ||
+                        0
+                    )
+                )
+
+        });
+
+    } catch (error) {
+
+        console.error(
+            error
+        );
+
+        res.status(500).json({
+
+            success: false,
+
+            message:
+                "Unable to load dashboard summary."
+
+        });
+
+    }
+
+};
+
+
+// =====================================================
+// MONTHLY COLLECTION
+// =====================================================
+
+exports.monthlyCollection = async (
+    req,
+    res
+) => {
+
+    try {
+
+        const year =
+            await getActiveYear();
+
+
+        if (!year) {
+
+            return res.json([]);
+
+        }
+
+
+        db.all(
+            `
+            SELECT
+
+                strftime(
+                    '%Y-%m',
+                    paymentDate
+                ) AS month,
+
+                COALESCE(
+                    SUM(amount),
+                    0
+                ) AS collection
+
+            FROM payments
+
+            WHERE feeAccountId IN (
+
+                SELECT
+                    sfa.id
+
+                FROM student_fee_accounts sfa
+
+                INNER JOIN student_enrollments se
+                    ON se.id =
+                       sfa.enrollmentId
+
+                WHERE
+                    se.academicYearId = ?
+            )
+
+            AND ${activePaymentCondition}
+
+            GROUP BY
+                strftime(
+                    '%Y-%m',
+                    paymentDate
+                )
+
+            ORDER BY
+                month ASC
+            `,
+            [
+                year.id
+            ],
+            (
+                err,
+                rows
+            ) => {
+
+                if (err) {
+
+                    return res.status(500).json({
+
+                        success: false,
+
+                        message:
+                            err.message
+
+                    });
+
+                }
+
+
+                res.json(rows);
+
+            }
+        );
+
+    } catch (error) {
+
+        res.status(500).json({
+
+            success: false,
+
+            message:
+                "Unable to load monthly collection."
+
+        });
+
+    }
+
+};
+
+
+// =====================================================
+// RECEIPT
+// =====================================================
+
+exports.getReceipt = (
+    req,
+    res
+) => {
 
     db.get(
         `
         SELECT
+
             payments.*,
 
             students.studentName,
@@ -920,24 +1825,46 @@ exports.getReceipt = (req, res) => {
             students.className,
             students.fatherName,
             students.contact1,
-            students.tuitionFee,
-            students.previousDues
+
+            ay.name AS academicYearName
 
         FROM payments
 
         LEFT JOIN students
-        ON payments.studentId = students.id
+            ON payments.studentId =
+               students.id
+
+        LEFT JOIN student_fee_accounts sfa
+            ON payments.feeAccountId =
+               sfa.id
+
+        LEFT JOIN student_enrollments se
+            ON sfa.enrollmentId =
+               se.id
+
+        LEFT JOIN academic_years ay
+            ON se.academicYearId =
+               ay.id
 
         WHERE payments.id = ?
         `,
-        [req.params.id],
-        (err, receipt) => {
+        [
+            req.params.id
+        ],
+        (
+            err,
+            receipt
+        ) => {
 
             if (err) {
 
                 return res.status(500).json({
+
                     success: false,
-                    message: err.message
+
+                    message:
+                        "Unable to load receipt."
+
                 });
 
             }
@@ -946,8 +1873,29 @@ exports.getReceipt = (req, res) => {
             if (!receipt) {
 
                 return res.status(404).json({
+
                     success: false,
-                    message: "Receipt not found."
+
+                    message:
+                        "Receipt not found."
+
+                });
+
+            }
+
+
+            if (
+                receipt.status ===
+                "reversed"
+            ) {
+
+                return res.status(409).json({
+
+                    success: false,
+
+                    message:
+                        "A reversed payment cannot generate a receipt."
+
                 });
 
             }
@@ -959,341 +1907,241 @@ exports.getReceipt = (req, res) => {
     );
 
 };
-// =========================================================
-// DETAILED REPORT
-// Weekly / Monthly / All Time
-// =========================================================
 
-exports.detailedReport = (req, res) => {
 
-    const db = require("../db");
+// =====================================================
+// REPORT SUMMARY
+// =====================================================
 
-    const period = req.query.period || "monthly";
+exports.reportSummary = async (
+    req,
+    res
+) => {
 
-    let dateCondition = "";
-    let dateParams = [];
+    try {
 
-    // -----------------------------------------------------
-    // DATE FILTER
-    // -----------------------------------------------------
+        const year =
+            await getActiveYear();
 
-    if (period === "weekly") {
 
-        dateCondition = `
-            AND date(paymentDate) >= date('now', '-6 days')
-            AND date(paymentDate) <= date('now')
-        `;
+        if (!year) {
 
-    } else if (period === "monthly") {
+            return res.status(404).json({
 
-        dateCondition = `
-            AND strftime('%Y-%m', paymentDate)
-            = strftime('%Y-%m', 'now')
-        `;
+                success: false,
 
-    } else {
+                message:
+                    "No active academic year."
 
-        dateCondition = "";
+            });
 
-    }
+        }
 
-    // -----------------------------------------------------
-    // MAIN REPORT
-    // -----------------------------------------------------
 
-    const reportQuery = `
-        SELECT
-
-            COUNT(*) AS totalPayments,
-
-            COALESCE(SUM(amount), 0) AS totalCollection,
-
-            COALESCE(AVG(amount), 0) AS averagePayment,
-
-            COALESCE(MAX(amount), 0) AS highestPayment
-
-        FROM payments
-
-        WHERE 1 = 1
-
-        ${dateCondition}
-    `;
-
-    db.get(
-        reportQuery,
-        dateParams,
-        (err, report) => {
-
-            if (err) {
-
-                console.error("Report error:", err);
-
-                return res.status(500).json({
-                    message: "Failed to generate report"
-                });
-
-            }
-
-            // -------------------------------------------------
-            // TOTAL STUDENTS + PENDING FEES
-            // -------------------------------------------------
-
-            const studentQuery = `
-                SELECT
-
-                    COUNT(*) AS totalStudents,
-
-                    COALESCE(
-                        SUM(
-                            COALESCE(previousDues, 0)
-                            +
-                            COALESCE(tuitionFee, 0)
-                        ),
-                        0
-                    ) AS totalFee
-
-                FROM students
-            `;
-
-            db.get(
-                studentQuery,
-                [],
-                (studentErr, studentData) => {
-
-                    if (studentErr) {
-
-                        console.error(
-                            "Student report error:",
-                            studentErr
-                        );
-
-                        return res.status(500).json({
-                            message:
-                                "Failed to calculate student report"
-                        });
-
-                    }
-
-                    // -------------------------------------------------
-                    // PAYMENT MODE BREAKDOWN
-                    // -------------------------------------------------
-
-                    const modeQuery = `
-                        SELECT
-
-                            paymentMode,
-
-                            COUNT(*) AS count,
-
-                            COALESCE(SUM(amount), 0) AS amount
-
-                        FROM payments
-
-                        WHERE 1 = 1
-
-                        ${dateCondition}
-
-                        GROUP BY paymentMode
-
-                        ORDER BY amount DESC
-                    `;
+        const students =
+            await new Promise(
+                (
+                    resolve,
+                    reject
+                ) => {
 
                     db.all(
-                        modeQuery,
-                        dateParams,
-                        (modeErr, modes) => {
+                        `
+                        SELECT
 
-                            if (modeErr) {
+                            se.studentId,
+                            se.className,
+                            se.rollNumber,
+                            s.studentName
 
-                                console.error(
-                                    "Payment mode error:",
-                                    modeErr
-                                );
+                        FROM student_enrollments se
 
-                                return res.status(500).json({
-                                    message:
-                                        "Failed to load payment modes"
-                                });
+                        INNER JOIN students s
+                            ON s.id =
+                               se.studentId
+
+                        WHERE
+                            se.academicYearId = ?
+
+                        AND se.status = 'active'
+
+                        ORDER BY
+                            se.className,
+                            se.rollNumber
+                        `,
+                        [
+                            year.id
+                        ],
+                        (
+                            err,
+                            rows
+                        ) => {
+
+                            if (err) {
+
+                                reject(err);
+
+                                return;
 
                             }
 
-                            // -------------------------------------------------
-                            // CLASS-WISE COLLECTION
-                            // -------------------------------------------------
+                            resolve(rows);
 
-                            const classQuery = `
-                                SELECT
+                        }
+                    );
 
-                                    s.className AS className,
+                }
+            );
 
-                                    COUNT(p.id) AS payments,
 
-                                    COALESCE(
-                                        SUM(p.amount),
-                                        0
-                                    ) AS collection
+        const payments =
+            await new Promise(
+                (
+                    resolve,
+                    reject
+                ) => {
 
-                                FROM payments p
+                    db.all(
+                        `
+                        SELECT
 
-                                LEFT JOIN students s
-                                    ON s.id = p.studentId
+                            p.id,
+                            p.studentId,
+                            p.paymentDate,
+                            p.amount,
+                            p.paymentMode,
+                            p.status,
+                            s.studentName,
+                            se.className
 
-                                WHERE 1 = 1
+                        FROM payments p
 
-                                ${dateCondition}
+                        INNER JOIN student_fee_accounts sfa
+                            ON sfa.id =
+                               p.feeAccountId
 
-                                GROUP BY s.className
+                        INNER JOIN student_enrollments se
+                            ON se.id =
+                               sfa.enrollmentId
 
-                                ORDER BY collection DESC
-                            `;
+                        INNER JOIN students s
+                            ON s.id =
+                               p.studentId
 
-                            db.all(
-                                classQuery,
-                                dateParams,
-                                (classErr, classes) => {
+                        WHERE se.academicYearId = ?
 
-                                    if (classErr) {
+                        ORDER BY
+                            p.paymentDate DESC,
+                            p.id DESC
+                        `,
+                        [
+                            year.id
+                        ],
+                        (
+                            err,
+                            rows
+                        ) => {
 
-                                        console.error(
-                                            "Class report error:",
-                                            classErr
-                                        );
+                            if (err) {
 
-                                        return res.status(500).json({
-                                            message:
-                                                "Failed to load class report"
-                                        });
+                                reject(err);
 
-                                    }
+                                return;
 
-                                    // -------------------------------------------------
-                                    // RECENT PAYMENTS
-                                    // -------------------------------------------------
+                            }
 
-                                    const recentQuery = `
-                                        SELECT
+                            resolve(rows);
 
-                                            p.id,
+                        }
+                    );
 
-                                            p.paymentDate,
+                }
+            );
 
-                                            p.amount,
 
-                                            p.paymentMode,
+        const activePayments =
+            payments.filter(
+                payment =>
+                    payment.status !==
+                    "reversed"
+            );
 
-                                            s.studentName,
 
-                                            s.className
+        const totalCollection =
+            activePayments.reduce(
+                (
+                    total,
+                    payment
+                ) =>
+                    total +
+                    Number(
+                        payment.amount ||
+                        0
+                    ),
+                0
+            );
 
-                                        FROM payments p
 
-                                        LEFT JOIN students s
-                                            ON s.id = p.studentId
+        const totalPayments =
+            activePayments.length;
 
-                                        WHERE 1 = 1
 
-                                        ${dateCondition}
+        const totalStudents =
+            students.length;
 
-                                        ORDER BY
-                                            date(p.paymentDate) DESC,
-                                            p.id DESC
 
-                                        LIMIT 10
-                                    `;
+        const feeTotal =
+            await new Promise(
+                (
+                    resolve,
+                    reject
+                ) => {
 
-                                    db.all(
-                                        recentQuery,
-                                        dateParams,
-                                        (recentErr, recentPayments) => {
+                    db.get(
+                        `
+                        SELECT
 
-                                            if (recentErr) {
+                            COALESCE(
+                                SUM(sfi.amount),
+                                0
+                            ) AS total
 
-                                                console.error(
-                                                    "Recent payment error:",
-                                                    recentErr
-                                                );
+                        FROM student_fee_items sfi
 
-                                                return res.status(500).json({
-                                                    message:
-                                                        "Failed to load recent payments"
-                                                });
+                        INNER JOIN student_fee_accounts sfa
+                            ON sfa.id =
+                               sfi.feeAccountId
 
-                                            }
+                        INNER JOIN student_enrollments se
+                            ON se.id =
+                               sfa.enrollmentId
 
-                                            // -------------------------------------------------
-                                            // CALCULATE PENDING
-                                            // -------------------------------------------------
+                        WHERE
+                            se.academicYearId = ?
 
-                                            const totalFee =
-                                                Number(
-                                                    studentData.totalFee || 0
-                                                );
+                        AND se.status = 'active'
+                        `,
+                        [
+                            year.id
+                        ],
+                        (
+                            err,
+                            row
+                        ) => {
 
-                                            const totalPaid =
-                                                Number(
-                                                    report.totalCollection || 0
-                                                );
+                            if (err) {
 
-                                            const pendingFees =
-                                                Math.max(
-                                                    0,
-                                                    totalFee - totalPaid
-                                                );
+                                reject(err);
 
-                                            // -------------------------------------------------
-                                            // RESPONSE
-                                            // -------------------------------------------------
+                                return;
 
-                                            res.json({
+                            }
 
-                                                period,
-
-                                                summary: {
-
-                                                    totalStudents:
-                                                        Number(
-                                                            studentData.totalStudents || 0
-                                                        ),
-
-                                                    totalPayments:
-                                                        Number(
-                                                            report.totalPayments || 0
-                                                        ),
-
-                                                    totalCollection:
-                                                        Number(
-                                                            report.totalCollection || 0
-                                                        ),
-
-                                                    averagePayment:
-                                                        Number(
-                                                            report.averagePayment || 0
-                                                        ),
-
-                                                    highestPayment:
-                                                        Number(
-                                                            report.highestPayment || 0
-                                                        ),
-
-                                                    pendingFees:
-                                                        pendingFees
-                                                },
-
-                                                paymentModes:
-                                                    modes || [],
-
-                                                classWise:
-                                                    classes || [],
-
-                                                recentPayments:
-                                                    recentPayments || []
-
-                                            });
-
-                                        }
-                                    );
-
-                                }
+                            resolve(
+                                Number(
+                                    row.total ||
+                                    0
+                                )
                             );
 
                         }
@@ -1302,415 +2150,230 @@ exports.detailedReport = (req, res) => {
                 }
             );
 
-        }
-    );
-};
-// =====================================================
-// DETAILED REPORT SUMMARY
-// =====================================================
 
-exports.reportSummary = (req, res) => {
-
-    const period = req.query.period || "all";
-
-    const db = require("../db");
-
-    // -------------------------------------------------
-    // Get all students
-    // -------------------------------------------------
-
-    const studentsQuery = `
-        SELECT
-            id,
-            studentName,
-            className,
-            COALESCE(previousDues, 0) AS previousDues,
-            COALESCE(tuitionFee, 0) AS tuitionFee
-        FROM students
-        ORDER BY className, studentName
-    `;
-
-    db.all(studentsQuery, [], (studentError, students) => {
-
-        if (studentError) {
-
-            console.error(
-                "REPORT STUDENTS ERROR:",
-                studentError
-            );
-
-            return res.status(500).json({
-                message: "Failed to load students report"
-            });
-        }
-
-        // -------------------------------------------------
-        // Get all payments
-        // -------------------------------------------------
-
-        const paymentsQuery = `
-            SELECT
-                p.id,
-                p.studentId,
-                p.paymentDate,
-                COALESCE(p.amount, 0) AS amount,
-                p.paymentMode,
-                s.studentName,
-                s.className
-            FROM payments p
-            LEFT JOIN students s
-                ON s.id = p.studentId
-            ORDER BY p.id DESC
-        `;
-
-        db.all(paymentsQuery, [], (paymentError, payments) => {
-
-            if (paymentError) {
-
-                console.error(
-                    "REPORT PAYMENTS ERROR:",
-                    paymentError
-                );
-
-                return res.status(500).json({
-                    message: "Failed to load payments report"
-                });
-            }
-
-            // -------------------------------------------------
-            // Date helper
-            // Supports:
-            // YYYY-MM-DD
-            // DD-MM-YYYY
-            // DD/MM/YYYY
-            // -------------------------------------------------
-
-            const parsePaymentDate = (value) => {
-
-                if (!value) {
-                    return null;
-                }
-
-                const stringValue = String(value).trim();
-
-                // YYYY-MM-DD
-                if (/^\d{4}-\d{2}-\d{2}$/.test(stringValue)) {
-
-                    const [year, month, day] =
-                        stringValue.split("-").map(Number);
-
-                    return new Date(
-                        year,
-                        month - 1,
-                        day
-                    );
-                }
-
-                // DD-MM-YYYY
-                if (/^\d{2}-\d{2}-\d{4}$/.test(stringValue)) {
-
-                    const [day, month, year] =
-                        stringValue.split("-").map(Number);
-
-                    return new Date(
-                        year,
-                        month - 1,
-                        day
-                    );
-                }
-
-                // DD/MM/YYYY
-                if (/^\d{2}\/\d{2}\/\d{4}$/.test(stringValue)) {
-
-                    const [day, month, year] =
-                        stringValue.split("/").map(Number);
-
-                    return new Date(
-                        year,
-                        month - 1,
-                        day
-                    );
-                }
-
-                const parsed = new Date(stringValue);
-
-                if (isNaN(parsed.getTime())) {
-                    return null;
-                }
-
-                return parsed;
-            };
-
-            // -------------------------------------------------
-            // Today
-            // -------------------------------------------------
-
-            const today = new Date();
-
-            today.setHours(23, 59, 59, 999);
-
-            // -------------------------------------------------
-            // Start date according to period
-            // -------------------------------------------------
-
-            let startDate = null;
-
-            if (period === "week") {
-
-                startDate = new Date(today);
-
-                startDate.setDate(
-                    today.getDate() - 6
-                );
-
-                startDate.setHours(0, 0, 0, 0);
-            }
-
-            if (period === "month") {
-
-                startDate = new Date(
-                    today.getFullYear(),
-                    today.getMonth(),
-                    1
-                );
-
-                startDate.setHours(0, 0, 0, 0);
-            }
-
-            // -------------------------------------------------
-            // Filter payments
-            // -------------------------------------------------
-
-            const filteredPayments = payments.filter(
-                (payment) => {
-
-                    if (period === "all") {
-                        return true;
-                    }
-
-                    const paymentDate =
-                        parsePaymentDate(
-                            payment.paymentDate
-                        );
-
-                    if (!paymentDate) {
-                        return false;
-                    }
-
-                    return (
-                        paymentDate >= startDate &&
-                        paymentDate <= today
-                    );
-                }
-            );
-
-            // -------------------------------------------------
-            // Basic calculations
-            // -------------------------------------------------
-
-            const totalStudents =
-                students.length;
-
-            const totalPayments =
-                filteredPayments.length;
-
-            const totalCollection =
-                filteredPayments.reduce(
-                    (total, payment) =>
-                        total +
-                        Number(payment.amount || 0),
-                    0
-                );
-
-            // -------------------------------------------------
-            // Pending fees
-            //
-            // Pending fees should NOT depend on selected
-            // weekly/monthly period.
-            // It represents current outstanding fees.
-            // -------------------------------------------------
-
-            const studentPaidMap = {};
-
-            payments.forEach((payment) => {
-
-                const studentId =
-                    payment.studentId;
-
-                if (!studentPaidMap[studentId]) {
-                    studentPaidMap[studentId] = 0;
-                }
-
-                studentPaidMap[studentId] +=
-                    Number(payment.amount || 0);
-            });
-
-            let pendingFees = 0;
-
-            students.forEach((student) => {
-
-                const totalFee =
-                    Number(student.tuitionFee || 0) +
-                    Number(student.previousDues || 0);
-
-                const totalPaid =
-                    Number(
-                        studentPaidMap[student.id] || 0
-                    );
-
-                const remaining =
-                    totalFee - totalPaid;
-
-                if (remaining > 0) {
-                    pendingFees += remaining;
-                }
-            });
-
-            // -------------------------------------------------
-            // Average payment
-            // -------------------------------------------------
-
-            const averagePayment =
-                totalPayments > 0
-                    ? totalCollection / totalPayments
-                    : 0;
-
-            // -------------------------------------------------
-            // Highest payment
-            // -------------------------------------------------
-
-            const highestPayment =
-                totalPayments > 0
-                    ? Math.max(
-                        ...filteredPayments.map(
-                            payment =>
-                                Number(
-                                    payment.amount || 0
-                                )
-                        )
+        const averagePayment =
+            totalPayments > 0
+                ? totalCollection /
+                  totalPayments
+                : 0;
+
+
+        const highestPayment =
+            totalPayments > 0
+                ? Math.max(
+                    ...activePayments.map(
+                        payment =>
+                            Number(
+                                payment.amount ||
+                                0
+                            )
                     )
-                    : 0;
+                )
+                : 0;
 
-            // -------------------------------------------------
-            // Payment mode collection
-            // -------------------------------------------------
 
-            const paymentModes = {};
+        const modeMap =
+            {};
 
-            filteredPayments.forEach((payment) => {
+
+        activePayments.forEach(
+            payment => {
 
                 const mode =
                     payment.paymentMode ||
                     "Other";
 
-                if (!paymentModes[mode]) {
-                    paymentModes[mode] = 0;
-                }
 
-                paymentModes[mode] +=
-                    Number(payment.amount || 0);
-            });
-
-            const modeCollection =
-                Object.entries(paymentModes)
-                    .map(([mode, amount]) => ({
-                        mode,
-                        amount
-                    }))
-                    .sort(
-                        (a, b) =>
-                            b.amount - a.amount
+                modeMap[mode] =
+                    (
+                        modeMap[mode] ||
+                        0
+                    ) +
+                    Number(
+                        payment.amount ||
+                        0
                     );
 
-            // -------------------------------------------------
-            // Class-wise collection
-            // -------------------------------------------------
+            }
+        );
 
-            const classMap = {};
 
-            filteredPayments.forEach((payment) => {
+        const modeCollection =
+            Object.entries(
+                modeMap
+            ).map(
+                (
+                    [
+                        mode,
+                        amount
+                    ]
+                ) => ({
+
+                    mode,
+                    amount
+
+                })
+            );
+
+
+        const classMap =
+            {};
+
+
+        activePayments.forEach(
+            payment => {
 
                 const className =
                     payment.className ||
                     "Unknown";
 
-                if (!classMap[className]) {
 
-                    classMap[className] = {
+                if (
+                    !classMap[
+                        className
+                    ]
+                ) {
+
+                    classMap[
+                        className
+                    ] = {
+
                         className,
-                        payments: 0,
-                        collection: 0
+
+                        payments:
+                            0,
+
+                        collection:
+                            0
+
                     };
+
                 }
 
-                classMap[className].payments += 1;
 
-                classMap[className].collection +=
-                    Number(payment.amount || 0);
-            });
+                classMap[
+                    className
+                ].payments += 1;
 
-            const classCollection =
-                Object.values(classMap)
-                    .sort(
-                        (a, b) =>
-                            b.collection -
-                            a.collection
+
+                classMap[
+                    className
+                ].collection +=
+                    Number(
+                        payment.amount ||
+                        0
                     );
 
-            // -------------------------------------------------
-            // Recent payments
-            // -------------------------------------------------
+            }
+        );
 
-            const recentPayments =
-                filteredPayments
-                    .slice(0, 10)
-                    .map((payment) => ({
-                        id: payment.id,
-                        studentId: payment.studentId,
-                        studentName:
-                            payment.studentName ||
-                            "Unknown Student",
-                        className:
-                            payment.className ||
-                            "-",
-                        paymentDate:
-                            payment.paymentDate,
-                        amount:
-                            Number(payment.amount || 0),
-                        paymentMode:
-                            payment.paymentMode ||
-                            "-"
-                    }));
 
-            // -------------------------------------------------
-            // Response
-            // -------------------------------------------------
+        const classCollection =
+            Object.values(
+                classMap
+            );
 
-            res.json({
 
-                period,
+        res.json({
 
-                totalStudents,
+            period:
+                req.query.period ||
+                "all",
 
-                totalPayments,
+            academicYear: {
 
-                totalCollection,
+                id:
+                    year.id,
 
-                pendingFees,
+                name:
+                    year.name
 
-                averagePayment,
+            },
 
-                highestPayment,
+            totalStudents,
 
-                modeCollection,
+            totalPayments,
 
-                classCollection,
+            totalCollection,
 
-                recentPayments
+            pendingFees:
+                Math.max(
+                    0,
+                    feeTotal -
+                    totalCollection
+                ),
 
-            });
+            totalFee:
+                feeTotal,
+
+            averagePayment,
+
+            highestPayment,
+
+            modeCollection,
+
+            classCollection,
+
+            recentPayments:
+                activePayments.slice(
+                    0,
+                    10
+                )
 
         });
+
+    } catch (error) {
+
+        console.error(
+            error
+        );
+
+        res.status(500).json({
+
+            success: false,
+
+            message:
+                "Unable to generate report."
+
+        });
+
+    }
+
+};
+
+
+// =====================================================
+// EDIT / DELETE DISABLED
+// =====================================================
+
+exports.updatePayment = (
+    req,
+    res
+) => {
+
+    res.status(405).json({
+
+        success: false,
+
+        message:
+            "Posted payments cannot be edited. Reverse the payment and create a corrected payment."
+
+    });
+
+};
+
+
+exports.deletePayment = (
+    req,
+    res
+) => {
+
+    res.status(405).json({
+
+        success: false,
+
+        message:
+            "Payments cannot be permanently deleted. Use reversal instead."
 
     });
 

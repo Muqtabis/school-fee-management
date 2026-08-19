@@ -1,25 +1,42 @@
-import { useEffect, useState } from "react";
+import {
+    useEffect,
+    useState
+} from "react";
 
 import api from "../services/api";
 
 
-function StudentForm({ student, onClose }) {
+function StudentForm({
+    student,
+    onClose
+}) {
 
-    const [formData, setFormData] = useState({
+    const [
+        formData,
+        setFormData
+    ] = useState({
 
         studentName: "",
+
         rollNumber: "",
+
         className: "",
+
         fatherName: "",
+
         contact1: "",
+
         previousDues: "",
+
         tuitionFee: ""
 
     });
 
 
-    const [loading, setLoading] =
-        useState(false);
+    const [
+        loading,
+        setLoading
+    ] = useState(false);
 
 
     const classes = [
@@ -40,6 +57,10 @@ function StudentForm({ student, onClose }) {
     ];
 
 
+    // =====================================================
+    // LOAD STUDENT
+    // =====================================================
+
     useEffect(() => {
 
         if (student) {
@@ -47,25 +68,52 @@ function StudentForm({ student, onClose }) {
             setFormData({
 
                 studentName:
-                    student.studentName || "",
+                    student.studentName ||
+                    "",
 
                 rollNumber:
-                    student.rollNumber || "",
+                    student.rollNumber ||
+                    "",
 
                 className:
-                    student.className || "",
+                    student.className ||
+                    "",
 
                 fatherName:
-                    student.fatherName || "",
+                    student.fatherName ||
+                    "",
 
                 contact1:
-                    student.contact1 || "",
+                    student.contact1 ||
+                    "",
 
                 previousDues:
-                    student.previousDues || "",
+                    student.previousDues ||
+                    "",
 
                 tuitionFee:
-                    student.tuitionFee || ""
+                    student.tuitionFee ||
+                    ""
+
+            });
+
+        } else {
+
+            setFormData({
+
+                studentName: "",
+
+                rollNumber: "",
+
+                className: "",
+
+                fatherName: "",
+
+                contact1: "",
+
+                previousDues: "",
+
+                tuitionFee: ""
 
             });
 
@@ -74,7 +122,13 @@ function StudentForm({ student, onClose }) {
     }, [student]);
 
 
-    const handleChange = (e) => {
+    // =====================================================
+    // INPUT CHANGE
+    // =====================================================
+
+    const handleChange = (
+        e
+    ) => {
 
         setFormData({
 
@@ -88,27 +142,105 @@ function StudentForm({ student, onClose }) {
     };
 
 
-    const handleSubmit = async (e) => {
+    // =====================================================
+    // SUBMIT
+    // =====================================================
+
+    const handleSubmit = async (
+        e
+    ) => {
 
         e.preventDefault();
 
-        setLoading(true);
+
+        if (
+            !formData.studentName.trim()
+        ) {
+
+            alert(
+                "Please enter the student name."
+            );
+
+            return;
+
+        }
+
+
+        if (
+            !formData.rollNumber.trim()
+        ) {
+
+            alert(
+                "Please enter the roll number."
+            );
+
+            return;
+
+        }
+
+
+        if (
+            !formData.className
+        ) {
+
+            alert(
+                "Please select the class."
+            );
+
+            return;
+
+        }
 
 
         try {
+
+            setLoading(
+                true
+            );
+
+
+            const data = {
+
+                studentName:
+                    formData.studentName.trim(),
+
+                rollNumber:
+                    formData.rollNumber.trim(),
+
+                className:
+                    formData.className,
+
+                fatherName:
+                    formData.fatherName.trim(),
+
+                contact1:
+                    formData.contact1.trim(),
+
+                previousDues:
+                    Number(
+                        formData.previousDues
+                    ) || 0,
+
+                tuitionFee:
+                    Number(
+                        formData.tuitionFee
+                    ) || 0
+
+            };
+
 
             if (student) {
 
                 await api.put(
                     `/students/${student.id}`,
-                    formData
+                    data
                 );
 
             } else {
 
                 await api.post(
                     "/students",
-                    formData
+                    data
                 );
 
             }
@@ -116,7 +248,15 @@ function StudentForm({ student, onClose }) {
 
             onClose();
 
-        } catch (error) {
+        } catch (
+            error
+        ) {
+
+            console.error(
+                "Student Save Error:",
+                error
+            );
+
 
             alert(
                 error.response?.data?.message ||
@@ -125,33 +265,87 @@ function StudentForm({ student, onClose }) {
 
         } finally {
 
-            setLoading(false);
+            setLoading(
+                false
+            );
 
         }
 
     };
 
 
+    // =====================================================
+    // DISPLAY CLASS
+    // =====================================================
+
+    const getClassDisplay =
+        (className) => {
+
+            if (
+                className === "LKG" ||
+                className === "UKG"
+            ) {
+
+                return className;
+
+            }
+
+
+            return `${className} Standard`;
+
+        };
+
+
     return (
 
-        <div className="modal-overlay">
+        <div
+            className="modal-overlay"
+        >
 
-            <div className="student-modal">
+            <div
+                className="student-modal"
+            >
 
-                <div className="modal-header">
+                {/* =================================================
+                    HEADER
+                ================================================= */}
 
-                    <h2>
+                <div
+                    className="modal-header"
+                >
 
-                        {student
-                            ? "Edit Student"
-                            : "Add Student"}
+                    <div>
 
-                    </h2>
+                        <h2>
+
+                            {
+                                student
+                                    ? "Edit Student"
+                                    : "Add Student"
+                            }
+
+                        </h2>
+
+
+                        <p>
+
+                            {
+                                student
+                                    ? "Update student information"
+                                    : "Register a new student"
+                            }
+
+                        </p>
+
+                    </div>
 
 
                     <button
+                        type="button"
                         className="close-btn"
-                        onClick={onClose}
+                        onClick={
+                            onClose
+                        }
                     >
 
                         ✕
@@ -161,16 +355,29 @@ function StudentForm({ student, onClose }) {
                 </div>
 
 
+                {/* =================================================
+                    FORM
+                ================================================= */}
+
                 <form
                     className="student-form"
-                    onSubmit={handleSubmit}
+                    onSubmit={
+                        handleSubmit
+                    }
                 >
 
-                    <div className="form-group">
+                    {/* =================================================
+                        STUDENT NAME
+                    ================================================= */}
+
+                    <div
+                        className="form-group"
+                    >
 
                         <label>
                             Student Name
                         </label>
+
 
                         <input
                             type="text"
@@ -178,18 +385,28 @@ function StudentForm({ student, onClose }) {
                             value={
                                 formData.studentName
                             }
-                            onChange={handleChange}
+                            onChange={
+                                handleChange
+                            }
+                            placeholder="Enter student name"
                             required
                         />
 
                     </div>
 
 
-                    <div className="form-group">
+                    {/* =================================================
+                        ROLL NUMBER
+                    ================================================= */}
+
+                    <div
+                        className="form-group"
+                    >
 
                         <label>
-                            Roll Number
+                            Roll Number (within class)
                         </label>
+
 
                         <input
                             type="text"
@@ -197,26 +414,56 @@ function StudentForm({ student, onClose }) {
                             value={
                                 formData.rollNumber
                             }
-                            onChange={handleChange}
-                            placeholder="Example: 101"
+                            onChange={
+                                handleChange
+                            }
+                            placeholder="Example: 1, 2, 3..."
                             required
                         />
+
+
+                        <small
+                            style={{
+                                display:
+                                    "block",
+
+                                marginTop:
+                                    "5px",
+
+                                color:
+                                    "#64748b"
+                            }}
+                        >
+
+                            Roll numbers can repeat
+                            in different classes.
+
+                        </small>
 
                     </div>
 
 
-                    <div className="form-group">
+                    {/* =================================================
+                        CLASS
+                    ================================================= */}
+
+                    <div
+                        className="form-group"
+                    >
 
                         <label>
                             Class
                         </label>
+
 
                         <select
                             name="className"
                             value={
                                 formData.className
                             }
-                            onChange={handleChange}
+                            onChange={
+                                handleChange
+                            }
                             required
                         >
 
@@ -225,42 +472,48 @@ function StudentForm({ student, onClose }) {
                             </option>
 
 
-                            {classes.map(
-                                (className) => (
+                            {
+                                classes.map(
+                                    className => (
 
-                                    <option
-                                        key={className}
-                                        value={className}
-                                    >
+                                        <option
+                                            key={
+                                                className
+                                            }
+                                            value={
+                                                className
+                                            }
+                                        >
 
-                                        {className === "1" ||
-                                        className === "2" ||
-                                        className === "3" ||
-                                        className === "4" ||
-                                        className === "5" ||
-                                        className === "6" ||
-                                        className === "7" ||
-                                        className === "8" ||
-                                        className === "9" ||
-                                        className === "10"
-                                            ? `${className} Standard`
-                                            : className}
+                                            {
+                                                getClassDisplay(
+                                                    className
+                                                )
+                                            }
 
-                                    </option>
+                                        </option>
 
+                                    )
                                 )
-                            )}
+                            }
 
                         </select>
 
                     </div>
 
 
-                    <div className="form-group">
+                    {/* =================================================
+                        FATHER
+                    ================================================= */}
+
+                    <div
+                        className="form-group"
+                    >
 
                         <label>
                             Father Name
                         </label>
+
 
                         <input
                             type="text"
@@ -268,77 +521,120 @@ function StudentForm({ student, onClose }) {
                             value={
                                 formData.fatherName
                             }
-                            onChange={handleChange}
+                            onChange={
+                                handleChange
+                            }
+                            placeholder="Enter father's name"
                             required
                         />
 
                     </div>
 
 
-                    <div className="form-group">
+                    {/* =================================================
+                        CONTACT
+                    ================================================= */}
+
+                    <div
+                        className="form-group"
+                    >
 
                         <label>
                             Contact Number
                         </label>
 
+
                         <input
-                            type="text"
+                            type="tel"
                             name="contact1"
                             value={
                                 formData.contact1
                             }
-                            onChange={handleChange}
+                            onChange={
+                                handleChange
+                            }
+                            placeholder="Enter contact number"
                             required
                         />
 
                     </div>
 
 
-                    <div className="form-group">
+                    {/* =================================================
+                        PREVIOUS DUES
+                    ================================================= */}
+
+                    <div
+                        className="form-group"
+                    >
 
                         <label>
                             Previous Dues
                         </label>
 
+
                         <input
                             type="number"
                             min="0"
+                            step="0.01"
                             name="previousDues"
                             value={
                                 formData.previousDues
                             }
-                            onChange={handleChange}
+                            onChange={
+                                handleChange
+                            }
+                            placeholder="₹0"
                         />
 
                     </div>
 
 
-                    <div className="form-group">
+                    {/* =================================================
+                        CURRENT TUITION
+                    ================================================= */}
+
+                    <div
+                        className="form-group"
+                    >
 
                         <label>
                             Tuition Fee
                         </label>
 
+
                         <input
                             type="number"
                             min="0"
+                            step="0.01"
                             name="tuitionFee"
                             value={
                                 formData.tuitionFee
                             }
-                            onChange={handleChange}
+                            onChange={
+                                handleChange
+                            }
+                            placeholder="₹0"
                             required
                         />
 
                     </div>
 
 
-                    <div className="modal-actions">
+                    {/* =================================================
+                        ACTIONS
+                    ================================================= */}
+
+                    <div
+                        className="modal-actions"
+                    >
 
                         <button
                             type="button"
                             className="cancel-btn"
-                            onClick={onClose}
+                            onClick={
+                                onClose
+                            }
                         >
 
                             Cancel
@@ -349,14 +645,18 @@ function StudentForm({ student, onClose }) {
                         <button
                             type="submit"
                             className="save-btn"
-                            disabled={loading}
+                            disabled={
+                                loading
+                            }
                         >
 
-                            {loading
-                                ? "Saving..."
-                                : student
-                                    ? "Update Student"
-                                    : "Save Student"}
+                            {
+                                loading
+                                    ? "Saving..."
+                                    : student
+                                        ? "Update Student"
+                                        : "Save Student"
+                            }
 
                         </button>
 
@@ -371,5 +671,6 @@ function StudentForm({ student, onClose }) {
     );
 
 }
+
 
 export default StudentForm;

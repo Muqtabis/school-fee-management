@@ -1,70 +1,118 @@
-const express = require("express");
+const express =
+    require("express");
 
-const router = express.Router();
+const router =
+    express.Router();
 
 const studentController =
     require("../controllers/studentController");
 
+const {
+    requireRole,
+    requireAdmin
+} =
+    require("../middleware/authMiddleware");
 
-/*
-GET ALL STUDENTS
 
-Examples:
-
-/students
-
-/students?className=LKG
-
-/students?className=5
-
-/students?search=rahul
-
-/students?className=5&search=rahul
-*/
+// =====================================================
+// LIST
+// =====================================================
 
 router.get(
     "/",
+    requireRole(
+        "admin",
+        "receptionist"
+    ),
     studentController.getStudents
 );
 
 
-/*
-GET SINGLE STUDENT
-*/
+// =====================================================
+// SINGLE STUDENT
+// =====================================================
 
 router.get(
     "/:id",
+    requireRole(
+        "admin",
+        "receptionist"
+    ),
     studentController.getStudent
 );
 
 
-/*
-ADD STUDENT
-*/
+// =====================================================
+// CREATE
+// =====================================================
 
 router.post(
     "/",
+    requireRole(
+        "admin",
+        "receptionist"
+    ),
     studentController.addStudent
 );
 
 
-/*
-UPDATE STUDENT
-*/
+// =====================================================
+// UPDATE
+// =====================================================
 
 router.put(
     "/:id",
+    requireRole(
+        "admin",
+        "receptionist"
+    ),
     studentController.updateStudent
 );
 
 
-/*
-DELETE STUDENT
-*/
+// =====================================================
+// ARCHIVE — ADMIN ONLY
+// =====================================================
+
+router.post(
+    "/:id/archive",
+    requireAdmin,
+    studentController.archiveStudent
+);
+
+
+// =====================================================
+// RESTORE — ADMIN ONLY
+// =====================================================
+
+router.post(
+    "/:id/restore",
+    requireAdmin,
+    studentController.restoreStudent
+);
+
+
+// =====================================================
+// PERMANENT DELETE DISABLED
+// =====================================================
 
 router.delete(
     "/:id",
-    studentController.deleteStudent
+    (
+        req,
+        res
+    ) => {
+
+        res.status(405).json({
+
+            success: false,
+
+            message:
+                "Permanent student deletion is disabled. Use Archive instead."
+
+        });
+
+    }
 );
 
 

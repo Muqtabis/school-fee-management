@@ -390,7 +390,7 @@ function NotificationsPage() {
                                                         <td>
 
                                                             {
-                                                                notification.mobileNumber ||
+                                                                notification.PhoneNumber ||
                                                                 "-"
                                                             }
 

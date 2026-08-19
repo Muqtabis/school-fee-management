@@ -1,70 +1,168 @@
-import { NavLink, useNavigate } from "react-router-dom";
+import {
+    NavLink,
+    useNavigate
+} from "react-router-dom";
 
-import { useAuth } from "../context/AuthContext";
+import {
+    useAuth
+} from "../context/AuthContext";
 
 
 function Sidebar() {
 
-    const navigate = useNavigate();
+    const navigate =
+        useNavigate();
 
-    const { logout } = useAuth();
-
-
-    const handleLogout = () => {
-
-        logout();
-
-        navigate("/login");
-
-    };
+    const {
+        user,
+        logout
+    } =
+        useAuth();
 
 
     const menuItems = [
 
         {
-            name: "Dashboard",
-            path: "/dashboard",
-            icon: "🏠",
+            name:
+                "Dashboard",
+
+            path:
+                "/dashboard",
+
+            icon:
+                "🏠"
+
         },
 
         {
-            name: "Students",
-            path: "/students",
-            icon: "👨‍🎓",
+            name:
+                "Students",
+
+            path:
+                "/students",
+
+            icon:
+                "👨‍🎓"
+
         },
 
         {
-            name: "Payments",
-            path: "/payments",
-            icon: "💰",
+            name:
+                "Fee Management",
+
+            path:
+                "/fees",
+
+            icon:
+                "📚"
+
         },
 
         {
-            name: "Expenses",
-            path: "/expenses",
-            icon: "💸",
+            name:
+                "Payments",
+
+            path:
+                "/payments",
+
+            icon:
+                "💰"
+
         },
 
         {
-            name: "Reports",
-            path: "/reports",
-            icon: "📊",
+            name:
+                "Expenses",
+
+            path:
+                "/expenses",
+
+            icon:
+                "💸"
+
         },
 
         {
-            name: "Settings",
-            path: "/settings",
-            icon: "⚙️",
+            name:
+                "Reports",
+
+            path:
+                "/reports",
+
+            icon:
+                "📊"
+
         },
+
+        {
+            name:
+                "Notifications",
+
+            path:
+                "/notifications",
+
+            icon:
+                "🔔"
+
+        },
+
+        {
+            name:
+                "Settings",
+
+            path:
+                "/settings",
+
+            icon:
+                "⚙️"
+
+        }
 
     ];
 
 
+    if (
+        user?.role ===
+        "admin"
+    ) {
+
+        menuItems.push({
+
+            name:
+                "Users",
+
+            path:
+                "/users",
+
+            icon:
+                "👥"
+
+        });
+
+    }
+
+
+    const handleLogout =
+        () => {
+
+            logout();
+
+            navigate(
+                "/login"
+            );
+
+        };
+
+
     return (
 
-        <aside className="sidebar">
+        <aside
+            className="sidebar"
+        >
 
-            <div className="sidebar-header">
+            <div
+                className="sidebar-header"
+            >
 
                 <h2>
                     THE AGE SCHOOL
@@ -77,43 +175,63 @@ function Sidebar() {
             </div>
 
 
-            <nav className="sidebar-menu">
+            <nav
+                className="sidebar-menu"
+            >
 
-                {menuItems.map(
-                    (item) => (
+                {
+                    menuItems.map(
+                        item => (
 
-                        <NavLink
-                            key={item.path}
-                            to={item.path}
-                            className={
-                                ({ isActive }) =>
-                                    isActive
-                                        ? "menu-item active"
-                                        : "menu-item"
-                            }
-                        >
+                            <NavLink
+                                key={
+                                    item.path
+                                }
+                                to={
+                                    item.path
+                                }
+                                className={
+                                    ({
+                                        isActive
+                                    }) =>
+                                        isActive
+                                            ? "menu-item active"
+                                            : "menu-item"
+                                }
+                            >
 
-                            <span className="menu-icon">
-                                {item.icon}
-                            </span>
+                                <span
+                                    className="menu-icon"
+                                >
+                                    {
+                                        item.icon
+                                    }
+                                </span>
 
-                            <span>
-                                {item.name}
-                            </span>
+                                <span>
+                                    {
+                                        item.name
+                                    }
+                                </span>
 
-                        </NavLink>
+                            </NavLink>
 
+                        )
                     )
-                )}
+                }
 
             </nav>
 
 
-            <div className="sidebar-footer">
+            <div
+                className="sidebar-footer"
+            >
 
                 <button
                     className="logout-btn"
-                    onClick={handleLogout}
+                    onClick={
+                        handleLogout
+                    }
                 >
                     Logout
                 </button>

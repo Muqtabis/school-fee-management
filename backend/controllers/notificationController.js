@@ -1,16 +1,20 @@
-const db = require("../db");
+const db =
+    require("../db");
 
-/*
-====================================================
-GET ALL NOTIFICATIONS
-====================================================
-*/
 
-exports.getNotifications = (req, res) => {
+// =====================================================
+// GET ALL NOTIFICATIONS
+// =====================================================
+
+exports.getNotifications = (
+    req,
+    res
+) => {
 
     db.all(
         `
         SELECT
+
             notifications.*,
 
             students.studentName,
@@ -20,21 +24,31 @@ exports.getNotifications = (req, res) => {
         FROM notifications
 
         LEFT JOIN students
-        ON notifications.studentId = students.id
+            ON notifications.studentId =
+               students.id
 
-        ORDER BY notifications.createdAt DESC
+        ORDER BY
+            notifications.createdAt DESC
         `,
         [],
-        (err, rows) => {
+        (
+            err,
+            rows
+        ) => {
 
             if (err) {
 
                 return res.status(500).json({
+
                     success: false,
-                    message: err.message
+
+                    message:
+                        "Unable to load notifications."
+
                 });
 
             }
+
 
             res.json(rows);
 
@@ -44,17 +58,19 @@ exports.getNotifications = (req, res) => {
 };
 
 
-/*
-====================================================
-GET SINGLE NOTIFICATION
-====================================================
-*/
+// =====================================================
+// GET SINGLE
+// =====================================================
 
-exports.getNotification = (req, res) => {
+exports.getNotification = (
+    req,
+    res
+) => {
 
     db.get(
         `
         SELECT
+
             notifications.*,
 
             students.studentName,
@@ -64,30 +80,46 @@ exports.getNotification = (req, res) => {
         FROM notifications
 
         LEFT JOIN students
-        ON notifications.studentId = students.id
+            ON notifications.studentId =
+               students.id
 
         WHERE notifications.id = ?
         `,
-        [req.params.id],
-        (err, row) => {
+        [
+            req.params.id
+        ],
+        (
+            err,
+            row
+        ) => {
 
             if (err) {
 
                 return res.status(500).json({
+
                     success: false,
-                    message: err.message
+
+                    message:
+                        "Unable to load notification."
+
                 });
 
             }
+
 
             if (!row) {
 
                 return res.status(404).json({
+
                     success: false,
-                    message: "Notification not found."
+
+                    message:
+                        "Notification not found."
+
                 });
 
             }
+
 
             res.json(row);
 
@@ -97,13 +129,14 @@ exports.getNotification = (req, res) => {
 };
 
 
-/*
-====================================================
-CREATE NOTIFICATION
-====================================================
-*/
+// =====================================================
+// CREATE NOTIFICATION
+// =====================================================
 
-exports.createNotification = (req, res) => {
+exports.createNotification = (
+    req,
+    res
+) => {
 
     const {
         studentId,
@@ -113,62 +146,171 @@ exports.createNotification = (req, res) => {
     } = req.body;
 
 
-    if (!studentId || !paymentId || !phoneNumber || !message) {
+    if (
+        !studentId ||
+        !paymentId ||
+        !phoneNumber ||
+        !message
+    ) {
 
         return res.status(400).json({
+
             success: false,
+
             message:
                 "Student, payment, phone number and message are required."
+
         });
 
     }
 
 
-    db.run(
+    db.get(
         `
-        INSERT INTO notifications
-        (
-            studentId,
-            paymentId,
-            phoneNumber,
-            message,
-            notificationType,
-            status,
-            provider
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        SELECT id
+        FROM students
+        WHERE id = ?
         `,
         [
-            studentId,
-            paymentId,
-            phoneNumber,
-            message,
-            "SMS",
-            "pending",
-            "MSG91"
+            studentId
         ],
-        function (err) {
+        (
+            studentErr,
+            student
+        ) => {
 
-            if (err) {
+            if (studentErr) {
 
                 return res.status(500).json({
+
                     success: false,
-                    message: err.message
+
+                    message:
+                        "Unable to verify student."
+
                 });
 
             }
 
 
-            res.status(201).json({
+            if (!student) {
 
-                success: true,
+                return res.status(404).json({
 
-                id: this.lastID,
+                    success: false,
 
-                message:
-                    "Notification created successfully."
+                    message:
+                        "Student not found."
 
-            });
+                });
+
+            }
+
+
+            db.get(
+                `
+                SELECT id
+                FROM payments
+                WHERE id = ?
+                `,
+                [
+                    paymentId
+                ],
+                (
+                    paymentErr,
+                    payment
+                ) => {
+
+                    if (paymentErr) {
+
+                        return res.status(500).json({
+
+                            success: false,
+
+                            message:
+                                "Unable to verify payment."
+
+                        });
+
+                    }
+
+
+                    if (!payment) {
+
+                        return res.status(404).json({
+
+                            success: false,
+
+                            message:
+                                "Payment not found."
+
+                        });
+
+                    }
+
+
+                    db.run(
+                        `
+                        INSERT INTO notifications
+                        (
+                            studentId,
+                            paymentId,
+                            phoneNumber,
+                            message,
+                            notificationType,
+                            status,
+                            provider
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        `,
+                        [
+                            studentId,
+                            paymentId,
+                            String(
+                                phoneNumber
+                            ).trim(),
+                            String(
+                                message
+                            ).trim(),
+                            "SMS",
+                            "pending",
+                            "MSG91"
+                        ],
+                        function (
+                            err
+                        ) {
+
+                            if (err) {
+
+                                return res.status(500).json({
+
+                                    success: false,
+
+                                    message:
+                                        "Unable to create notification."
+
+                                });
+
+                            }
+
+
+                            res.status(201).json({
+
+                                success: true,
+
+                                id:
+                                    this.lastID,
+
+                                message:
+                                    "Notification created successfully."
+
+                            });
+
+                        }
+                    );
+
+                }
+            );
 
         }
     );
@@ -176,13 +318,14 @@ exports.createNotification = (req, res) => {
 };
 
 
-/*
-====================================================
-UPDATE NOTIFICATION STATUS
-====================================================
-*/
+// =====================================================
+// UPDATE STATUS
+// =====================================================
 
-exports.updateNotificationStatus = (req, res) => {
+exports.updateNotificationStatus = (
+    req,
+    res
+) => {
 
     const {
         status,
@@ -190,11 +333,26 @@ exports.updateNotificationStatus = (req, res) => {
     } = req.body;
 
 
-    if (!status) {
+    const allowedStatuses = [
+        "pending",
+        "sent",
+        "failed"
+    ];
+
+
+    if (
+        !allowedStatuses.includes(
+            status
+        )
+    ) {
 
         return res.status(400).json({
+
             success: false,
-            message: "Notification status is required."
+
+            message:
+                "Invalid notification status."
+
         });
 
     }
@@ -215,13 +373,36 @@ exports.updateNotificationStatus = (req, res) => {
             sentAt || null,
             req.params.id
         ],
-        function (err) {
+        function (
+            err
+        ) {
 
             if (err) {
 
                 return res.status(500).json({
+
                     success: false,
-                    message: err.message
+
+                    message:
+                        "Unable to update notification."
+
+                });
+
+            }
+
+
+            if (
+                this.changes ===
+                0
+            ) {
+
+                return res.status(404).json({
+
+                    success: false,
+
+                    message:
+                        "Notification not found."
+
                 });
 
             }
@@ -235,6 +416,131 @@ exports.updateNotificationStatus = (req, res) => {
                     "Notification status updated successfully."
 
             });
+
+        }
+    );
+
+};
+
+
+// =====================================================
+// RETRY
+//
+// This only puts the notification back into pending.
+// It does not pretend that an SMS was actually sent.
+// =====================================================
+
+exports.retryNotification = (
+    req,
+    res
+) => {
+
+    db.get(
+        `
+        SELECT *
+        FROM notifications
+        WHERE id = ?
+        `,
+        [
+            req.params.id
+        ],
+        (
+            err,
+            notification
+        ) => {
+
+            if (err) {
+
+                return res.status(500).json({
+
+                    success: false,
+
+                    message:
+                        "Unable to load notification."
+
+                });
+
+            }
+
+
+            if (!notification) {
+
+                return res.status(404).json({
+
+                    success: false,
+
+                    message:
+                        "Notification not found."
+
+                });
+
+            }
+
+
+            if (
+                notification.status !==
+                    "failed" &&
+                notification.status !==
+                    "pending"
+            ) {
+
+                return res.status(409).json({
+
+                    success: false,
+
+                    message:
+                        "Only failed or pending notifications can be retried."
+
+                });
+
+            }
+
+
+            db.run(
+                `
+                UPDATE notifications
+
+                SET
+                    status = 'pending',
+                    sentAt = NULL
+
+                WHERE id = ?
+                `,
+                [
+                    req.params.id
+                ],
+                function (
+                    updateErr
+                ) {
+
+                    if (updateErr) {
+
+                        return res.status(500).json({
+
+                            success: false,
+
+                            message:
+                                "Unable to retry notification."
+
+                        });
+
+                    }
+
+
+                    res.json({
+
+                        success: true,
+
+                        message:
+                            "Notification queued for retry.",
+
+                        provider:
+                            notification.provider
+
+                    });
+
+                }
+            );
 
         }
     );

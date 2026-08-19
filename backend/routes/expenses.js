@@ -1,16 +1,30 @@
-const express = require("express");
+const express =
+    require("express");
 
-const router = express.Router();
+const router =
+    express.Router();
 
 const expenseController =
     require("../controllers/expenseController");
 
+const {
+    requireRole
+} =
+    require("../middleware/authMiddleware");
+
+
+router.use(
+    requireRole(
+        "admin",
+        "receptionist"
+    )
+);
+
 
 // =====================================================
-// EXPENSES
+// LIST
 // =====================================================
 
-// Get all expenses + filters
 router.get(
     "/",
     expenseController.getExpenses
@@ -18,13 +32,17 @@ router.get(
 
 
 // =====================================================
-// EXPENSE SUMMARY
-// IMPORTANT: Keep this BEFORE /:id
+// SUMMARY
 // =====================================================
-router.get("/summary", expenseController.expenseSummary);
+
+router.get(
+    "/summary",
+    expenseController.expenseSummary
+);
+
 
 // =====================================================
-// SINGLE EXPENSE
+// SINGLE
 // =====================================================
 
 router.get(
@@ -34,7 +52,7 @@ router.get(
 
 
 // =====================================================
-// ADD EXPENSE
+// CREATE
 // =====================================================
 
 router.post(
@@ -44,7 +62,7 @@ router.post(
 
 
 // =====================================================
-// UPDATE EXPENSE
+// EDIT ACTIVE EXPENSE
 // =====================================================
 
 router.put(
@@ -54,12 +72,37 @@ router.put(
 
 
 // =====================================================
-// DELETE EXPENSE
+// REVERSE
+// ADMIN + RECEPTIONIST
+// =====================================================
+
+router.post(
+    "/:id/reverse",
+    expenseController.reverseExpense
+);
+
+
+// =====================================================
+// DELETE DISABLED
 // =====================================================
 
 router.delete(
     "/:id",
-    expenseController.deleteExpense
+    (
+        req,
+        res
+    ) => {
+
+        res.status(405).json({
+
+            success: false,
+
+            message:
+                "Expenses cannot be permanently deleted. Use reversal instead."
+
+        });
+
+    }
 );
 
 

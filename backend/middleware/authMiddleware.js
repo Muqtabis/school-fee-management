@@ -1,85 +1,121 @@
 const jwt = require("jsonwebtoken");
 
-const JWT_SECRET = process.env.JWT_SECRET || "THE_AGE_SCHOOL_SECRET";
+const JWT_SECRET = process.env.JWT_SECRET;
 
-// Verify JWT Token
-exports.verifyToken = (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
+if (!JWT_SECRET) {
+    throw new Error(
+        "JWT_SECRET is not configured."
+    );
+}
+
+
+// =====================================================
+// AUTHENTICATE JWT
+// =====================================================
+
+function authenticateToken(req, res, next) {
+
+    const authHeader =
+        req.headers.authorization;
 
     if (!authHeader) {
-      return res.status(401).json({
-        success: false,
-        message: "Access denied. No token provided.",
-      });
+
+        return res.status(401).json({
+            success: false,
+            message: "Authentication required."
+        });
+
     }
 
-    const token = authHeader.startsWith("Bearer ")
-      ? authHeader.split(" ")[1]
-      : authHeader;
+    const parts =
+        authHeader.split(" ");
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    if (
+        parts.length !== 2 ||
+        parts[0] !== "Bearer"
+    ) {
 
-    req.user = decoded;
+        return res.status(401).json({
+            success: false,
+            message: "Invalid authorization format."
+        });
 
-    next();
-  } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid or expired token.",
-    });
-  }
-};
+    }
 
-// Admin Only
-exports.isAdmin = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({
-      success: false,
-      message: "Unauthorized",
-    });
-  }
+    const token =
+        parts[1];
 
-  if (req.user.role !== "admin") {
-    return res.status(403).json({
-      success: false,
-      message: "Access denied. Admin only.",
-    });
-  }
+    try {
 
-  next();
-};
+        const decoded =
+            jwt.verify(
+                token,
+                JWT_SECRET
+            );
 
-// Admin or Accountant
-exports.isAdminOrAccountant = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({
-      success: false,
-      message: "Unauthorized",
-    });
-  }
+        req.user = decoded;
 
-  if (
-    req.user.role !== "admin" &&
-    req.user.role !== "accountant"
-  ) {
-    return res.status(403).json({
-      success: false,
-      message: "Access denied.",
-    });
-  }
+        next();
 
-  next();
-};
+    } catch (error) {
 
-// Any Logged-in User
-exports.isAuthenticated = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({
-      success: false,
-      message: "Please login first.",
-    });
-  }
+        return res.status(401).json({
+            success: false,
+            message: "Invalid or expired token."
+        });
 
-  next();
+    }
+
+}
+
+
+// =====================================================
+// ROLE AUTHORIZATION
+// =====================================================
+
+function requireRole(...allowedRoles) {
+
+    return (req, res, next) => {
+
+        if (!req.user) {
+
+            return res.status(401).json({
+                success: false,
+                message: "Authentication required."
+            });
+
+        }
+
+        if (
+            !allowedRoles.includes(
+                req.user.role
+            )
+        ) {
+
+            return res.status(403).json({
+                success: false,
+                message: "You do not have permission for this action."
+            });
+
+        }
+
+        next();
+
+    };
+
+}
+
+
+// =====================================================
+// ADMIN
+// =====================================================
+
+const requireAdmin =
+    requireRole("admin");
+
+
+module.exports = {
+    authenticateToken,
+    requireRole,
+    requireAdmin
 };

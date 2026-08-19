@@ -2,68 +2,117 @@ const express = require("express");
 
 const router = express.Router();
 
-const paymentController = require("../controllers/paymentController");
+const paymentController =
+    require("../controllers/paymentController");
+
+const {
+    requireRole
+} = require("../middleware/authMiddleware");
+
+// =====================================================
+// ROLE
+// =====================================================
+
+router.use(
+    requireRole(
+        "admin",
+        "receptionist"
+    )
+);
 
 // =====================================================
 // PAYMENTS
 // =====================================================
 
-// Get payments + filters
 router.get(
     "/",
     paymentController.getPayments
 );
 
-// Dashboard summary
+// =====================================================
+// DASHBOARD SUMMARY
+// IMPORTANT: BEFORE /:id
+// =====================================================
+
 router.get(
     "/summary",
     paymentController.dashboardSummary
 );
 
-// Detailed reports
-// IMPORTANT: keep this BEFORE /:id
+// =====================================================
+// REPORT SUMMARY
+// IMPORTANT: BEFORE /:id
+// =====================================================
+
 router.get(
     "/report-summary",
     paymentController.reportSummary
 );
 
-// Monthly collection
+// =====================================================
+// MONTHLY COLLECTION
+// IMPORTANT: BEFORE /:id
+// =====================================================
+
 router.get(
     "/monthly-collection",
     paymentController.monthlyCollection
 );
 
-// Student fee history
+// =====================================================
+// STUDENT HISTORY
+// =====================================================
+
 router.get(
     "/history/student/:studentId",
     paymentController.studentFeeHistory
 );
 
-// Receipt
+// =====================================================
+// RECEIPT
+// =====================================================
+
 router.get(
     "/receipt/:id",
     paymentController.getReceipt
 );
 
-// Single payment
+// =====================================================
+// SINGLE PAYMENT
+// =====================================================
+
 router.get(
     "/:id",
     paymentController.getPayment
 );
 
-// Add payment
+// =====================================================
+// ADD PAYMENT
+// =====================================================
+
 router.post(
     "/",
     paymentController.addPayment
 );
 
-// Update payment
+// =====================================================
+// REVERSE PAYMENT
+// =====================================================
+
+router.post(
+    "/:id/reverse",
+    paymentController.reversePayment
+);
+
+// =====================================================
+// DISABLED
+// =====================================================
+
 router.put(
     "/:id",
     paymentController.updatePayment
 );
 
-// Delete payment
 router.delete(
     "/:id",
     paymentController.deletePayment

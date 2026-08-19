@@ -1,11 +1,26 @@
-const db = require("../db");
+const db =
+    require("../db");
+
+const logAudit =
+    require("../utils/auditLogger");
+
+
+const activeExpenseCondition = `
+    (
+        status IS NULL
+        OR status != 'reversed'
+    )
+`;
 
 
 // =====================================================
 // GET ALL EXPENSES
 // =====================================================
 
-exports.getExpenses = (req, res) => {
+exports.getExpenses = (
+    req,
+    res
+) => {
 
     const {
         category,
@@ -14,20 +29,29 @@ exports.getExpenses = (req, res) => {
         endDate
     } = req.query;
 
+
     let query = `
         SELECT *
         FROM expenses
         WHERE 1 = 1
     `;
 
+
     const params = [];
 
 
-    if (category && category !== "all") {
+    if (
+        category &&
+        category !== "all"
+    ) {
 
-        query += ` AND category = ?`;
+        query += `
+            AND category = ?
+        `;
 
-        params.push(category);
+        params.push(
+            category
+        );
 
     }
 
@@ -42,50 +66,73 @@ exports.getExpenses = (req, res) => {
             )
         `;
 
-        const value = `%${search}%`;
+        const value =
+            `%${search}%`;
 
-        params.push(value, value, value);
+
+        params.push(
+            value,
+            value,
+            value
+        );
 
     }
 
 
     if (startDate) {
 
-        query += ` AND expenseDate >= ?`;
+        query += `
+            AND expenseDate >= ?
+        `;
 
-        params.push(startDate);
+        params.push(
+            startDate
+        );
 
     }
 
 
     if (endDate) {
 
-        query += ` AND expenseDate <= ?`;
+        query += `
+            AND expenseDate <= ?
+        `;
 
-        params.push(endDate);
+        params.push(
+            endDate
+        );
 
     }
 
 
     query += `
-        ORDER BY expenseDate DESC, id DESC
+        ORDER BY
+            expenseDate DESC,
+            id DESC
     `;
 
 
     db.all(
         query,
         params,
-        (err, rows) => {
+        (
+            err,
+            rows
+        ) => {
 
             if (err) {
 
-                console.error(err);
-
                 return res.status(500).json({
-                    message: "Unable to fetch expenses"
+
+                    success: false,
+
+                    message:
+                        "Unable to fetch expenses."
+
                 });
 
             }
+
 
             res.json(rows);
 
@@ -96,33 +143,55 @@ exports.getExpenses = (req, res) => {
 
 
 // =====================================================
-// GET SINGLE EXPENSE
+// GET SINGLE
 // =====================================================
 
-exports.getExpense = (req, res) => {
-
-    const { id } = req.params;
+exports.getExpense = (
+    req,
+    res
+) => {
 
     db.get(
-        `SELECT * FROM expenses WHERE id = ?`,
-        [id],
-        (err, row) => {
+        `
+        SELECT *
+        FROM expenses
+        WHERE id = ?
+        `,
+        [
+            req.params.id
+        ],
+        (
+            err,
+            row
+        ) => {
 
             if (err) {
 
                 return res.status(500).json({
-                    message: "Unable to fetch expense"
+
+                    success: false,
+
+                    message:
+                        "Unable to fetch expense."
+
                 });
 
             }
+
 
             if (!row) {
 
                 return res.status(404).json({
-                    message: "Expense not found"
+
+                    success: false,
+
+                    message:
+                        "Expense not found."
+
                 });
 
             }
+
 
             res.json(row);
 
@@ -136,7 +205,10 @@ exports.getExpense = (req, res) => {
 // ADD EXPENSE
 // =====================================================
 
-exports.addExpense = (req, res) => {
+exports.addExpense = (
+    req,
+    res
+) => {
 
     const {
         expenseName,
@@ -149,16 +221,28 @@ exports.addExpense = (req, res) => {
     } = req.body;
 
 
+    const numericAmount =
+        Number(amount);
+
+
     if (
         !expenseName ||
         !category ||
-        !amount ||
         !expenseDate ||
-        !paymentMode
+        !paymentMode ||
+        !Number.isFinite(
+            numericAmount
+        ) ||
+        numericAmount <= 0
     ) {
 
         return res.status(400).json({
-            message: "Please fill all required fields"
+
+            success: false,
+
+            message:
+                "Please enter valid expense details."
+
         });
 
     }
@@ -174,39 +258,100 @@ exports.addExpense = (req, res) => {
             expenseDate,
             paymentMode,
             paidTo,
-            description
+            description,
+            status
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'completed')
         `,
         [
-            expenseName,
+            String(
+                expenseName
+            ).trim(),
+
             category,
-            Number(amount),
+
+            numericAmount,
+
             expenseDate,
+
             paymentMode,
-            paidTo || "",
-            description || ""
+
+            paidTo
+                ? String(
+                    paidTo
+                ).trim()
+                : "",
+
+            description
+                ? String(
+                    description
+                ).trim()
+                : ""
         ],
-        function (err) {
+        function (
+            err
+        ) {
 
             if (err) {
 
-                console.error(err);
-
                 return res.status(500).json({
-                    message: "Unable to add expense"
+
+                    success: false,
+
+                    message:
+                        "Unable to add expense."
+
                 });
 
             }
 
 
-            res.status(201).json({
+            const expenseId =
+                this.lastID;
 
-                success: true,
 
-                message: "Expense added successfully",
+            logAudit({
 
-                id: this.lastID
+                userId:
+                    req.user.id,
+
+                action:
+                    "EXPENSE_CREATED",
+
+                entityType:
+                    "expense",
+
+                entityId:
+                    expenseId,
+
+                details: {
+
+                    expenseName,
+
+                    category,
+
+                    amount:
+                        numericAmount,
+
+                    expenseDate,
+
+                    paymentMode
+
+                }
+
+            }).then(() => {
+
+                res.status(201).json({
+
+                    success: true,
+
+                    id:
+                        expenseId,
+
+                    message:
+                        "Expense added successfully."
+
+                });
 
             });
 
@@ -220,9 +365,10 @@ exports.addExpense = (req, res) => {
 // UPDATE EXPENSE
 // =====================================================
 
-exports.updateExpense = (req, res) => {
-
-    const { id } = req.params;
+exports.updateExpense = (
+    req,
+    res
+) => {
 
     const {
         expenseName,
@@ -235,75 +381,194 @@ exports.updateExpense = (req, res) => {
     } = req.body;
 
 
+    const numericAmount =
+        Number(amount);
+
+
     if (
         !expenseName ||
         !category ||
-        !amount ||
         !expenseDate ||
-        !paymentMode
+        !paymentMode ||
+        !Number.isFinite(
+            numericAmount
+        ) ||
+        numericAmount <= 0
     ) {
 
         return res.status(400).json({
-            message: "Please fill all required fields"
+
+            success: false,
+
+            message:
+                "Please enter valid expense details."
+
         });
 
     }
 
 
-    db.run(
+    db.get(
         `
-        UPDATE expenses
-
-        SET
-            expenseName = ?,
-            category = ?,
-            amount = ?,
-            expenseDate = ?,
-            paymentMode = ?,
-            paidTo = ?,
-            description = ?
-
+        SELECT *
+        FROM expenses
         WHERE id = ?
         `,
         [
-            expenseName,
-            category,
-            Number(amount),
-            expenseDate,
-            paymentMode,
-            paidTo || "",
-            description || "",
-            id
+            req.params.id
         ],
-        function (err) {
+        (
+            findErr,
+            expense
+        ) => {
 
-            if (err) {
-
-                console.error(err);
+            if (findErr) {
 
                 return res.status(500).json({
-                    message: "Unable to update expense"
+
+                    success: false,
+
+                    message:
+                        "Unable to find expense."
+
                 });
 
             }
 
 
-            if (this.changes === 0) {
+            if (!expense) {
 
                 return res.status(404).json({
-                    message: "Expense not found"
+
+                    success: false,
+
+                    message:
+                        "Expense not found."
+
                 });
 
             }
 
 
-            res.json({
+            if (
+                expense.status ===
+                "reversed"
+            ) {
 
-                success: true,
+                return res.status(409).json({
 
-                message: "Expense updated successfully"
+                    success: false,
 
-            });
+                    message:
+                        "Reversed expenses cannot be edited."
+
+                });
+
+            }
+
+
+            db.run(
+                `
+                UPDATE expenses
+
+                SET
+                    expenseName = ?,
+                    category = ?,
+                    amount = ?,
+                    expenseDate = ?,
+                    paymentMode = ?,
+                    paidTo = ?,
+                    description = ?
+
+                WHERE id = ?
+                `,
+                [
+                    String(
+                        expenseName
+                    ).trim(),
+
+                    category,
+
+                    numericAmount,
+
+                    expenseDate,
+
+                    paymentMode,
+
+                    paidTo
+                        ? String(
+                            paidTo
+                        ).trim()
+                        : "",
+
+                    description
+                        ? String(
+                            description
+                        ).trim()
+                        : "",
+
+                    req.params.id
+                ],
+                function (
+                    err
+                ) {
+
+                    if (err) {
+
+                        return res.status(500).json({
+
+                            success: false,
+
+                            message:
+                                "Unable to update expense."
+
+                        });
+
+                    }
+
+
+                    logAudit({
+
+                        userId:
+                            req.user.id,
+
+                        action:
+                            "EXPENSE_UPDATED",
+
+                        entityType:
+                            "expense",
+
+                        entityId:
+                            Number(
+                                req.params.id
+                            ),
+
+                        details: {
+
+                            expenseName,
+
+                            category,
+
+                            amount:
+                                numericAmount
+
+                        }
+
+                    }).then(() => {
+
+                        res.json({
+
+                            success: true,
+
+                            message:
+                                "Expense updated successfully."
+
+                        });
+
+                    });
+
+                }
+            );
 
         }
     );
@@ -312,49 +577,229 @@ exports.updateExpense = (req, res) => {
 
 
 // =====================================================
-// DELETE EXPENSE
+// REVERSE EXPENSE
 // =====================================================
 
-exports.deleteExpense = (req, res) => {
+exports.reverseExpense = (
+    req,
+    res
+) => {
 
-    const { id } = req.params;
+    const expenseId =
+        Number(
+            req.params.id
+        );
 
 
-    db.run(
+    const reason =
+        String(
+            req.body?.reason || ""
+        ).trim();
+
+
+    if (
+        !expenseId ||
+        expenseId <= 0
+    ) {
+
+        return res.status(400).json({
+
+            success: false,
+
+            message:
+                "Invalid expense ID."
+
+        });
+
+    }
+
+
+    if (!reason) {
+
+        return res.status(400).json({
+
+            success: false,
+
+            message:
+                "A reversal reason is required."
+
+        });
+
+    }
+
+
+    db.get(
         `
-        DELETE FROM expenses
+        SELECT *
+        FROM expenses
         WHERE id = ?
         `,
-        [id],
-        function (err) {
+        [
+            expenseId
+        ],
+        (
+            err,
+            expense
+        ) => {
 
             if (err) {
 
-                console.error(err);
-
                 return res.status(500).json({
-                    message: "Unable to delete expense"
+
+                    success: false,
+
+                    message:
+                        "Unable to find expense."
+
                 });
 
             }
 
 
-            if (this.changes === 0) {
+            if (!expense) {
 
                 return res.status(404).json({
-                    message: "Expense not found"
+
+                    success: false,
+
+                    message:
+                        "Expense not found."
+
                 });
 
             }
 
 
-            res.json({
+            if (
+                expense.status ===
+                "reversed"
+            ) {
 
-                success: true,
+                return res.status(409).json({
 
-                message: "Expense deleted successfully"
+                    success: false,
 
-            });
+                    message:
+                        "This expense has already been reversed."
+
+                });
+
+            }
+
+
+            const voidedAt =
+                new Date().toISOString();
+
+
+            db.run(
+                `
+                UPDATE expenses
+
+                SET
+
+                    status = 'reversed',
+
+                    voidedAt = ?,
+
+                    voidedBy = ?,
+
+                    voidReason = ?
+
+                WHERE id = ?
+
+                AND (
+                    status IS NULL
+                    OR status != 'reversed'
+                )
+                `,
+                [
+                    voidedAt,
+                    req.user.id,
+                    reason,
+                    expenseId
+                ],
+                function (
+                    updateErr
+                ) {
+
+                    if (updateErr) {
+
+                        return res.status(500).json({
+
+                            success: false,
+
+                            message:
+                                "Unable to reverse expense."
+
+                        });
+
+                    }
+
+
+                    if (
+                        this.changes ===
+                        0
+                    ) {
+
+                        return res.status(409).json({
+
+                            success: false,
+
+                            message:
+                                "Expense could not be reversed."
+
+                        });
+
+                    }
+
+
+                    logAudit({
+
+                        userId:
+                            req.user.id,
+
+                        action:
+                            "EXPENSE_REVERSED",
+
+                        entityType:
+                            "expense",
+
+                        entityId:
+                            expenseId,
+
+                        details: {
+
+                            expenseName:
+                                expense.expenseName,
+
+                            amount:
+                                expense.amount,
+
+                            category:
+                                expense.category,
+
+                            reason,
+
+                            reversedAt:
+                                voidedAt
+
+                        }
+
+                    }).then(() => {
+
+                        res.json({
+
+                            success: true,
+
+                            message:
+                                "Expense reversed successfully."
+
+                        });
+
+                    });
+
+                }
+            );
 
         }
     );
@@ -366,156 +811,154 @@ exports.deleteExpense = (req, res) => {
 // EXPENSE SUMMARY
 // =====================================================
 
-exports.expenseSummary = (req, res) => {
-
-    const queries = {
-
-        // Total amount spent
-        total: `
-            SELECT
-                COALESCE(SUM(amount), 0) AS total
-            FROM expenses
-        `,
-
-        // Number of expense transactions
-        count: `
-            SELECT
-                COUNT(*) AS total
-            FROM expenses
-        `,
-
-        // Current month expenses
-        month: `
-            SELECT
-                COALESCE(SUM(amount), 0) AS total
-            FROM expenses
-            WHERE strftime('%Y-%m', expenseDate) =
-                  strftime('%Y-%m', 'now')
-        `,
-
-        // Current year expenses
-        year: `
-            SELECT
-                COALESCE(SUM(amount), 0) AS total
-            FROM expenses
-            WHERE strftime('%Y', expenseDate) =
-                  strftime('%Y', 'now')
-        `
-    };
-
-
-    // =====================================================
-    // TOTAL EXPENSE AMOUNT
-    // =====================================================
+exports.expenseSummary = (
+    req,
+    res
+) => {
 
     db.get(
-        queries.total,
+        `
+        SELECT
+            COALESCE(
+                SUM(amount),
+                0
+            ) AS totalAmount,
+
+            COUNT(*) AS totalExpenses
+
+        FROM expenses
+
+        WHERE ${activeExpenseCondition}
+        `,
         [],
-        (err, totalResult) => {
+        (
+            err,
+            summary
+        ) => {
 
             if (err) {
 
-                console.error(
-                    "Total Expense Error:",
-                    err
-                );
-
                 return res.status(500).json({
+
+                    success: false,
+
                     message:
-                        "Unable to calculate total expenses"
+                        "Unable to calculate expense summary."
+
                 });
 
             }
 
 
-            // =====================================================
-            // EXPENSE TRANSACTION COUNT
-            // =====================================================
-
             db.get(
-                queries.count,
+                `
+                SELECT
+                    COALESCE(
+                        SUM(amount),
+                        0
+                    ) AS total
+
+                FROM expenses
+
+                WHERE ${activeExpenseCondition}
+
+                AND strftime(
+                    '%Y-%m',
+                    expenseDate
+                ) =
+                    strftime(
+                        '%Y-%m',
+                        'now'
+                    )
+                `,
                 [],
-                (err, countResult) => {
+                (
+                    monthErr,
+                    month
+                ) => {
 
-                    if (err) {
-
-                        console.error(
-                            "Expense Count Error:",
-                            err
-                        );
+                    if (monthErr) {
 
                         return res.status(500).json({
+
+                            success: false,
+
                             message:
-                                "Unable to calculate expense transactions"
+                                "Unable to calculate monthly expenses."
+
                         });
 
                     }
 
 
-                    // =====================================================
-                    // MONTHLY EXPENSE
-                    // =====================================================
-
                     db.get(
-                        queries.month,
-                        [],
-                        (err, monthResult) => {
+                        `
+                        SELECT
+                            COALESCE(
+                                SUM(amount),
+                                0
+                            ) AS total
 
-                            if (err) {
+                        FROM expenses
+
+                        WHERE ${activeExpenseCondition}
+
+                        AND strftime(
+                            '%Y',
+                            expenseDate
+                        ) =
+                            strftime(
+                                '%Y',
+                                'now'
+                            )
+                        `,
+                        [],
+                        (
+                            yearErr,
+                            year
+                        ) => {
+
+                            if (yearErr) {
 
                                 return res.status(500).json({
+
+                                    success: false,
+
                                     message:
-                                        "Unable to calculate monthly expenses"
+                                        "Unable to calculate yearly expenses."
+
                                 });
 
                             }
 
 
-                            // =====================================================
-                            // YEARLY EXPENSE
-                            // =====================================================
+                            res.json({
 
-                            db.get(
-                                queries.year,
-                                [],
-                                (err, yearResult) => {
+                                totalExpenseAmount:
+                                    Number(
+                                        summary.totalAmount ||
+                                        0
+                                    ),
 
-                                    if (err) {
+                                totalExpenses:
+                                    Number(
+                                        summary.totalExpenses ||
+                                        0
+                                    ),
 
-                                        return res.status(500).json({
-                                            message:
-                                                "Unable to calculate yearly expenses"
-                                        });
+                                monthlyExpenses:
+                                    Number(
+                                        month.total ||
+                                        0
+                                    ),
 
-                                    }
+                                yearlyExpenses:
+                                    Number(
+                                        year.total ||
+                                        0
+                                    )
 
-
-                                    // =====================================================
-                                    // FINAL RESPONSE
-                                    // =====================================================
-
-                                    res.json({
-
-                                        // Total money spent
-                                        totalExpenseAmount:
-                                            totalResult.total || 0,
-
-                                        // Number of expense records
-                                        totalExpenses:
-                                            countResult.total || 0,
-
-                                        // Current month
-                                        monthlyExpenses:
-                                            monthResult.total || 0,
-
-                                        // Current year
-                                        yearlyExpenses:
-                                            yearResult.total || 0
-
-                                    });
-
-                                }
-                            );
+                            });
 
                         }
                     );
@@ -525,5 +968,26 @@ exports.expenseSummary = (req, res) => {
 
         }
     );
+
+};
+
+
+// =====================================================
+// DELETE DISABLED
+// =====================================================
+
+exports.deleteExpense = (
+    req,
+    res
+) => {
+
+    return res.status(405).json({
+
+        success: false,
+
+        message:
+            "Expenses cannot be permanently deleted. Use reversal instead."
+
+    });
 
 };

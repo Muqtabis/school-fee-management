@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react";
+import {
+    useEffect,
+    useState
+} from "react";
 
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
@@ -9,281 +12,369 @@ import api from "../services/api";
 
 function DashboardPage() {
 
-    const [summary, setSummary] = useState({
+    const [
+        summary,
+        setSummary
+    ] = useState({
 
-        totalStudents: 0,
+        academicYear:
+            "",
 
-        totalPayments: 0,
+        totalStudents:
+            0,
 
-        totalCollection: 0,
+        totalPayments:
+            0,
 
-        pendingFees: 0,
+        totalFee:
+            0,
 
-        totalExpenses: 0,
+        totalCollection:
+            0,
 
-        totalExpenseAmount: 0,
+        pendingFees:
+            0,
 
-        netBalance: 0
+        totalExpenses:
+            0,
+
+        totalExpenseAmount:
+            0,
+
+        netBalance:
+            0
 
     });
 
 
-    const [recentPayments, setRecentPayments] =
-        useState([]);
+    const [
+        recentPayments,
+        setRecentPayments
+    ] = useState([]);
 
 
-    const [recentExpenses, setRecentExpenses] =
-        useState([]);
+    const [
+        recentExpenses,
+        setRecentExpenses
+    ] = useState([]);
 
 
-    useEffect(() => {
+    useEffect(
+        () => {
 
-        fetchDashboard();
+            fetchDashboard();
 
-    }, []);
-
-
-    const fetchDashboard = async () => {
-
-        try {
+        },
+        []
+    );
 
 
-            // PAYMENT SUMMARY
+    const fetchDashboard =
+        async () => {
 
-            const paymentSummary =
-                await api.get("/payments/summary");
+            try {
+
+                const [
+                    paymentSummary,
+                    expenseSummary,
+                    payments,
+                    expenses
+                ] = await Promise.all([
+
+                    api.get(
+                        "/payments/summary"
+                    ),
+
+                    api.get(
+                        "/expenses/summary"
+                    ),
+
+                    api.get(
+                        "/payments"
+                    ),
+
+                    api.get(
+                        "/expenses"
+                    )
+
+                ]);
 
 
-            // EXPENSE SUMMARY
-
-            const expenseSummary =
-                await api.get("/expenses/summary");
-
-
-            const totalCollection =
-                Number(paymentSummary.data.totalCollection) || 0;
+                const totalCollection =
+                    Number(
+                        paymentSummary.data.totalCollection
+                    ) || 0;
 
 
-            const totalExpenseAmount =
-                Number(expenseSummary.data.totalExpenseAmount) || 0;
+                const totalExpenseAmount =
+                    Number(
+                        expenseSummary.data.totalExpenseAmount
+                    ) || 0;
 
 
-            setSummary({
+                setSummary({
 
-                totalStudents:
-                    Number(paymentSummary.data.totalStudents) || 0,
+                    academicYear:
+                        paymentSummary.data.academicYear?.name ||
+                        "",
 
-                totalPayments:
-                    Number(paymentSummary.data.totalPayments) || 0,
+                    totalStudents:
+                        Number(
+                            paymentSummary.data.totalStudents ||
+                            0
+                        ),
 
-                totalCollection:
+                    totalPayments:
+                        Number(
+                            paymentSummary.data.totalPayments ||
+                            0
+                        ),
+
+                    totalFee:
+                        Number(
+                            paymentSummary.data.totalFee ||
+                            0
+                        ),
+
                     totalCollection,
 
-                pendingFees:
-                    Number(paymentSummary.data.pendingFees) || 0,
+                    pendingFees:
+                        Number(
+                            paymentSummary.data.pendingFees ||
+                            0
+                        ),
 
-                totalExpenses:
-                    Number(expenseSummary.data.totalExpenses) || 0,
+                    totalExpenses:
+                        Number(
+                            expenseSummary.data.totalExpenses ||
+                            0
+                        ),
 
-                totalExpenseAmount:
                     totalExpenseAmount,
 
-                netBalance:
-                    totalCollection - totalExpenseAmount
+                    netBalance:
+                        totalCollection -
+                        totalExpenseAmount
 
-            });
-
-
-            // RECENT PAYMENTS
-
-            const paymentRes =
-                await api.get("/payments");
+                });
 
 
-            setRecentPayments(
-                paymentRes.data.slice(0, 5)
-            );
+                setRecentPayments(
+                    Array.isArray(
+                        payments.data
+                    )
+                        ? payments.data
+                            .filter(
+                                payment =>
+                                    payment.status !==
+                                    "reversed"
+                            )
+                            .slice(
+                                0,
+                                5
+                            )
+                        : []
+                );
 
 
-            // RECENT EXPENSES
+                setRecentExpenses(
+                    Array.isArray(
+                        expenses.data
+                    )
+                        ? expenses.data
+                            .filter(
+                                expense =>
+                                    expense.status !==
+                                    "reversed"
+                            )
+                            .slice(
+                                0,
+                                5
+                            )
+                        : []
+                );
 
-            const expenseRes =
-                await api.get("/expenses");
+            } catch (error) {
+
+                console.error(
+                    "Dashboard Error:",
+                    error
+                );
+
+            }
+
+        };
 
 
-            setRecentExpenses(
-                expenseRes.data.slice(0, 5)
-            );
-
-
-        }
-
-        catch (error) {
-
-            console.error(
-                "Dashboard Error:",
-                error
-            );
-
-        }
-
-    };
+    const money =
+        value =>
+            `₹ ${Number(
+                value || 0
+            ).toLocaleString(
+                "en-IN"
+            )}`;
 
 
     return (
 
-        <div className="dashboard">
-
+        <div
+            className="dashboard"
+        >
 
             <Sidebar />
 
 
-            <div className="main-content">
-
+            <div
+                className="main-content"
+            >
 
                 <Navbar />
 
 
-                <div className="page-content">
+                <div
+                    className="page-content"
+                >
+
+                    <div
+                        className="page-header"
+                    >
+
+                        <div>
+
+                            <h2>
+                                Dashboard
+                            </h2>
+
+                            <p>
+
+                                Active Academic Year:
+                                {" "}
+
+                                <strong>
+                                    {
+                                        summary.academicYear ||
+                                        "-"
+                                    }
+                                </strong>
+
+                            </p>
+
+                        </div>
+
+                    </div>
 
 
-                    {/* ================================================= */}
-                    {/* FINANCIAL CARDS */}
-                    {/* ================================================= */}
-
-
-                    <div className="cards">
-
+                    <div
+                        className="cards"
+                    >
 
                         <DashboardCard
-
                             title="Students"
-
                             value={
                                 summary.totalStudents
                             }
-
                             icon="👨‍🎓"
-
                             color="#2563EB"
-
                         />
 
 
                         <DashboardCard
+                            title="Total Fees"
+                            value={
+                                money(
+                                    summary.totalFee
+                                )
+                            }
+                            icon="📚"
+                            color="#7C3AED"
+                        />
 
+
+                        <DashboardCard
                             title="Fee Collection"
-
                             value={
-                                `₹ ${summary.totalCollection.toLocaleString("en-IN")}`
+                                money(
+                                    summary.totalCollection
+                                )
                             }
-
                             icon="💰"
-
                             color="#22C55E"
-
                         />
 
 
                         <DashboardCard
-
-                            title="School Expenses"
-
+                            title="Pending Fees"
                             value={
-                                `₹ ${summary.totalExpenseAmount.toLocaleString("en-IN")}`
+                                money(
+                                    summary.pendingFees
+                                )
                             }
-
-                            icon="💸"
-
-                            color="#EF4444"
-
+                            icon="⚠️"
+                            color="#DC2626"
                         />
-
-
-                        <DashboardCard
-
-                            title="Net Balance"
-
-                            value={
-                                `₹ ${summary.netBalance.toLocaleString("en-IN")}`
-                            }
-
-                            icon="💵"
-
-                            color="#F59E0B"
-
-                        />
-
 
                     </div>
 
 
-                    {/* ================================================= */}
-                    {/* PENDING FEES */}
-                    {/* ================================================= */}
-
-
-                    <div className="cards">
-
+                    <div
+                        className="cards"
+                    >
 
                         <DashboardCard
-
-                            title="Pending Student Fees"
-
+                            title="School Expenses"
                             value={
-                                `₹ ${summary.pendingFees.toLocaleString("en-IN")}`
+                                money(
+                                    summary.totalExpenseAmount
+                                )
                             }
-
-                            icon="⚠️"
-
-                            color="#DC2626"
-
+                            icon="💸"
+                            color="#EF4444"
                         />
 
 
                         <DashboardCard
+                            title="Net Balance"
+                            value={
+                                money(
+                                    summary.netBalance
+                                )
+                            }
+                            icon="💵"
+                            color="#F59E0B"
+                        />
 
+
+                        <DashboardCard
                             title="Total Payments"
-
                             value={
                                 summary.totalPayments
                             }
-
                             icon="🧾"
-
                             color="#7C3AED"
-
                         />
 
 
                         <DashboardCard
-
                             title="Expense Transactions"
-
                             value={
                                 summary.totalExpenses
                             }
-
                             icon="📋"
-
                             color="#EA580C"
-
                         />
-
 
                     </div>
 
 
-                    {/* ================================================= */}
                     {/* RECENT PAYMENTS */}
-                    {/* ================================================= */}
 
+                    <div
+                        className="dashboard-grid"
+                    >
 
-                    <div className="dashboard-grid">
-
-
-                        <div className="dashboard-table">
-
+                        <div
+                            className="dashboard-table"
+                        >
 
                             <h3>
                                 Recent Payments
@@ -291,7 +382,6 @@ function DashboardPage() {
 
 
                             <table>
-
 
                                 <thead>
 
@@ -320,74 +410,83 @@ function DashboardPage() {
 
                                 <tbody>
 
+                                    {
+                                        recentPayments.length ===
+                                        0 ? (
 
-                                    {recentPayments.length === 0 ? (
+                                            <tr>
 
-                                        <tr>
-
-                                            <td colSpan="4">
-
-                                                No Payments Found
-
-                                            </td>
-
-                                        </tr>
-
-                                    ) : (
-
-                                        recentPayments.map(
-                                            (payment) => (
-
-                                                <tr
-                                                    key={payment.id}
+                                                <td
+                                                    colSpan="4"
                                                 >
+                                                    No Payments Found
+                                                </td>
 
-                                                    <td>
-                                                        {payment.studentName}
-                                                    </td>
+                                            </tr>
 
-                                                    <td>
-                                                        ₹ {payment.amount}
-                                                    </td>
+                                        ) : (
 
-                                                    <td>
-                                                        {payment.paymentDate}
-                                                    </td>
+                                            recentPayments.map(
+                                                payment => (
 
-                                                    <td>
-                                                        {payment.paymentMode}
-                                                    </td>
+                                                    <tr
+                                                        key={
+                                                            payment.id
+                                                        }
+                                                    >
 
-                                                </tr>
+                                                        <td>
+                                                            {
+                                                                payment.studentName
+                                                            }
+                                                        </td>
 
+                                                        <td>
+                                                            {
+                                                                money(
+                                                                    payment.amount
+                                                                )
+                                                            }
+                                                        </td>
+
+                                                        <td>
+                                                            {
+                                                                payment.paymentDate
+                                                            }
+                                                        </td>
+
+                                                        <td>
+                                                            {
+                                                                payment.paymentMode
+                                                            }
+                                                        </td>
+
+                                                    </tr>
+
+                                                )
                                             )
+
                                         )
-
-                                    )}
-
+                                    }
 
                                 </tbody>
 
-
                             </table>
 
-
                         </div>
-
 
                     </div>
 
 
-                    {/* ================================================= */}
                     {/* RECENT EXPENSES */}
-                    {/* ================================================= */}
 
+                    <div
+                        className="dashboard-grid"
+                    >
 
-                    <div className="dashboard-grid">
-
-
-                        <div className="dashboard-table">
-
+                        <div
+                            className="dashboard-table"
+                        >
 
                             <h3>
                                 Recent School Expenses
@@ -395,7 +494,6 @@ function DashboardPage() {
 
 
                             <table>
-
 
                                 <thead>
 
@@ -424,71 +522,76 @@ function DashboardPage() {
 
                                 <tbody>
 
+                                    {
+                                        recentExpenses.length ===
+                                        0 ? (
 
-                                    {recentExpenses.length === 0 ? (
+                                            <tr>
 
-                                        <tr>
-
-                                            <td colSpan="4">
-
-                                                No Expenses Found
-
-                                            </td>
-
-                                        </tr>
-
-                                    ) : (
-
-                                        recentExpenses.map(
-                                            (expense) => (
-
-                                                <tr
-                                                    key={expense.id}
+                                                <td
+                                                    colSpan="4"
                                                 >
+                                                    No Expenses Found
+                                                </td>
 
-                                                    <td>
-                                                        {expense.expenseName}
-                                                    </td>
+                                            </tr>
 
-                                                    <td>
-                                                        {expense.category}
-                                                    </td>
+                                        ) : (
 
-                                                    <td>
-                                                        ₹ {Number(
-                                                            expense.amount
-                                                        ).toLocaleString("en-IN")}
-                                                    </td>
+                                            recentExpenses.map(
+                                                expense => (
 
-                                                    <td>
-                                                        {expense.expenseDate}
-                                                    </td>
+                                                    <tr
+                                                        key={
+                                                            expense.id
+                                                        }
+                                                    >
 
-                                                </tr>
+                                                        <td>
+                                                            {
+                                                                expense.expenseName
+                                                            }
+                                                        </td>
 
+                                                        <td>
+                                                            {
+                                                                expense.category
+                                                            }
+                                                        </td>
+
+                                                        <td>
+                                                            {
+                                                                money(
+                                                                    expense.amount
+                                                                )
+                                                            }
+                                                        </td>
+
+                                                        <td>
+                                                            {
+                                                                expense.expenseDate
+                                                            }
+                                                        </td>
+
+                                                    </tr>
+
+                                                )
                                             )
+
                                         )
-
-                                    )}
-
+                                    }
 
                                 </tbody>
 
-
                             </table>
-
 
                         </div>
 
-
                     </div>
-
 
                 </div>
 
-
             </div>
-
 
         </div>
 

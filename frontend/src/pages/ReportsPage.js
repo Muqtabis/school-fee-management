@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react";
+import {
+    useEffect,
+    useState
+} from "react";
 
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
@@ -8,418 +11,572 @@ import api from "../services/api";
 
 function ReportsPage() {
 
-    const [period, setPeriod] = useState("all");
+    const [
+        period,
+        setPeriod
+    ] = useState("all");
 
-    const [report, setReport] = useState({
 
-        totalStudents: 0,
-        totalPayments: 0,
-        totalCollection: 0,
-        pendingFees: 0,
+    const [
+        report,
+        setReport
+    ] = useState({
 
-        averagePayment: 0,
-        highestPayment: 0,
+        academicYear: null,
 
-        modeCollection: [],
-        classCollection: [],
+        totalStudents:
+            0,
 
-        recentPayments: [],
+        totalPayments:
+            0,
 
-        totalExpenses: 0,
-        totalExpenseAmount: 0,
+        totalCollection:
+            0,
 
-        expenseCategories: [],
-        recentExpenses: [],
+        totalFee:
+            0,
 
-        netBalance: 0
+        pendingFees:
+            0,
+
+        averagePayment:
+            0,
+
+        highestPayment:
+            0,
+
+        modeCollection:
+            [],
+
+        classCollection:
+            [],
+
+        recentPayments:
+            [],
+
+        totalExpenses:
+            0,
+
+        totalExpenseAmount:
+            0,
+
+        expenseCategories:
+            [],
+
+        recentExpenses:
+            [],
+
+        netBalance:
+            0
 
     });
 
-    const [loading, setLoading] = useState(true);
+
+    const [
+        loading,
+        setLoading
+    ] = useState(true);
+
+
+    const money =
+        value =>
+            `₹${Number(
+                value || 0
+            ).toLocaleString(
+                "en-IN",
+                {
+                    minimumFractionDigits:
+                        2,
+
+                    maximumFractionDigits:
+                        2
+                }
+            )}`;
 
 
     // =====================================================
-    // MONEY FORMAT
+    // EXPENSE DATE FILTER
     // =====================================================
 
-    const money = (value) => {
+    const isExpenseInPeriod =
+        expense => {
 
-        return `₹${Number(value || 0).toLocaleString("en-IN", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        })}`;
+            if (
+                expense.status ===
+                "reversed"
+            ) {
 
-    };
+                return false;
+
+            }
 
 
-    // =====================================================
-    // EXPENSE PERIOD FILTER
-    // =====================================================
+            if (
+                period ===
+                "all"
+            ) {
 
-    const isExpenseInPeriod = (expense) => {
+                return true;
 
-        if (period === "all") {
+            }
+
+
+            if (
+                !expense.expenseDate
+            ) {
+
+                return false;
+
+            }
+
+
+            const expenseDate =
+                new Date(
+                    expense.expenseDate
+                );
+
+
+            const today =
+                new Date();
+
+
+            expenseDate.setHours(
+                0,
+                0,
+                0,
+                0
+            );
+
+
+            today.setHours(
+                0,
+                0,
+                0,
+                0
+            );
+
+
+            if (
+                period ===
+                "month"
+            ) {
+
+                return (
+
+                    expenseDate.getMonth() ===
+                    today.getMonth() &&
+
+                    expenseDate.getFullYear() ===
+                    today.getFullYear()
+
+                );
+
+            }
+
+
+            if (
+                period ===
+                "week"
+            ) {
+
+                const day =
+                    today.getDay();
+
+
+                const difference =
+                    day === 0
+                        ? 6
+                        : day - 1;
+
+
+                const startOfWeek =
+                    new Date(
+                        today
+                    );
+
+
+                startOfWeek.setDate(
+                    today.getDate() -
+                    difference
+                );
+
+
+                startOfWeek.setHours(
+                    0,
+                    0,
+                    0,
+                    0
+                );
+
+
+                return (
+
+                    expenseDate >=
+                        startOfWeek &&
+
+                    expenseDate <=
+                        today
+
+                );
+
+            }
+
+
             return true;
-        }
 
-        if (!expense.expenseDate) {
-            return false;
-        }
-
-        const expenseDate = new Date(expense.expenseDate);
-
-        const today = new Date();
-
-        expenseDate.setHours(0, 0, 0, 0);
-        today.setHours(0, 0, 0, 0);
-
-
-        // -----------------------------
-        // THIS MONTH
-        // -----------------------------
-
-        if (period === "month") {
-
-            return (
-                expenseDate.getMonth() === today.getMonth() &&
-                expenseDate.getFullYear() === today.getFullYear()
-            );
-
-        }
-
-
-        // -----------------------------
-        // THIS WEEK
-        // -----------------------------
-
-        if (period === "week") {
-
-            const day = today.getDay();
-
-            const difference =
-                day === 0 ? 6 : day - 1;
-
-            const startOfWeek = new Date(today);
-
-            startOfWeek.setDate(
-                today.getDate() - difference
-            );
-
-            startOfWeek.setHours(0, 0, 0, 0);
-
-            return (
-                expenseDate >= startOfWeek &&
-                expenseDate <= today
-            );
-
-        }
-
-
-        return true;
-
-    };
+        };
 
 
     // =====================================================
     // FETCH REPORT
     // =====================================================
 
-    const fetchReport = async () => {
+    const fetchReport =
+        async () => {
 
-        try {
+            try {
 
-            setLoading(true);
-
-
-            // =================================================
-            // PAYMENT REPORT
-            // =================================================
-
-            const paymentResponse =
-                await api.get(
-                    `/payments/report-summary?period=${period}`
+                setLoading(
+                    true
                 );
 
 
-            const paymentData =
-                paymentResponse.data || {};
+                const [
+                    paymentResponse,
+                    expenseResponse
+                ] =
+                    await Promise.all([
+
+                        api.get(
+                            `/payments/report-summary?period=${period}`
+                        ),
+
+                        api.get(
+                            "/expenses"
+                        )
+
+                    ]);
 
 
-            // =================================================
-            // EXPENSES
-            // =================================================
-
-            const expenseResponse =
-                await api.get("/expenses");
+                const paymentData =
+                    paymentResponse.data ||
+                    {};
 
 
-            const allExpenses =
-                Array.isArray(expenseResponse.data)
-                    ? expenseResponse.data
-                    : [];
+                const allExpenses =
+                    Array.isArray(
+                        expenseResponse.data
+                    )
+                        ? expenseResponse.data
+                        : [];
 
 
-            const filteredExpenses =
-                allExpenses.filter(
-                    isExpenseInPeriod
-                );
+                const filteredExpenses =
+                    allExpenses.filter(
+                        isExpenseInPeriod
+                    );
 
 
-            // =================================================
-            // TOTAL EXPENSE
-            // =================================================
+                // =================================================
+                // EXPENSE TOTAL
+                // =================================================
 
-            const totalExpenseAmount =
-                filteredExpenses.reduce(
-                    (total, expense) => {
-
-                        return (
+                const totalExpenseAmount =
+                    filteredExpenses.reduce(
+                        (
+                            total,
+                            expense
+                        ) =>
                             total +
-                            Number(expense.amount || 0)
-                        );
-
-                    },
-                    0
-                );
-
-
-            // =================================================
-            // EXPENSE CATEGORIES
-            // =================================================
-
-            const categoryMap = {};
+                            Number(
+                                expense.amount ||
+                                0
+                            ),
+                        0
+                    );
 
 
-            filteredExpenses.forEach(
-                (expense) => {
+                // =================================================
+                // EXPENSE CATEGORIES
+                // =================================================
 
-                    const category =
-                        expense.category || "Other";
+                const categoryMap =
+                    {};
 
 
-                    if (!categoryMap[category]) {
+                filteredExpenses.forEach(
+                    expense => {
 
-                        categoryMap[category] = {
-                            category,
-                            amount: 0,
-                            count: 0
-                        };
+                        const category =
+                            expense.category ||
+                            "Other";
+
+
+                        if (
+                            !categoryMap[
+                                category
+                            ]
+                        ) {
+
+                            categoryMap[
+                                category
+                            ] = {
+
+                                category,
+
+                                amount:
+                                    0,
+
+                                count:
+                                    0
+
+                            };
+
+                        }
+
+
+                        categoryMap[
+                            category
+                        ].amount +=
+                            Number(
+                                expense.amount ||
+                                0
+                            );
+
+
+                        categoryMap[
+                            category
+                        ].count +=
+                            1;
 
                     }
-
-
-                    categoryMap[category].amount +=
-                        Number(expense.amount || 0);
-
-
-                    categoryMap[category].count += 1;
-
-                }
-            );
-
-
-            const expenseCategories =
-                Object.values(categoryMap).sort(
-                    (a, b) =>
-                        b.amount - a.amount
                 );
 
 
-            // =================================================
-            // RECENT EXPENSES
-            // =================================================
-
-            const recentExpenses =
-                [...filteredExpenses]
-                    .sort(
-                        (a, b) =>
-                            new Date(b.expenseDate || 0) -
-                            new Date(a.expenseDate || 0)
-                    )
-                    .slice(0, 10);
-
-
-            // =================================================
-            // COLLECTION
-            // =================================================
-
-            const totalCollection =
-                Number(
-                    paymentData.totalCollection
-                ) || 0;
+                const expenseCategories =
+                    Object.values(
+                        categoryMap
+                    ).sort(
+                        (
+                            a,
+                            b
+                        ) =>
+                            b.amount -
+                            a.amount
+                    );
 
 
-            // =================================================
-            // NET BALANCE
-            // =================================================
+                // =================================================
+                // RECENT EXPENSES
+                // =================================================
 
-            const netBalance =
-                totalCollection -
-                totalExpenseAmount;
+                const recentExpenses =
+                    [...filteredExpenses]
+                        .sort(
+                            (
+                                a,
+                                b
+                            ) =>
+                                new Date(
+                                    b.expenseDate ||
+                                    0
+                                ) -
+                                new Date(
+                                    a.expenseDate ||
+                                    0
+                                )
+                        )
+                        .slice(
+                            0,
+                            10
+                        );
 
 
-            // =================================================
-            // UPDATE REPORT
-            // =================================================
-
-            setReport({
-
-                totalStudents:
+                const totalCollection =
                     Number(
-                        paymentData.totalStudents
-                    ) || 0,
-
-                totalPayments:
-                    Number(
-                        paymentData.totalPayments
-                    ) || 0,
-
-                totalCollection,
-
-                pendingFees:
-                    Number(
-                        paymentData.pendingFees
-                    ) || 0,
-
-                averagePayment:
-                    Number(
-                        paymentData.averagePayment
-                    ) || 0,
-
-                highestPayment:
-                    Number(
-                        paymentData.highestPayment
-                    ) || 0,
-
-                modeCollection:
-                    Array.isArray(
-                        paymentData.modeCollection
-                    )
-                        ? paymentData.modeCollection
-                        : [],
-
-                classCollection:
-                    Array.isArray(
-                        paymentData.classCollection
-                    )
-                        ? paymentData.classCollection
-                        : [],
-
-                recentPayments:
-                    Array.isArray(
-                        paymentData.recentPayments
-                    )
-                        ? paymentData.recentPayments
-                        : [],
-
-                totalExpenses:
-                    filteredExpenses.length,
-
-                totalExpenseAmount,
-
-                expenseCategories,
-
-                recentExpenses,
-
-                netBalance
-
-            });
-
-        }
-
-        catch (error) {
-
-            console.error(
-                "REPORT ERROR:",
-                error
-            );
-
-        }
-
-        finally {
-
-            setLoading(false);
-
-        }
-
-    };
+                        paymentData.totalCollection ||
+                        0
+                    );
 
 
-    // =====================================================
-    // LOAD REPORT
-    // =====================================================
-
-    useEffect(() => {
-
-        fetchReport();
-
-    }, [period]);
+                const netBalance =
+                    totalCollection -
+                    totalExpenseAmount;
 
 
-    // =====================================================
-    // PERIOD NAME
-    // =====================================================
+                setReport({
 
-    const getPeriodName = () => {
+                    academicYear:
+                        paymentData.academicYear ||
+                        null,
 
-        if (period === "week") {
-            return "This Week";
-        }
+                    totalStudents:
+                        Number(
+                            paymentData.totalStudents ||
+                            0
+                        ),
 
-        if (period === "month") {
-            return "This Month";
-        }
+                    totalPayments:
+                        Number(
+                            paymentData.totalPayments ||
+                            0
+                        ),
 
-        return "All Time";
+                    totalCollection,
 
-    };
+                    totalFee:
+                        Number(
+                            paymentData.totalFee ||
+                            0
+                        ),
+
+                    pendingFees:
+                        Number(
+                            paymentData.pendingFees ||
+                            0
+                        ),
+
+                    averagePayment:
+                        Number(
+                            paymentData.averagePayment ||
+                            0
+                        ),
+
+                    highestPayment:
+                        Number(
+                            paymentData.highestPayment ||
+                            0
+                        ),
+
+                    modeCollection:
+                        Array.isArray(
+                            paymentData.modeCollection
+                        )
+                            ? paymentData.modeCollection
+                            : [],
+
+                    classCollection:
+                        Array.isArray(
+                            paymentData.classCollection
+                        )
+                            ? paymentData.classCollection
+                            : [],
+
+                    recentPayments:
+                        Array.isArray(
+                            paymentData.recentPayments
+                        )
+                            ? paymentData.recentPayments
+                            : [],
+
+                    totalExpenses:
+                        filteredExpenses.length,
+
+                    totalExpenseAmount,
+
+                    expenseCategories,
+
+                    recentExpenses,
+
+                    netBalance
+
+                });
+
+            } catch (error) {
+
+                console.error(
+                    "REPORT ERROR:",
+                    error
+                );
+
+            } finally {
+
+                setLoading(
+                    false
+                );
+
+            }
+
+        };
 
 
-    // =====================================================
-    // CHART VALUES
-    // =====================================================
+    useEffect(
+        () => {
+
+            fetchReport();
+
+        },
+        [period]
+    );
+
+
+    const periodName =
+        period === "week"
+            ? "This Week"
+            : period === "month"
+                ? "This Month"
+                : "All Time";
+
 
     const collection =
-        Number(report.totalCollection) || 0;
+        Number(
+            report.totalCollection
+        ) || 0;
+
 
     const expenses =
-        Number(report.totalExpenseAmount) || 0;
+        Number(
+            report.totalExpenseAmount
+        ) || 0;
+
 
     const maximum =
-        Math.max(collection, expenses, 1);
+        Math.max(
+            collection,
+            expenses,
+            1
+        );
 
 
     const collectionHeight =
-        `${(collection / maximum) * 100}%`;
+        `${(
+            collection /
+            maximum
+        ) * 100}%`;
+
 
     const expenseHeight =
-        `${(expenses / maximum) * 100}%`;
+        `${(
+            expenses /
+            maximum
+        ) * 100}%`;
 
-
-    // =====================================================
-    // RENDER
-    // =====================================================
 
     return (
 
-        <div className="dashboard">
+        <div
+            className="dashboard"
+        >
 
             <Sidebar />
 
 
-            <div className="main-content">
+            <div
+                className="main-content"
+            >
 
                 <Navbar />
 
 
-                <div className="page-content">
+                <div
+                    className="page-content"
+                >
 
+                    {/* HEADER */}
 
-                    {/* =================================================
-                        HEADER
-                    ================================================= */}
-
-                    <div className="page-header">
+                    <div
+                        className="page-header"
+                    >
 
                         <div>
 
@@ -428,14 +585,26 @@ function ReportsPage() {
                             </h2>
 
                             <p>
-                                Detailed fee collection,
-                                expenses and financial reports
+
+                                Financial and fee report for
+
+                                {" "}
+
+                                <strong>
+                                    {
+                                        report.academicYear?.name ||
+                                        "Active Academic Year"
+                                    }
+                                </strong>
+
                             </p>
 
                         </div>
 
 
-                        <div className="report-period">
+                        <div
+                            className="report-period"
+                        >
 
                             <label>
                                 Report Period
@@ -443,11 +612,14 @@ function ReportsPage() {
 
 
                             <select
-                                value={period}
-                                onChange={(e) =>
-                                    setPeriod(
-                                        e.target.value
-                                    )
+                                value={
+                                    period
+                                }
+                                onChange={
+                                    e =>
+                                        setPeriod(
+                                            e.target.value
+                                        )
                                 }
                             >
 
@@ -470,104 +642,144 @@ function ReportsPage() {
                     </div>
 
 
-                    <div className="report-period-text">
+                    <div
+                        className="report-period-text"
+                    >
 
-                        Showing report for{" "}
+                        Academic Year:
+
+                        {" "}
 
                         <strong>
-                            {getPeriodName()}
+                            {
+                                report.academicYear?.name ||
+                                "-"
+                            }
+                        </strong>
+
+                        {" • "}
+
+                        Report:
+
+                        {" "}
+
+                        <strong>
+                            {
+                                periodName
+                            }
                         </strong>
 
                     </div>
 
 
                     {/* =================================================
-                        FEE COLLECTION
+                        FEE SUMMARY
                     ================================================= */}
 
-                    <h3 className="section-title">
+                    <h3
+                        className="section-title"
+                    >
                         Fee Collection
                     </h3>
 
 
-                    <div className="report-cards">
+                    <div
+                        className="report-cards"
+                    >
 
-
-                        <div className="report-summary-card">
+                        <div
+                            className="report-summary-card"
+                        >
 
                             <span>
                                 Total Students
                             </span>
 
                             <strong>
-                                {loading
-                                    ? "..."
-                                    : report.totalStudents}
+                                {
+                                    loading
+                                        ? "..."
+                                        : report.totalStudents
+                                }
                             </strong>
 
                             <small>
-                                Registered students
+                                Active students
                             </small>
 
                         </div>
 
 
-                        <div className="report-summary-card">
+                        <div
+                            className="report-summary-card"
+                        >
 
                             <span>
-                                Payments
+                                Total Assessed Fees
                             </span>
 
                             <strong>
-                                {loading
-                                    ? "..."
-                                    : report.totalPayments}
+                                {
+                                    loading
+                                        ? "..."
+                                        : money(
+                                            report.totalFee
+                                        )
+                                }
                             </strong>
 
                             <small>
-                                Transactions in period
+                                Active academic year
                             </small>
 
                         </div>
 
 
-                        <div className="report-summary-card">
+                        <div
+                            className="report-summary-card"
+                        >
 
                             <span>
                                 Collection
                             </span>
 
                             <strong>
-                                {loading
-                                    ? "..."
-                                    : money(
-                                        report.totalCollection
-                                    )}
+                                {
+                                    loading
+                                        ? "..."
+                                        : money(
+                                            report.totalCollection
+                                        )
+                                }
                             </strong>
 
                             <small>
-                                Total amount collected
+                                Active payments
                             </small>
 
                         </div>
 
 
-                        <div className="report-summary-card pending">
+                        <div
+                            className="report-summary-card pending"
+                        >
 
                             <span>
                                 Pending Fees
                             </span>
 
                             <strong>
-                                {loading
-                                    ? "..."
-                                    : money(
-                                        report.pendingFees
-                                    )}
+                                {
+                                    loading
+                                        ? "..."
+                                        : money(
+                                            report.pendingFees
+                                        )
+                                }
                             </strong>
 
                             <small>
-                                Outstanding fees
+                                Outstanding
                             </small>
 
                         </div>
@@ -575,51 +787,62 @@ function ReportsPage() {
                     </div>
 
 
-                    {/* =================================================
-                        PAYMENT DETAILS
-                    ================================================= */}
+                    {/* PAYMENT DETAILS */}
 
-                    <div className="report-small-cards">
+                    <div
+                        className="report-small-cards"
+                    >
+
+                        <div
+                            className="report-small-card"
+                        >
+
+                            <span>
+                                Payments
+                            </span>
+
+                            <strong>
+                                {
+                                    report.totalPayments
+                                }
+                            </strong>
+
+                        </div>
 
 
-                        <div className="report-small-card">
+                        <div
+                            className="report-small-card"
+                        >
 
                             <span>
                                 Average Payment
                             </span>
 
                             <strong>
-                                {money(
-                                    report.averagePayment
-                                )}
+                                {
+                                    money(
+                                        report.averagePayment
+                                    )
+                                }
                             </strong>
 
                         </div>
 
 
-                        <div className="report-small-card">
+                        <div
+                            className="report-small-card"
+                        >
 
                             <span>
                                 Highest Payment
                             </span>
 
                             <strong>
-                                {money(
-                                    report.highestPayment
-                                )}
-                            </strong>
-
-                        </div>
-
-
-                        <div className="report-small-card">
-
-                            <span>
-                                Payment Transactions
-                            </span>
-
-                            <strong>
-                                {report.totalPayments}
+                                {
+                                    money(
+                                        report.highestPayment
+                                    )
+                                }
                             </strong>
 
                         </div>
@@ -631,57 +854,64 @@ function ReportsPage() {
                         SCHOOL EXPENSES
                     ================================================= */}
 
-                    <h3 className="section-title">
-
+                    <h3
+                        className="section-title"
+                    >
                         School Expenses
-
                     </h3>
 
 
-                    <div className="report-cards">
+                    <div
+                        className="report-cards"
+                    >
 
-
-                        <div className="report-summary-card">
+                        <div
+                            className="report-summary-card"
+                        >
 
                             <span>
                                 Expense Transactions
                             </span>
 
                             <strong>
-                                {loading
-                                    ? "..."
-                                    : report.totalExpenses}
+                                {
+                                    report.totalExpenses
+                                }
                             </strong>
 
                             <small>
-                                Recorded expenses
+                                Active expenses
                             </small>
 
                         </div>
 
 
-                        <div className="report-summary-card">
+                        <div
+                            className="report-summary-card"
+                        >
 
                             <span>
                                 Total Spent
                             </span>
 
                             <strong>
-                                {loading
-                                    ? "..."
-                                    : money(
+                                {
+                                    money(
                                         report.totalExpenseAmount
-                                    )}
+                                    )
+                                }
                             </strong>
 
                             <small>
-                                Total school spending
+                                School spending
                             </small>
 
                         </div>
 
 
-                        <div className="report-summary-card">
+                        <div
+                            className="report-summary-card"
+                        >
 
                             <span>
                                 Net Balance
@@ -689,16 +919,17 @@ function ReportsPage() {
 
                             <strong
                                 className={
-                                    report.netBalance < 0
+                                    report.netBalance <
+                                    0
                                         ? "negative-balance"
                                         : "positive-balance"
                                 }
                             >
-                                {loading
-                                    ? "..."
-                                    : money(
+                                {
+                                    money(
                                         report.netBalance
-                                    )}
+                                    )
+                                }
                             </strong>
 
                             <small>
@@ -708,22 +939,24 @@ function ReportsPage() {
                         </div>
 
 
-                        <div className="report-summary-card">
+                        <div
+                            className="report-summary-card"
+                        >
 
                             <span>
                                 Collection
                             </span>
 
                             <strong>
-                                {loading
-                                    ? "..."
-                                    : money(
+                                {
+                                    money(
                                         report.totalCollection
-                                    )}
+                                    )
+                                }
                             </strong>
 
                             <small>
-                                Total fee income
+                                Fee income
                             </small>
 
                         </div>
@@ -735,10 +968,13 @@ function ReportsPage() {
                         COLLECTION VS EXPENSES
                     ================================================= */}
 
-                    <div className="report-panel financial-chart-panel">
+                    <div
+                        className="report-panel financial-chart-panel"
+                    >
 
-
-                        <div className="report-panel-header">
+                        <div
+                            className="report-panel-header"
+                        >
 
                             <div>
 
@@ -747,8 +983,14 @@ function ReportsPage() {
                                 </h3>
 
                                 <p>
-                                    Overall financial comparison
-                                    for {getPeriodName()}
+                                    {
+                                        periodName
+                                    }
+                                    {" • "}
+                                    {
+                                        report.academicYear?.name ||
+                                        "-"
+                                    }
                                 </p>
 
                             </div>
@@ -756,28 +998,40 @@ function ReportsPage() {
                         </div>
 
 
-                        <div className="financial-chart">
+                        <div
+                            className="financial-chart"
+                        >
 
-
-                            <div className="chart-value">
+                            <div
+                                className="chart-value"
+                            >
 
                                 <span>
                                     Collection
                                 </span>
 
                                 <strong>
-                                    {money(collection)}
+                                    {
+                                        money(
+                                            collection
+                                        )
+                                    }
                                 </strong>
 
                             </div>
 
 
-                            <div className="chart-area">
+                            <div
+                                className="chart-area"
+                            >
 
+                                <div
+                                    className="chart-column"
+                                >
 
-                                <div className="chart-column">
-
-                                    <div className="chart-bar-wrapper">
+                                    <div
+                                        className="chart-bar-wrapper"
+                                    >
 
                                         <div
                                             className="chart-bar collection-bar"
@@ -796,9 +1050,13 @@ function ReportsPage() {
                                 </div>
 
 
-                                <div className="chart-column">
+                                <div
+                                    className="chart-column"
+                                >
 
-                                    <div className="chart-bar-wrapper">
+                                    <div
+                                        className="chart-bar-wrapper"
+                                    >
 
                                         <div
                                             className="chart-bar expense-bar"
@@ -816,12 +1074,12 @@ function ReportsPage() {
 
                                 </div>
 
-
                             </div>
 
 
-                            <div className="chart-legend">
-
+                            <div
+                                className="chart-legend"
+                            >
 
                                 <div>
 
@@ -844,202 +1102,175 @@ function ReportsPage() {
 
                                 </div>
 
-
                             </div>
 
-
                         </div>
 
                     </div>
 
 
                     {/* =================================================
-                        FINANCIAL SUMMARY
+                        PAYMENT MODE / EXPENSE CATEGORY
                     ================================================= */}
 
-                    <div className="report-small-cards">
+                    <div
+                        className="report-grid"
+                    >
 
+                        <div
+                            className="report-panel"
+                        >
 
-                        <div className="report-small-card">
-
-                            <span>
-                                Total Collected
-                            </span>
-
-                            <strong>
-                                {money(
-                                    report.totalCollection
-                                )}
-                            </strong>
-
-                        </div>
-
-
-                        <div className="report-small-card">
-
-                            <span>
-                                Total Spent
-                            </span>
-
-                            <strong>
-                                {money(
-                                    report.totalExpenseAmount
-                                )}
-                            </strong>
-
-                        </div>
-
-
-                        <div className="report-small-card">
-
-                            <span>
-                                Balance After Expenses
-                            </span>
-
-                            <strong
-                                className={
-                                    report.netBalance < 0
-                                        ? "negative-balance"
-                                        : "positive-balance"
-                                }
+                            <div
+                                className="report-panel-header"
                             >
-                                {money(
-                                    report.netBalance
-                                )}
-                            </strong>
-
-                        </div>
-
-                    </div>
-
-
-                    {/* =================================================
-                        PAYMENT MODE + EXPENSE CATEGORY
-                    ================================================= */}
-
-                    <div className="report-grid">
-
-
-                        {/* PAYMENT MODE */}
-
-                        <div className="report-panel">
-
-
-                            <div className="report-panel-header">
 
                                 <h3>
                                     Collection by Payment Mode
                                 </h3>
 
                                 <p>
-                                    Cash, UPI, card and bank payments
+                                    Active payments
                                 </p>
 
                             </div>
 
 
-                            {report.modeCollection.length === 0 ? (
+                            {
+                                report.modeCollection.length ===
+                                0 ? (
 
-                                <div className="report-empty">
-                                    No payment data available
-                                </div>
+                                    <div className="report-empty">
+                                        No payment data available
+                                    </div>
 
-                            ) : (
+                                ) : (
 
-                                <div className="report-list">
+                                    <div
+                                        className="report-list"
+                                    >
 
-                                    {report.modeCollection.map(
-                                        (item) => (
+                                        {
+                                            report.modeCollection.map(
+                                                item => (
 
-                                            <div
-                                                className="report-list-row"
-                                                key={item.mode}
-                                            >
+                                                    <div
+                                                        className="report-list-row"
+                                                        key={
+                                                            item.mode
+                                                        }
+                                                    >
 
-                                                <span>
-                                                    {item.mode}
-                                                </span>
+                                                        <span>
+                                                            {
+                                                                item.mode
+                                                            }
+                                                        </span>
 
-                                                <strong>
-                                                    {money(
-                                                        item.amount
-                                                    )}
-                                                </strong>
+                                                        <strong>
+                                                            {
+                                                                money(
+                                                                    item.amount
+                                                                )
+                                                            }
+                                                        </strong>
 
-                                            </div>
+                                                    </div>
 
-                                        )
-                                    )}
+                                                )
+                                            )
+                                        }
 
-                                </div>
+                                    </div>
 
-                            )}
+                                )
+                            }
 
                         </div>
 
 
-                        {/* EXPENSE CATEGORY */}
+                        <div
+                            className="report-panel"
+                        >
 
-                        <div className="report-panel">
-
-
-                            <div className="report-panel-header">
+                            <div
+                                className="report-panel-header"
+                            >
 
                                 <h3>
                                     Expenses by Category
                                 </h3>
 
                                 <p>
-                                    School spending by category
+                                    {
+                                        periodName
+                                    }
                                 </p>
 
                             </div>
 
 
-                            {report.expenseCategories.length === 0 ? (
+                            {
+                                report.expenseCategories.length ===
+                                0 ? (
 
-                                <div className="report-empty">
-                                    No expense data available
-                                </div>
+                                    <div className="report-empty">
+                                        No expense data available
+                                    </div>
 
-                            ) : (
+                                ) : (
 
-                                <div className="report-list">
+                                    <div
+                                        className="report-list"
+                                    >
 
-                                    {report.expenseCategories.map(
-                                        (item) => (
+                                        {
+                                            report.expenseCategories.map(
+                                                item => (
 
-                                            <div
-                                                className="report-list-row"
-                                                key={item.category}
-                                            >
+                                                    <div
+                                                        className="report-list-row"
+                                                        key={
+                                                            item.category
+                                                        }
+                                                    >
 
-                                                <div>
+                                                        <div>
 
-                                                    <strong>
-                                                        {item.category}
-                                                    </strong>
+                                                            <strong>
+                                                                {
+                                                                    item.category
+                                                                }
+                                                            </strong>
 
-                                                    <small>
-                                                        {item.count} expenses
-                                                    </small>
+                                                            <small>
+                                                                {
+                                                                    item.count
+                                                                }
+                                                                {" "}
+                                                                expenses
+                                                            </small>
 
-                                                </div>
+                                                        </div>
 
-                                                <strong>
-                                                    {money(
-                                                        item.amount
-                                                    )}
-                                                </strong>
+                                                        <strong>
+                                                            {
+                                                                money(
+                                                                    item.amount
+                                                                )
+                                                            }
+                                                        </strong>
 
-                                            </div>
+                                                    </div>
 
-                                        )
-                                    )}
+                                                )
+                                            )
+                                        }
 
-                                </div>
+                                    </div>
 
-                            )}
+                                )
+                            }
 
                         </div>
 
@@ -1050,66 +1281,86 @@ function ReportsPage() {
                         CLASS COLLECTION
                     ================================================= */}
 
-                    <div className="report-panel">
+                    <div
+                        className="report-panel"
+                    >
 
-
-                        <div className="report-panel-header">
+                        <div
+                            className="report-panel-header"
+                        >
 
                             <h3>
                                 Class-wise Collection
                             </h3>
 
                             <p>
-                                Fee collection by class
+                                Active academic year
                             </p>
 
                         </div>
 
 
-                        {report.classCollection.length === 0 ? (
+                        {
+                            report.classCollection.length ===
+                            0 ? (
 
-                            <div className="report-empty">
-                                No class data available
-                            </div>
+                                <div className="report-empty">
+                                    No class collection available
+                                </div>
 
-                        ) : (
+                            ) : (
 
-                            <div className="report-list">
+                                <div
+                                    className="report-list"
+                                >
 
-                                {report.classCollection.map(
-                                    (item) => (
+                                    {
+                                        report.classCollection.map(
+                                            item => (
 
-                                        <div
-                                            className="report-list-row"
-                                            key={item.className}
-                                        >
+                                                <div
+                                                    className="report-list-row"
+                                                    key={
+                                                        item.className
+                                                    }
+                                                >
 
-                                            <div>
+                                                    <div>
 
-                                                <strong>
-                                                    {item.className}
-                                                </strong>
+                                                        <strong>
+                                                            {
+                                                                item.className
+                                                            }
+                                                        </strong>
 
-                                                <small>
-                                                    {item.payments} payments
-                                                </small>
+                                                        <small>
+                                                            {
+                                                                item.payments
+                                                            }
+                                                            {" "}
+                                                            payments
+                                                        </small>
 
-                                            </div>
+                                                    </div>
 
-                                            <strong>
-                                                {money(
-                                                    item.collection
-                                                )}
-                                            </strong>
+                                                    <strong>
+                                                        {
+                                                            money(
+                                                                item.collection
+                                                            )
+                                                        }
+                                                    </strong>
 
-                                        </div>
+                                                </div>
 
-                                    )
-                                )}
+                                            )
+                                        )
+                                    }
 
-                            </div>
+                                </div>
 
-                        )}
+                            )
+                        }
 
                     </div>
 
@@ -1118,112 +1369,140 @@ function ReportsPage() {
                         RECENT PAYMENTS
                     ================================================= */}
 
-                    <div className="report-panel recent-payments">
+                    <div
+                        className="report-panel recent-payments"
+                    >
 
-
-                        <div className="report-panel-header">
+                        <div
+                            className="report-panel-header"
+                        >
 
                             <h3>
                                 Recent Payments
                             </h3>
 
                             <p>
-                                Latest fee transactions
+                                {
+                                    report.academicYear?.name ||
+                                    "Active Academic Year"
+                                }
                             </p>
 
                         </div>
 
 
-                        {report.recentPayments.length === 0 ? (
+                        {
+                            report.recentPayments.length ===
+                            0 ? (
 
-                            <div className="report-empty">
-                                No payments available for this period.
-                            </div>
+                                <div className="report-empty">
+                                    No payments available.
+                                </div>
 
-                        ) : (
+                            ) : (
 
-                            <div className="report-table-wrapper">
+                                <div
+                                    className="report-table-wrapper"
+                                >
 
-                                <table className="report-table">
+                                    <table
+                                        className="report-table"
+                                    >
 
-                                    <thead>
+                                        <thead>
 
-                                        <tr>
+                                            <tr>
 
-                                            <th>Student</th>
-                                            <th>Class</th>
-                                            <th>Date</th>
-                                            <th>Payment Mode</th>
-                                            <th>Amount</th>
+                                                <th>
+                                                    Student
+                                                </th>
 
-                                        </tr>
+                                                <th>
+                                                    Class
+                                                </th>
 
-                                    </thead>
+                                                <th>
+                                                    Date
+                                                </th>
+
+                                                <th>
+                                                    Mode
+                                                </th>
+
+                                                <th>
+                                                    Amount
+                                                </th>
+
+                                            </tr>
+
+                                        </thead>
 
 
-                                    <tbody>
+                                        <tbody>
 
-                                        {report.recentPayments.map(
-                                            (payment) => (
+                                            {
+                                                report.recentPayments.map(
+                                                    payment => (
 
-                                                <tr
-                                                    key={payment.id}
-                                                >
-
-                                                    <td>
-                                                        <strong>
-                                                            {
-                                                                payment.studentName
+                                                        <tr
+                                                            key={
+                                                                payment.id
                                                             }
-                                                        </strong>
-                                                    </td>
+                                                        >
 
-                                                    <td>
-                                                        {
-                                                            payment.className
-                                                        }
-                                                    </td>
+                                                            <td>
+                                                                <strong>
+                                                                    {
+                                                                        payment.studentName
+                                                                    }
+                                                                </strong>
+                                                            </td>
 
-                                                    <td>
-                                                        {
-                                                            payment.paymentDate
-                                                        }
-                                                    </td>
+                                                            <td>
+                                                                {
+                                                                    payment.className ||
+                                                                    "-"
+                                                                }
+                                                            </td>
 
-                                                    <td>
+                                                            <td>
+                                                                {
+                                                                    payment.paymentDate
+                                                                }
+                                                            </td>
 
-                                                        <span className="payment-badge">
+                                                            <td>
+                                                                <span className="payment-badge">
+                                                                    {
+                                                                        payment.paymentMode
+                                                                    }
+                                                                </span>
+                                                            </td>
 
-                                                            {
-                                                                payment.paymentMode
-                                                            }
+                                                            <td>
+                                                                <strong>
+                                                                    {
+                                                                        money(
+                                                                            payment.amount
+                                                                        )
+                                                                    }
+                                                                </strong>
+                                                            </td>
 
-                                                        </span>
+                                                        </tr>
 
-                                                    </td>
+                                                    )
+                                                )
+                                            }
 
-                                                    <td>
+                                        </tbody>
 
-                                                        <strong>
-                                                            {money(
-                                                                payment.amount
-                                                            )}
-                                                        </strong>
+                                    </table>
 
-                                                    </td>
+                                </div>
 
-                                                </tr>
-
-                                            )
-                                        )}
-
-                                    </tbody>
-
-                                </table>
-
-                            </div>
-
-                        )}
+                            )
+                        }
 
                     </div>
 
@@ -1232,117 +1511,142 @@ function ReportsPage() {
                         RECENT EXPENSES
                     ================================================= */}
 
-                    <div className="report-panel recent-payments">
+                    <div
+                        className="report-panel recent-payments"
+                    >
 
-
-                        <div className="report-panel-header">
+                        <div
+                            className="report-panel-header"
+                        >
 
                             <h3>
                                 Recent School Expenses
                             </h3>
 
                             <p>
-                                Latest school expenses
+                                {
+                                    periodName
+                                }
                             </p>
 
                         </div>
 
 
-                        {report.recentExpenses.length === 0 ? (
+                        {
+                            report.recentExpenses.length ===
+                            0 ? (
 
-                            <div className="report-empty">
-                                No expenses available for this period.
-                            </div>
+                                <div className="report-empty">
+                                    No expenses available.
+                                </div>
 
-                        ) : (
+                            ) : (
 
-                            <div className="report-table-wrapper">
+                                <div
+                                    className="report-table-wrapper"
+                                >
 
-                                <table className="report-table">
+                                    <table
+                                        className="report-table"
+                                    >
 
-                                    <thead>
+                                        <thead>
 
-                                        <tr>
+                                            <tr>
 
-                                            <th>Expense</th>
-                                            <th>Category</th>
-                                            <th>Paid To</th>
-                                            <th>Date</th>
-                                            <th>Amount</th>
+                                                <th>
+                                                    Expense
+                                                </th>
 
-                                        </tr>
+                                                <th>
+                                                    Category
+                                                </th>
 
-                                    </thead>
+                                                <th>
+                                                    Paid To
+                                                </th>
+
+                                                <th>
+                                                    Date
+                                                </th>
+
+                                                <th>
+                                                    Amount
+                                                </th>
+
+                                            </tr>
+
+                                        </thead>
 
 
-                                    <tbody>
+                                        <tbody>
 
-                                        {report.recentExpenses.map(
-                                            (expense) => (
+                                            {
+                                                report.recentExpenses.map(
+                                                    expense => (
 
-                                                <tr
-                                                    key={expense.id}
-                                                >
-
-                                                    <td>
-                                                        <strong>
-                                                            {
-                                                                expense.expenseName
+                                                        <tr
+                                                            key={
+                                                                expense.id
                                                             }
-                                                        </strong>
-                                                    </td>
+                                                        >
 
-                                                    <td>
+                                                            <td>
+                                                                <strong>
+                                                                    {
+                                                                        expense.expenseName
+                                                                    }
+                                                                </strong>
+                                                            </td>
 
-                                                        <span className="payment-badge">
+                                                            <td>
+                                                                <span className="payment-badge">
+                                                                    {
+                                                                        expense.category ||
+                                                                        "Other"
+                                                                    }
+                                                                </span>
+                                                            </td>
 
-                                                            {
-                                                                expense.category ||
-                                                                "Other"
-                                                            }
+                                                            <td>
+                                                                {
+                                                                    expense.paidTo ||
+                                                                    "-"
+                                                                }
+                                                            </td>
 
-                                                        </span>
+                                                            <td>
+                                                                {
+                                                                    expense.expenseDate
+                                                                }
+                                                            </td>
 
-                                                    </td>
+                                                            <td>
+                                                                <strong>
+                                                                    {
+                                                                        money(
+                                                                            expense.amount
+                                                                        )
+                                                                    }
+                                                                </strong>
+                                                            </td>
 
-                                                    <td>
-                                                        {
-                                                            expense.paidTo ||
-                                                            "-"
-                                                        }
-                                                    </td>
+                                                        </tr>
 
-                                                    <td>
-                                                        {
-                                                            expense.expenseDate
-                                                        }
-                                                    </td>
+                                                    )
+                                                )
+                                            }
 
-                                                    <td>
+                                        </tbody>
 
-                                                        <strong>
-                                                            {money(
-                                                                expense.amount
-                                                            )}
-                                                        </strong>
+                                    </table>
 
-                                                    </td>
+                                </div>
 
-                                                </tr>
-
-                                            )
-                                        )}
-
-                                    </tbody>
-
-                                </table>
-
-                            </div>
-
-                        )}
+                            )
+                        }
 
                     </div>
-
 
                 </div>
 

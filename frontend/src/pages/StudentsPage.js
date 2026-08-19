@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react";
+import {
+    useEffect,
+    useState
+} from "react";
 
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
@@ -28,13 +31,14 @@ function StudentsPage() {
     const [searchKeyword, setSearchKeyword] =
         useState("");
 
-
     const [historyStudent, setHistoryStudent] =
         useState(null);
 
+    const [showArchived, setShowArchived] =
+        useState(false);
+
 
     const classes = [
-
         "LKG",
         "UKG",
         "1",
@@ -47,15 +51,18 @@ function StudentsPage() {
         "8",
         "9",
         "10"
-
     ];
 
+
+    // =====================================================
+    // LOAD STUDENTS
+    // =====================================================
 
     useEffect(() => {
 
         fetchStudents();
 
-    }, []);
+    }, [showArchived]);
 
 
     const fetchStudents = async () => {
@@ -63,20 +70,50 @@ function StudentsPage() {
         try {
 
             const res =
-                await api.get("/students");
+                await api.get(
+                    "/students",
+                    {
+                        params: {
+                            status:
+                                showArchived
+                                    ? "archived"
+                                    : "active"
+                        }
+                    }
+                );
 
-            setStudents(res.data);
 
-            setFilteredStudents(res.data);
+            const data =
+                Array.isArray(
+                    res.data
+                )
+                    ? res.data
+                    : [];
+
+
+            setStudents(data);
+
+            setFilteredStudents(data);
 
         } catch (error) {
 
-            console.error(error);
+            console.error(
+                "Unable to fetch students:",
+                error
+            );
+
+            setStudents([]);
+
+            setFilteredStudents([]);
 
         }
 
     };
 
+
+    // =====================================================
+    // FILTER
+    // =====================================================
 
     const filterStudents = (
         search,
@@ -84,57 +121,85 @@ function StudentsPage() {
     ) => {
 
         const keyword =
-            search.toLowerCase().trim();
+            String(
+                search || ""
+            )
+                .toLowerCase()
+                .trim();
 
 
         const result =
-            students.filter((student) => {
+            students.filter(
+                student => {
 
-                const matchesSearch =
-                    !keyword ||
+                    const matchesSearch =
+                        !keyword ||
 
-                    student.studentName
-                        ?.toLowerCase()
-                        .includes(keyword) ||
+                        student.studentName
+                            ?.toLowerCase()
+                            .includes(
+                                keyword
+                            ) ||
 
-                    student.rollNumber
-                        ?.toLowerCase()
-                        .includes(keyword) ||
+                        student.rollNumber
+                            ?.toLowerCase()
+                            .includes(
+                                keyword
+                            ) ||
 
-                    student.className
-                        ?.toLowerCase()
-                        .includes(keyword) ||
+                        student.className
+                            ?.toLowerCase()
+                            .includes(
+                                keyword
+                            ) ||
 
-                    student.fatherName
-                        ?.toLowerCase()
-                        .includes(keyword) ||
+                        student.fatherName
+                            ?.toLowerCase()
+                            .includes(
+                                keyword
+                            ) ||
 
-                    student.contact1
-                        ?.toLowerCase()
-                        .includes(keyword);
-
-
-                const matchesClass =
-                    classFilter === "All" ||
-                    student.className === classFilter;
-
-
-                return (
-                    matchesSearch &&
-                    matchesClass
-                );
-
-            });
+                        student.contact1
+                            ?.toLowerCase()
+                            .includes(
+                                keyword
+                            );
 
 
-        setFilteredStudents(result);
+                    const matchesClass =
+                        classFilter === "All" ||
+                        student.className ===
+                            classFilter;
+
+
+                    return (
+                        matchesSearch &&
+                        matchesClass
+                    );
+
+                }
+            );
+
+
+        setFilteredStudents(
+            result
+        );
 
     };
 
 
-    const handleSearch = (value) => {
+    // =====================================================
+    // SEARCH
+    // =====================================================
 
-        setSearchKeyword(value);
+    const handleSearch = (
+        value
+    ) => {
+
+        setSearchKeyword(
+            value
+        );
+
 
         filterStudents(
             value,
@@ -144,11 +209,22 @@ function StudentsPage() {
     };
 
 
-    const handleClassChange = (e) => {
+    // =====================================================
+    // CLASS FILTER
+    // =====================================================
 
-        const value = e.target.value;
+    const handleClassChange = (
+        e
+    ) => {
 
-        setSelectedClass(value);
+        const value =
+            e.target.value;
+
+
+        setSelectedClass(
+            value
+        );
+
 
         filterStudents(
             searchKeyword,
@@ -158,31 +234,136 @@ function StudentsPage() {
     };
 
 
-    const handleEdit = (student) => {
+    // =====================================================
+    // ACTIVE / ARCHIVED
+    // =====================================================
 
-        setSelectedStudent(student);
+    const handleStatusToggle = (
+        archived
+    ) => {
 
-        setShowForm(true);
+        setShowArchived(
+            archived
+        );
+
+        setSelectedClass(
+            "All"
+        );
+
+        setSearchKeyword(
+            ""
+        );
 
     };
 
 
-    const handleDelete = async (id) => {
+    // =====================================================
+    // EDIT
+    // =====================================================
 
-        const confirmDelete =
-            window.confirm(
-                "Delete this student?"
+    const handleEdit = (
+        student
+    ) => {
+
+        if (
+            student.status ===
+            "archived"
+        ) {
+
+            alert(
+                "Archived students cannot be edited. Restore the student first."
+            );
+
+            return;
+
+        }
+
+
+        setSelectedStudent(
+            student
+        );
+
+        setShowForm(
+            true
+        );
+
+    };
+
+
+    // =====================================================
+    // ARCHIVE
+    // =====================================================
+
+    const handleArchive = async (
+        student
+    ) => {
+
+        const reason =
+            window.prompt(
+                `Why are you archiving ${student.studentName}?`
             );
 
 
-        if (!confirmDelete) return;
+        if (
+            !reason ||
+            !reason.trim()
+        ) {
+
+            return;
+
+        }
+
+
+        const confirmed =
+            window.confirm(
+
+                `Archive ${student.studentName}?\n\n` +
+
+                `Class: ${
+                    getClassDisplay(
+                        student.className
+                    )
+                }\n` +
+
+                `Roll No: ${
+                    student.rollNumber ||
+                    "-"
+                }\n\n` +
+
+                `Reason: ${
+                    reason.trim()
+                }\n\n` +
+
+                `The student will NOT be deleted. Their fee and payment history will remain.`
+
+            );
+
+
+        if (!confirmed) {
+
+            return;
+
+        }
 
 
         try {
 
-            await api.delete(
-                `/students/${id}`
+            await api.post(
+
+                `/students/${student.id}/archive`,
+
+                {
+                    reason:
+                        reason.trim()
+                }
+
             );
+
+
+            alert(
+                "Student archived successfully."
+            );
+
 
             fetchStudents();
 
@@ -190,7 +371,7 @@ function StudentsPage() {
 
             alert(
                 error.response?.data?.message ||
-                "Unable to delete student."
+                "Unable to archive student."
             );
 
         }
@@ -198,16 +379,90 @@ function StudentsPage() {
     };
 
 
-    const handleAddStudent = () => {
+    // =====================================================
+    // RESTORE
+    // =====================================================
 
-        setSelectedStudent(null);
+    const handleRestore = async (
+        student
+    ) => {
 
-        setShowForm(true);
+        const confirmed =
+            window.confirm(
+
+                `Restore ${student.studentName}?\n\n` +
+
+                `Class: ${
+                    getClassDisplay(
+                        student.className
+                    )
+                }\n` +
+
+                `Roll No: ${
+                    student.rollNumber ||
+                    "-"
+                }`
+
+            );
+
+
+        if (!confirmed) {
+
+            return;
+
+        }
+
+
+        try {
+
+            await api.post(
+                `/students/${student.id}/restore`
+            );
+
+
+            alert(
+                "Student restored successfully."
+            );
+
+
+            fetchStudents();
+
+        } catch (error) {
+
+            alert(
+                error.response?.data?.message ||
+                "Unable to restore student."
+            );
+
+        }
 
     };
 
 
-    const getClassDisplay = (className) => {
+    // =====================================================
+    // ADD STUDENT
+    // =====================================================
+
+    const handleAddStudent = () => {
+
+        setSelectedStudent(
+            null
+        );
+
+        setShowForm(
+            true
+        );
+
+    };
+
+
+    // =====================================================
+    // CLASS DISPLAY
+    // =====================================================
+
+    const getClassDisplay = (
+        className
+    ) => {
 
         if (
             className === "LKG" ||
@@ -224,6 +479,26 @@ function StudentsPage() {
     };
 
 
+    // =====================================================
+    // MONEY
+    // =====================================================
+
+    const money =
+        value =>
+            `₹${Number(
+                value || 0
+            ).toLocaleString(
+                "en-IN",
+                {
+                    minimumFractionDigits:
+                        2,
+
+                    maximumFractionDigits:
+                        2
+                }
+            )}`;
+
+
     return (
 
         <div className="dashboard">
@@ -238,6 +513,8 @@ function StudentsPage() {
 
                 <div className="page-content">
 
+                    {/* HEADER */}
+
                     <div className="page-header">
 
                         <div>
@@ -248,27 +525,90 @@ function StudentsPage() {
 
                             <p>
                                 Manage students,
-                                classes and fee details.
+                                classes and fee accounts.
                             </p>
 
                         </div>
 
 
+                        {!showArchived && (
+
+                            <button
+                                className="primary-btn"
+                                onClick={
+                                    handleAddStudent
+                                }
+                            >
+
+                                + Add Student
+
+                            </button>
+
+                        )}
+
+                    </div>
+
+
+                    {/* STATUS */}
+
+                    <div
+                        style={{
+                            display:
+                                "flex",
+
+                            gap:
+                                "10px",
+
+                            marginBottom:
+                                "20px"
+                        }}
+                    >
+
                         <button
-                            className="primary-btn"
-                            onClick={
-                                handleAddStudent
+                            type="button"
+                            className={
+                                !showArchived
+                                    ? "primary-btn"
+                                    : "clear-btn"
+                            }
+                            onClick={() =>
+                                handleStatusToggle(
+                                    false
+                                )
                             }
                         >
 
-                            + Add Student
+                            Active Students
+
+                        </button>
+
+
+                        <button
+                            type="button"
+                            className={
+                                showArchived
+                                    ? "primary-btn"
+                                    : "clear-btn"
+                            }
+                            onClick={() =>
+                                handleStatusToggle(
+                                    true
+                                )
+                            }
+                        >
+
+                            Archived Students
 
                         </button>
 
                     </div>
 
 
-                    <div className="student-filters">
+                    {/* FILTER */}
+
+                    <div
+                        className="student-filters"
+                    >
 
                         <StudentSearch
                             onSearch={
@@ -279,7 +619,9 @@ function StudentsPage() {
 
                         <select
                             className="filter-select"
-                            value={selectedClass}
+                            value={
+                                selectedClass
+                            }
                             onChange={
                                 handleClassChange
                             }
@@ -290,31 +632,41 @@ function StudentsPage() {
                             </option>
 
 
-                            {classes.map(
-                                (className) => (
+                            {
+                                classes.map(
+                                    className => (
 
-                                    <option
-                                        key={className}
-                                        value={className}
-                                    >
-
-                                        {
-                                            getClassDisplay(
+                                        <option
+                                            key={
                                                 className
-                                            )
-                                        }
+                                            }
+                                            value={
+                                                className
+                                            }
+                                        >
 
-                                    </option>
+                                            {
+                                                getClassDisplay(
+                                                    className
+                                                )
+                                            }
 
+                                        </option>
+
+                                    )
                                 )
-                            )}
+                            }
 
                         </select>
 
                     </div>
 
 
-                    <div className="table-container">
+                    {/* TABLE */}
+
+                    <div
+                        className="table-container"
+                    >
 
                         <table>
 
@@ -322,7 +674,9 @@ function StudentsPage() {
 
                                 <tr>
 
-                                    <th>#</th>
+                                    <th>
+                                        #
+                                    </th>
 
                                     <th>
                                         Roll No.
@@ -345,7 +699,7 @@ function StudentsPage() {
                                     </th>
 
                                     <th>
-                                        Fee
+                                        Status
                                     </th>
 
                                     <th>
@@ -359,154 +713,203 @@ function StudentsPage() {
 
                             <tbody>
 
-                                {filteredStudents.length === 0 ? (
+                                {
+                                    filteredStudents.length ===
+                                    0 ? (
 
-                                    <tr>
+                                        <tr>
 
-                                        <td
-                                            colSpan="8"
-                                            style={{
-                                                textAlign:
-                                                    "center"
-                                            }}
-                                        >
-
-                                            No students found.
-
-                                        </td>
-
-                                    </tr>
-
-                                ) : (
-
-                                    filteredStudents.map(
-                                        (student, index) => (
-
-                                            <tr
-                                                key={
-                                                    student.id
-                                                }
+                                            <td
+                                                colSpan="8"
+                                                style={{
+                                                    textAlign:
+                                                        "center"
+                                                }}
                                             >
 
-                                                <td>
-                                                    {index + 1}
-                                                </td>
+                                                {
+                                                    showArchived
+                                                        ? "No archived students found."
+                                                        : "No active students found."
+                                                }
 
+                                            </td>
 
-                                                <td>
+                                        </tr>
 
-                                                    <strong>
+                                    ) : (
+
+                                        filteredStudents.map(
+                                            (
+                                                student,
+                                                index
+                                            ) => (
+
+                                                <tr
+                                                    key={
+                                                        student.id
+                                                    }
+                                                    style={
+                                                        student.status ===
+                                                        "archived"
+                                                            ? {
+                                                                opacity:
+                                                                    0.65
+                                                            }
+                                                            : {}
+                                                    }
+                                                >
+
+                                                    <td>
                                                         {
-                                                            student.rollNumber ||
+                                                            index + 1
+                                                        }
+                                                    </td>
+
+                                                    <td>
+                                                        <strong>
+                                                            {
+                                                                student.rollNumber ||
+                                                                "-"
+                                                            }
+                                                        </strong>
+                                                    </td>
+
+                                                    <td>
+                                                        <strong>
+                                                            {
+                                                                student.studentName
+                                                            }
+                                                        </strong>
+                                                    </td>
+
+                                                    <td>
+                                                        {
+                                                            getClassDisplay(
+                                                                student.className
+                                                            )
+                                                        }
+                                                    </td>
+
+                                                    <td>
+                                                        {
+                                                            student.fatherName ||
                                                             "-"
                                                         }
-                                                    </strong>
+                                                    </td>
 
-                                                </td>
+                                                    <td>
+                                                        {
+                                                            student.contact1 ||
+                                                            "-"
+                                                        }
+                                                    </td>
 
+                                                    <td>
 
-                                                <td>
-                                                    {
-                                                        student.studentName
-                                                    }
-                                                </td>
+                                                        {
+                                                            student.status ===
+                                                            "archived" ? (
 
+                                                                <span className="payment-badge mode-default">
+                                                                    Archived
+                                                                </span>
 
-                                                <td>
+                                                            ) : (
 
-                                                    {
-                                                        getClassDisplay(
-                                                            student.className
-                                                        )
-                                                    }
+                                                                <span className="payment-badge mode-upi">
+                                                                    Active
+                                                                </span>
 
-                                                </td>
+                                                            )
+                                                        }
 
+                                                    </td>
 
-                                                <td>
-                                                    {
-                                                        student.fatherName
-                                                    }
-                                                </td>
+                                                    <td>
 
-
-                                                <td>
-                                                    {
-                                                        student.contact1
-                                                    }
-                                                </td>
-
-
-                                                <td>
-
-                                                    ₹{" "}
-                                                    {Number(
-                                                        student.tuitionFee ||
-                                                        0
-                                                    ).toLocaleString(
-                                                        "en-IN"
-                                                    )}
-
-                                                </td>
-
-
-                                                <td>
-
-                                                    <div
-                                                        className="action-buttons"
-                                                    >
-
-                                                        <button
-                                                            className="history-btn"
-                                                            onClick={() =>
-                                                                setHistoryStudent(
-                                                                    student
-                                                                )
-                                                            }
+                                                        <div
+                                                            className="action-buttons"
                                                         >
 
-                                                            History
+                                                            <button
+                                                                className="history-btn"
+                                                                onClick={() =>
+                                                                    setHistoryStudent(
+                                                                        student
+                                                                    )
+                                                                }
+                                                            >
 
-                                                        </button>
+                                                                History
+
+                                                            </button>
 
 
-                                                        <button
-                                                            className="edit-btn"
-                                                            onClick={() =>
-                                                                handleEdit(
-                                                                    student
+                                                            {
+                                                                student.status ===
+                                                                "archived" ? (
+
+                                                                    <button
+                                                                        className="edit-btn"
+                                                                        onClick={() =>
+                                                                            handleRestore(
+                                                                                student
+                                                                            )
+                                                                        }
+                                                                    >
+
+                                                                        Restore
+
+                                                                    </button>
+
+                                                                ) : (
+
+                                                                    <>
+
+                                                                        <button
+                                                                            className="edit-btn"
+                                                                            onClick={() =>
+                                                                                handleEdit(
+                                                                                    student
+                                                                                )
+                                                                            }
+                                                                        >
+
+                                                                            Edit
+
+                                                                        </button>
+
+
+                                                                        <button
+                                                                            className="delete-btn"
+                                                                            onClick={() =>
+                                                                                handleArchive(
+                                                                                    student
+                                                                                )
+                                                                            }
+                                                                        >
+
+                                                                            Archive
+
+                                                                        </button>
+
+                                                                    </>
+
                                                                 )
                                                             }
-                                                        >
 
-                                                            Edit
+                                                        </div>
 
-                                                        </button>
+                                                    </td>
 
+                                                </tr>
 
-                                                        <button
-                                                            className="delete-btn"
-                                                            onClick={() =>
-                                                                handleDelete(
-                                                                    student.id
-                                                                )
-                                                            }
-                                                        >
-
-                                                            Delete
-
-                                                        </button>
-
-                                                    </div>
-
-                                                </td>
-
-                                            </tr>
-
+                                            )
                                         )
-                                    )
 
-                                )}
+                                    )
+                                }
 
                             </tbody>
 
@@ -519,35 +922,58 @@ function StudentsPage() {
             </div>
 
 
-            {showForm && (
+            {/* STUDENT FORM */}
 
-                <StudentForm
-                    student={selectedStudent}
+            {
+                showForm && (
 
-                    onClose={() => {
+                    <StudentForm
 
-                        setShowForm(false);
+                        student={
+                            selectedStudent
+                        }
 
-                        fetchStudents();
+                        onClose={() => {
 
-                    }}
-                />
+                            setShowForm(
+                                false
+                            );
 
-            )}
+                            setSelectedStudent(
+                                null
+                            );
+
+                            fetchStudents();
+
+                        }}
+
+                    />
+
+                )
+            }
 
 
-            {historyStudent && (
+            {/* FEE HISTORY */}
 
-                <FeeHistory
-                    student={
-                        historyStudent
-                    }
-                    onClose={() =>
-                        setHistoryStudent(null)
-                    }
-                />
+            {
+                historyStudent && (
 
-            )}
+                    <FeeHistory
+
+                        student={
+                            historyStudent
+                        }
+
+                        onClose={() =>
+                            setHistoryStudent(
+                                null
+                            )
+                        }
+
+                    />
+
+                )
+            }
 
         </div>
 
@@ -556,76 +982,137 @@ function StudentsPage() {
 }
 
 
-/*
-====================================================
-FEE HISTORY MODAL
-====================================================
-*/
+// =====================================================
+// FEE HISTORY
+// =====================================================
 
 function FeeHistory({
     student,
     onClose
 }) {
 
-    const [history, setHistory] =
-        useState(null);
+    const [
+        history,
+        setHistory
+    ] = useState(null);
 
-    const [loading, setLoading] =
-        useState(true);
+
+    const [
+        loading,
+        setLoading
+    ] = useState(true);
 
 
     useEffect(() => {
 
-        fetchHistory();
+        loadHistory();
 
     }, [student]);
 
 
-    const fetchHistory = async () => {
+    const loadHistory =
+        async () => {
 
-        try {
+            try {
 
-            const res =
-                await api.get(
-                    `/payments/history/student/${student.id}`
+                setLoading(
+                    true
                 );
 
-            setHistory(res.data);
 
-        } catch (error) {
+                const res =
+                    await api.get(
+                        `/payments/history/student/${student.id}`
+                    );
 
-            console.error(error);
 
-        } finally {
+                setHistory(
+                    res.data
+                );
 
-            setLoading(false);
+            } catch (error) {
 
-        }
+                console.error(
+                    "Fee History Error:",
+                    error
+                );
 
-    };
+                setHistory(
+                    null
+                );
+
+            } finally {
+
+                setLoading(
+                    false
+                );
+
+            }
+
+        };
+
+
+    const money =
+        value =>
+            `₹${Number(
+                value || 0
+            ).toLocaleString(
+                "en-IN",
+                {
+                    minimumFractionDigits:
+                        2,
+
+                    maximumFractionDigits:
+                        2
+                }
+            )}`;
 
 
     return (
 
-        <div className="modal-overlay">
+        <div
+            className="modal-overlay"
+        >
 
-            <div className="history-modal">
+            <div
+                className="history-modal"
+            >
 
-                <div className="modal-header">
+                {/* HEADER */}
+
+                <div
+                    className="modal-header"
+                >
 
                     <div>
 
                         <h2>
-                            Fee History
+                            Fee Account
                         </h2>
 
                         <p>
 
-                            {student.studentName}
+                            {
+                                student.studentName
+                            }
+
                             {" • "}
-                            Roll No:
-                            {" "}
-                            {student.rollNumber}
+
+                            {
+                                student.rollNumber ||
+                                "-"
+                            }
+
+                            {" • "}
+
+                            {
+                                student.className
+                                    === "LKG" ||
+                                student.className
+                                    === "UKG"
+                                    ? student.className
+                                    : `${student.className} Standard`
+                            }
 
                         </p>
 
@@ -633,8 +1120,11 @@ function FeeHistory({
 
 
                     <button
+                        type="button"
                         className="close-btn"
-                        onClick={onClose}
+                        onClick={
+                            onClose
+                        }
                     >
 
                         ✕
@@ -644,185 +1134,425 @@ function FeeHistory({
                 </div>
 
 
-                {loading ? (
+                {
+                    loading ? (
 
-                    <div className="history-loading">
-
-                        Loading fee history...
-
-                    </div>
-
-                ) : history ? (
-
-                    <>
-
-                        <div className="fee-summary">
-
-                            <div>
-
-                                <span>
-                                    Total Fee
-                                </span>
-
-                                <strong>
-                                    ₹{" "}
-                                    {Number(
-                                        history.totalFee
-                                    ).toLocaleString(
-                                        "en-IN"
-                                    )}
-                                </strong>
-
-                            </div>
-
-
-                            <div>
-
-                                <span>
-                                    Total Paid
-                                </span>
-
-                                <strong>
-                                    ₹{" "}
-                                    {Number(
-                                        history.totalPaid
-                                    ).toLocaleString(
-                                        "en-IN"
-                                    )}
-                                </strong>
-
-                            </div>
-
-
-                            <div>
-
-                                <span>
-                                    Balance
-                                </span>
-
-                                <strong>
-                                    ₹{" "}
-                                    {Number(
-                                        history.balance
-                                    ).toLocaleString(
-                                        "en-IN"
-                                    )}
-                                </strong>
-
-                            </div>
-
+                        <div className="history-loading">
+                            Loading fee account...
                         </div>
 
+                    ) : history ? (
 
-                        <div className="table-container">
+                        <>
 
-                            <table>
+                            {/* ACADEMIC YEAR */}
 
-                                <thead>
+                            <div
+                                className="fee-summary"
+                                style={{
+                                    marginBottom:
+                                        "15px"
+                                }}
+                            >
 
-                                    <tr>
+                                <div>
 
-                                        <th>
-                                            Date
-                                        </th>
+                                    <span>
+                                        Academic Year
+                                    </span>
 
-                                        <th>
-                                            Amount
-                                        </th>
+                                    <strong>
+                                        {
+                                            history.academicYear?.name ||
+                                            "-"
+                                        }
+                                    </strong>
 
-                                        <th>
-                                            Mode
-                                        </th>
-
-                                        <th>
-                                            Remarks
-                                        </th>
-
-                                    </tr>
-
-                                </thead>
+                                </div>
 
 
-                                <tbody>
+                                <div>
 
-                                    {history.payments.length === 0 ? (
+                                    <span>
+                                        Account
+                                    </span>
 
-                                        <tr>
+                                    <strong>
+                                        Active
+                                    </strong>
 
-                                            <td
-                                                colSpan="4"
-                                            >
+                                </div>
 
-                                                No payments
-                                                found.
+                            </div>
 
-                                            </td>
 
-                                        </tr>
+                            {/* SUMMARY */}
 
-                                    ) : (
+                            <div
+                                className="fee-summary"
+                            >
 
-                                        history.payments.map(
-                                            (payment) => (
+                                <div>
 
-                                                <tr
-                                                    key={
-                                                        payment.id
-                                                    }
-                                                >
+                                    <span>
+                                        Total Fee
+                                    </span>
 
-                                                    <td>
-                                                        {
-                                                            payment.paymentDate
-                                                        }
-                                                    </td>
-
-                                                    <td>
-
-                                                        ₹{" "}
-                                                        {Number(
-                                                            payment.amount
-                                                        ).toLocaleString(
-                                                            "en-IN"
-                                                        )}
-
-                                                    </td>
-
-                                                    <td>
-                                                        {
-                                                            payment.paymentMode
-                                                        }
-                                                    </td>
-
-                                                    <td>
-                                                        {
-                                                            payment.remarks ||
-                                                            "-"
-                                                        }
-                                                    </td>
-
-                                                </tr>
-
+                                    <strong>
+                                        {
+                                            money(
+                                                history.totalFee
                                             )
-                                        )
+                                        }
+                                    </strong>
 
-                                    )}
+                                </div>
 
-                                </tbody>
 
-                            </table>
+                                <div>
 
-                        </div>
+                                    <span>
+                                        Total Paid
+                                    </span>
 
-                    </>
+                                    <strong className="fee-paid">
+                                        {
+                                            money(
+                                                history.totalPaid
+                                            )
+                                        }
+                                    </strong>
 
-                ) : (
+                                </div>
 
-                    <p>
-                        Unable to load fee history.
-                    </p>
 
-                )}
+                                <div>
+
+                                    <span>
+                                        Balance
+                                    </span>
+
+                                    <strong className="fee-remaining">
+                                        {
+                                            money(
+                                                history.balance
+                                            )
+                                        }
+                                    </strong>
+
+                                </div>
+
+                            </div>
+
+
+                            {/* FEE BREAKDOWN */}
+
+                            <div
+                                style={{
+                                    marginTop:
+                                        "20px"
+                                }}
+                            >
+
+                                <h3>
+                                    Fee Breakdown
+                                </h3>
+
+
+                                <div
+                                    className="table-container"
+                                >
+
+                                    <table>
+
+                                        <thead>
+
+                                            <tr>
+
+                                                <th>
+                                                    Component
+                                                </th>
+
+                                                <th>
+                                                    Type
+                                                </th>
+
+                                                <th>
+                                                    Amount
+                                                </th>
+
+                                            </tr>
+
+                                        </thead>
+
+
+                                        <tbody>
+
+                                            {
+                                                history.items?.length ===
+                                                0 ? (
+
+                                                    <tr>
+
+                                                        <td
+                                                            colSpan="3"
+                                                        >
+                                                            No fee components found.
+                                                        </td>
+
+                                                    </tr>
+
+                                                ) : (
+
+                                                    history.items?.map(
+                                                        item => (
+
+                                                            <tr
+                                                                key={
+                                                                    item.id
+                                                                }
+                                                            >
+
+                                                                <td>
+                                                                    {
+                                                                        item.componentName
+                                                                    }
+                                                                </td>
+
+                                                                <td>
+                                                                    {
+                                                                        item.itemType ===
+                                                                        "carry_forward"
+                                                                            ? "Previous Dues"
+                                                                            : item.itemType
+                                                                    }
+                                                                </td>
+
+                                                                <td>
+                                                                    <strong>
+                                                                        {
+                                                                            money(
+                                                                                item.amount
+                                                                            )
+                                                                        }
+                                                                    </strong>
+                                                                </td>
+
+                                                            </tr>
+
+                                                        )
+                                                    )
+
+                                                )
+                                            }
+
+                                        </tbody>
+
+                                    </table>
+
+                                </div>
+
+                            </div>
+
+
+                            {/* PAYMENTS */}
+
+                            <div
+                                style={{
+                                    marginTop:
+                                        "20px"
+                                }}
+                            >
+
+                                <h3>
+                                    Payment History
+                                </h3>
+
+
+                                <div
+                                    className="table-container"
+                                >
+
+                                    <table>
+
+                                        <thead>
+
+                                            <tr>
+
+                                                <th>
+                                                    Date
+                                                </th>
+
+                                                <th>
+                                                    Amount
+                                                </th>
+
+                                                <th>
+                                                    Mode
+                                                </th>
+
+                                                <th>
+                                                    Status
+                                                </th>
+
+                                                <th>
+                                                    Remarks
+                                                </th>
+
+                                            </tr>
+
+                                        </thead>
+
+
+                                        <tbody>
+
+                                            {
+                                                history.payments?.length ===
+                                                0 ? (
+
+                                                    <tr>
+
+                                                        <td
+                                                            colSpan="5"
+                                                        >
+                                                            No payments found.
+                                                        </td>
+
+                                                    </tr>
+
+                                                ) : (
+
+                                                    history.payments.map(
+                                                        payment => (
+
+                                                            <tr
+                                                                key={
+                                                                    payment.id
+                                                                }
+                                                                style={
+                                                                    payment.status ===
+                                                                    "reversed"
+                                                                        ? {
+                                                                            opacity:
+                                                                                0.6
+                                                                        }
+                                                                        : {}
+                                                                }
+                                                            >
+
+                                                                <td>
+                                                                    {
+                                                                        payment.paymentDate ||
+                                                                        "-"
+                                                                    }
+                                                                </td>
+
+                                                                <td>
+
+                                                                    <strong>
+                                                                        {
+                                                                            money(
+                                                                                payment.amount
+                                                                            )
+                                                                        }
+                                                                    </strong>
+
+                                                                </td>
+
+                                                                <td>
+                                                                    {
+                                                                        payment.paymentMode ||
+                                                                        "-"
+                                                                    }
+                                                                </td>
+
+                                                                <td>
+
+                                                                    {
+                                                                        payment.status ===
+                                                                        "reversed" ? (
+
+                                                                            <span className="payment-badge mode-default">
+                                                                                Reversed
+                                                                            </span>
+
+                                                                        ) : (
+
+                                                                            <span className="payment-badge mode-upi">
+                                                                                Completed
+                                                                            </span>
+
+                                                                        )
+                                                                    }
+
+                                                                </td>
+
+                                                                <td>
+
+                                                                    {
+                                                                        payment.remarks ||
+                                                                        "-"
+                                                                    }
+
+
+                                                                    {
+                                                                        payment.status ===
+                                                                        "reversed" &&
+                                                                        payment.voidReason && (
+
+                                                                            <div
+                                                                                style={{
+                                                                                    marginTop:
+                                                                                        "5px",
+
+                                                                                    fontSize:
+                                                                                        "12px",
+
+                                                                                    color:
+                                                                                        "#b91c1c"
+                                                                                }}
+                                                                            >
+
+                                                                                Reason:
+                                                                                {" "}
+
+                                                                                {
+                                                                                    payment.voidReason
+                                                                                }
+
+                                                                            </div>
+
+                                                                        )
+                                                                    }
+
+                                                                </td>
+
+                                                            </tr>
+
+                                                        )
+                                                    )
+
+                                                )
+                                            }
+
+                                        </tbody>
+
+                                    </table>
+
+                                </div>
+
+                            </div>
+
+                        </>
+
+                    ) : (
+
+                        <p>
+                            Unable to load fee account.
+                        </p>
+
+                    )
+                }
 
             </div>
 
