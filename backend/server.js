@@ -15,19 +15,18 @@ const {
 
 const app = express();
 
-const PORT =
-    Number(process.env.PORT) || 5000;
+const PORT = Number(process.env.PORT) || 5000;
 
 // =====================================================
-// CORS
+// CORS (Updated for Azure)
 // =====================================================
 
 app.use(
     cors({
-        origin:
-            process.env.FRONTEND_URL ||
+        origin: [
             "http://localhost:3000",
-
+            "https://wonderful-hill-06e76ae10.7.azurestaticapps.net" // Your Azure Frontend
+        ],
         credentials: true
     })
 );
@@ -100,12 +99,9 @@ app.use(
 app.get(
     "/",
     (req, res) => {
-
         res.json({
             status: "THE AGE SCHOOL API Running",
-
             authenticated: true,
-
             user: {
                 id: req.user.id,
                 role: req.user.role
@@ -120,7 +116,6 @@ app.get(
 
 app.use(
     (req, res) => {
-
         res.status(404).json({
             success: false,
             message: "API endpoint not found."
@@ -133,9 +128,7 @@ app.use(
 // =====================================================
 
 async function startServer() {
-
     try {
-
         console.log(
             "Starting database initialization..."
         );
@@ -149,16 +142,13 @@ async function startServer() {
         app.listen(
             PORT,
             () => {
-
                 console.log(
                     `Server Running on http://localhost:${PORT}`
                 );
-
             }
         );
 
     } catch (error) {
-
         console.error(
             "Database initialization failed:",
             error
