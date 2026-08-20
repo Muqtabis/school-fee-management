@@ -1,16 +1,21 @@
-const express = require("express");
+const express =
+    require("express");
 
-const router = express.Router();
+const router =
+    express.Router();
 
 const paymentController =
     require("../controllers/paymentController");
 
 const {
-    requireRole
-} = require("../middleware/authMiddleware");
+    requireRole,
+    requireAdmin
+} =
+    require("../middleware/authMiddleware");
+
 
 // =====================================================
-// ROLE
+// ADMIN + RECEPTIONIST
 // =====================================================
 
 router.use(
@@ -20,8 +25,10 @@ router.use(
     )
 );
 
+
 // =====================================================
-// PAYMENTS
+// PAYMENT LIST
+// ADMIN + RECEPTIONIST
 // =====================================================
 
 router.get(
@@ -29,38 +36,46 @@ router.get(
     paymentController.getPayments
 );
 
+
 // =====================================================
-// DASHBOARD SUMMARY
-// IMPORTANT: BEFORE /:id
+// DASHBOARD FINANCIAL SUMMARY
+// ADMIN ONLY
 // =====================================================
 
 router.get(
     "/summary",
+    requireAdmin,
     paymentController.dashboardSummary
 );
 
+
 // =====================================================
-// REPORT SUMMARY
-// IMPORTANT: BEFORE /:id
+// FINANCIAL REPORT
+// ADMIN ONLY
 // =====================================================
 
 router.get(
     "/report-summary",
+    requireAdmin,
     paymentController.reportSummary
 );
 
+
 // =====================================================
 // MONTHLY COLLECTION
-// IMPORTANT: BEFORE /:id
+// ADMIN ONLY
 // =====================================================
 
 router.get(
     "/monthly-collection",
+    requireAdmin,
     paymentController.monthlyCollection
 );
 
+
 // =====================================================
-// STUDENT HISTORY
+// STUDENT FEE HISTORY
+// ADMIN + RECEPTIONIST
 // =====================================================
 
 router.get(
@@ -68,8 +83,10 @@ router.get(
     paymentController.studentFeeHistory
 );
 
+
 // =====================================================
 // RECEIPT
+// ADMIN + RECEPTIONIST
 // =====================================================
 
 router.get(
@@ -77,8 +94,10 @@ router.get(
     paymentController.getReceipt
 );
 
+
 // =====================================================
 // SINGLE PAYMENT
+// ADMIN + RECEPTIONIST
 // =====================================================
 
 router.get(
@@ -86,8 +105,10 @@ router.get(
     paymentController.getPayment
 );
 
+
 // =====================================================
 // ADD PAYMENT
+// ADMIN + RECEPTIONIST
 // =====================================================
 
 router.post(
@@ -95,8 +116,10 @@ router.post(
     paymentController.addPayment
 );
 
+
 // =====================================================
 // REVERSE PAYMENT
+// ADMIN + RECEPTIONIST
 // =====================================================
 
 router.post(
@@ -104,8 +127,9 @@ router.post(
     paymentController.reversePayment
 );
 
+
 // =====================================================
-// DISABLED
+// UPDATE DISABLED
 // =====================================================
 
 router.put(
@@ -113,9 +137,15 @@ router.put(
     paymentController.updatePayment
 );
 
+
+// =====================================================
+// DELETE DISABLED
+// =====================================================
+
 router.delete(
     "/:id",
     paymentController.deletePayment
 );
+
 
 module.exports = router;

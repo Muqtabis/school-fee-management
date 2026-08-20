@@ -33,7 +33,7 @@ router.get(
 
 
 // =====================================================
-// CREATE USER
+// CREATE RECEPTIONIST
 // =====================================================
 
 router.post(
@@ -43,12 +43,32 @@ router.post(
 
 
 // =====================================================
-// CHANGE ROLE
+// RESET RECEPTIONIST PASSWORD
 // =====================================================
 
 router.put(
-    "/:id/role",
-    userController.changeRole
+    "/:id/password",
+    userController.resetPassword
+);
+
+
+// =====================================================
+// DELETE RECEPTIONIST
+// =====================================================
+
+router.delete(
+    "/:id",
+    userController.deleteUser
+);
+
+
+// =====================================================
+// CHANGE OWN PASSWORD
+// =====================================================
+
+router.put(
+    "/change-own-password",
+    userController.changeOwnPassword
 );
 
 

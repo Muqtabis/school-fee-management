@@ -1,45 +1,141 @@
 const express = require("express");
+
 const router = express.Router();
+
 const feeController = require("../controllers/feeController");
-const { requireRole, requireAdmin } = require("../middleware/authMiddleware");
+
+const {
+    requireRole,
+    requireAdmin
+} = require("../middleware/authMiddleware");
+
 
 // =====================================================
-// ROLE
+// ALLOWED ROLES
+// ADMIN + RECEPTIONIST
 // =====================================================
 
-router.use(requireRole("admin", "receptionist"));
+router.use(
+    requireRole(
+        "admin",
+        "receptionist"
+    )
+);
+
 
 // =====================================================
 // ACADEMIC YEARS
 // =====================================================
 
-router.get("/academic-years", feeController.getAcademicYears);
-router.post("/academic-years", requireAdmin, feeController.createAcademicYear);
-router.post("/academic-years/:id/activate", requireAdmin, feeController.activateAcademicYear);
+// View academic years
+router.get(
+    "/academic-years",
+    feeController.getAcademicYears
+);
+
+
+// -----------------------------------------------------
+// CREATE ACADEMIC YEAR
+// ADMIN ONLY
+// -----------------------------------------------------
+
+router.post(
+    "/academic-years",
+    requireAdmin,
+    feeController.createAcademicYear
+);
+
+
+// -----------------------------------------------------
+// ACTIVATE ACADEMIC YEAR
+// ADMIN + RECEPTIONIST
+// -----------------------------------------------------
+
+router.post(
+    "/academic-years/:id/activate",
+    feeController.activateAcademicYear
+);
+
 
 // =====================================================
 // FEE STRUCTURES
+// ADMIN + RECEPTIONIST
 // =====================================================
 
-router.get("/structures", feeController.getStructures);
-router.get("/structures/:id", feeController.getStructure);
 
-// NEW: Route to create a new class structure dynamically
-router.post("/structures", requireAdmin, feeController.createStructure);
+// -----------------------------------------------------
+// LIST STRUCTURES
+// -----------------------------------------------------
 
-router.put("/structures/:id", requireAdmin, feeController.updateStructure);
-router.post("/structures/:id/copy/:targetYearId", requireAdmin, feeController.copyStructure);
+router.get(
+    "/structures",
+    feeController.getStructures
+);
+
+
+// -----------------------------------------------------
+// SINGLE STRUCTURE
+// -----------------------------------------------------
+
+router.get(
+    "/structures/:id",
+    feeController.getStructure
+);
+
+
+// -----------------------------------------------------
+// CREATE CLASS STRUCTURE
+// ADMIN + RECEPTIONIST
+// -----------------------------------------------------
+
+router.post(
+    "/structures",
+    feeController.createStructure
+);
+
+
+// -----------------------------------------------------
+// UPDATE CLASS STRUCTURE
+// ADMIN + RECEPTIONIST
+// -----------------------------------------------------
+
+router.put(
+    "/structures/:id",
+    feeController.updateStructure
+);
+
+
+// -----------------------------------------------------
+// COPY STRUCTURE
+// ADMIN + RECEPTIONIST
+// -----------------------------------------------------
+
+router.post(
+    "/structures/:id/copy/:targetYearId",
+    feeController.copyStructure
+);
+
 
 // =====================================================
 // PREPARE ACADEMIC YEAR
+// ADMIN + RECEPTIONIST
 // =====================================================
 
-router.post("/academic-years/:id/prepare", requireAdmin, feeController.prepareAcademicYear);
+router.post(
+    "/academic-years/:id/prepare",
+    feeController.prepareAcademicYear
+);
+
 
 // =====================================================
 // STUDENT FEE ACCOUNT
+// ADMIN + RECEPTIONIST
 // =====================================================
 
-router.get("/student/:studentId", feeController.getStudentFeeAccount);
+router.get(
+    "/student/:studentId",
+    feeController.getStudentFeeAccount
+);
+
 
 module.exports = router;

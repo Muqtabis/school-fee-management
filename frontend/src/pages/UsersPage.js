@@ -36,21 +36,21 @@ function UsersPage() {
 
         email: "",
 
-        password: "",
-
-        role: "receptionist"
+        password: ""
 
     });
 
+
+    // =====================================================
+    // LOAD USERS
+    // =====================================================
 
     const loadUsers =
         async () => {
 
             try {
 
-                setLoading(
-                    true
-                );
+                setLoading(true);
 
                 const res =
                     await api.get(
@@ -72,9 +72,7 @@ function UsersPage() {
 
             } finally {
 
-                setLoading(
-                    false
-                );
+                setLoading(false);
 
             }
 
@@ -91,6 +89,10 @@ function UsersPage() {
     );
 
 
+    // =====================================================
+    // INPUT CHANGE
+    // =====================================================
+
     const handleChange =
         (e) => {
 
@@ -106,11 +108,14 @@ function UsersPage() {
         };
 
 
+    // =====================================================
+    // CREATE RECEPTIONIST
+    // =====================================================
+
     const createUser =
         async (e) => {
 
             e.preventDefault();
-
 
             try {
 
@@ -121,7 +126,7 @@ function UsersPage() {
 
 
                 alert(
-                    "User created successfully."
+                    "Receptionist created successfully."
                 );
 
 
@@ -131,10 +136,7 @@ function UsersPage() {
 
                     email: "",
 
-                    password: "",
-
-                    role:
-                        "receptionist"
+                    password: ""
 
                 });
 
@@ -147,13 +149,151 @@ function UsersPage() {
 
                 alert(
                     error.response?.data?.message ||
-                    "Unable to create user."
+                    "Unable to create receptionist."
                 );
 
             }
 
         };
 
+
+    // =====================================================
+    // RESET RECEPTIONIST PASSWORD
+    // =====================================================
+
+    const resetPassword =
+        async (user) => {
+
+            const newPassword =
+                window.prompt(
+                    `Enter a new password for ${user.name}:`
+                );
+
+
+            if (
+                newPassword === null
+            ) {
+
+                return;
+
+            }
+
+
+            if (
+                newPassword.length < 8
+            ) {
+
+                alert(
+                    "Password must contain at least 8 characters."
+                );
+
+                return;
+
+            }
+
+
+            const confirmPassword =
+                window.prompt(
+                    "Confirm the new password:"
+                );
+
+
+            if (
+                confirmPassword !==
+                newPassword
+            ) {
+
+                alert(
+                    "Passwords do not match."
+                );
+
+                return;
+
+            }
+
+
+            try {
+
+                await api.put(
+                    `/users/${user.id}/password`,
+                    {
+                        password:
+                            newPassword
+                    }
+                );
+
+
+                alert(
+                    "Receptionist password reset successfully."
+                );
+
+            } catch (
+                error
+            ) {
+
+                alert(
+                    error.response?.data?.message ||
+                    "Unable to reset password."
+                );
+
+            }
+
+        };
+
+
+    // =====================================================
+    // DELETE RECEPTIONIST
+    // =====================================================
+
+    const deleteUser =
+        async (user) => {
+
+            const confirmed =
+                window.confirm(
+                    `Are you sure you want to delete ${user.name}?\n\nThis will remove their ERP login.`
+                );
+
+
+            if (
+                !confirmed
+            ) {
+
+                return;
+
+            }
+
+
+            try {
+
+                await api.delete(
+                    `/users/${user.id}`
+                );
+
+
+                alert(
+                    "Receptionist deleted successfully."
+                );
+
+
+                loadUsers();
+
+            } catch (
+                error
+            ) {
+
+                alert(
+                    error.response?.data?.message ||
+                    "Unable to delete receptionist."
+                );
+
+            }
+
+        };
+
+
+    // =====================================================
+    // UI
+    // =====================================================
 
     return (
 
@@ -186,9 +326,9 @@ function UsersPage() {
                             </h2>
 
                             <p>
-                                Admin can create
-                                and manage school
-                                staff accounts.
+                                Admin can create and
+                                manage school staff
+                                accounts.
                             </p>
 
                         </div>
@@ -196,12 +336,16 @@ function UsersPage() {
                     </div>
 
 
+                    {/* =================================================
+                        CREATE RECEPTIONIST
+                    ================================================= */}
+
                     <div
                         className="settings-card"
                     >
 
                         <h3>
-                            Create User
+                            Create Receptionist
                         </h3>
 
 
@@ -212,10 +356,13 @@ function UsersPage() {
                             style={{
                                 display:
                                     "grid",
+
                                 gap:
                                     "12px",
+
                                 marginTop:
                                     "20px",
+
                                 maxWidth:
                                     "500px"
                             }}
@@ -257,48 +404,27 @@ function UsersPage() {
                                 onChange={
                                     handleChange
                                 }
-                                placeholder="Password"
-                                minLength="6"
+                                placeholder="Initial password"
+                                minLength="8"
                                 required
                             />
-
-
-                            <select
-                                name="role"
-                                value={
-                                    form.role
-                                }
-                                onChange={
-                                    handleChange
-                                }
-                            >
-
-                                <option
-                                    value="receptionist"
-                                >
-                                    Receptionist
-                                </option>
-
-                                <option
-                                    value="admin"
-                                >
-                                    Admin
-                                </option>
-
-                            </select>
 
 
                             <button
                                 type="submit"
                                 className="primary-btn"
                             >
-                                Create User
+                                Create Receptionist
                             </button>
 
                         </form>
 
                     </div>
 
+
+                    {/* =================================================
+                        USERS TABLE
+                    ================================================= */}
 
                     <div
                         className="table-container"
@@ -330,6 +456,10 @@ function UsersPage() {
                                         Created
                                     </th>
 
+                                    <th>
+                                        Actions
+                                    </th>
+
                                 </tr>
 
                             </thead>
@@ -343,9 +473,21 @@ function UsersPage() {
                                         <tr>
 
                                             <td
-                                                colSpan="4"
+                                                colSpan="5"
                                             >
                                                 Loading...
+                                            </td>
+
+                                        </tr>
+
+                                    ) : users.length === 0 ? (
+
+                                        <tr>
+
+                                            <td
+                                                colSpan="5"
+                                            >
+                                                No users found.
                                             </td>
 
                                         </tr>
@@ -367,11 +509,13 @@ function UsersPage() {
                                                         }
                                                     </td>
 
+
                                                     <td>
                                                         {
                                                             user.email
                                                         }
                                                     </td>
+
 
                                                     <td>
                                                         {
@@ -379,10 +523,69 @@ function UsersPage() {
                                                         }
                                                     </td>
 
+
                                                     <td>
                                                         {
                                                             user.createdAt
                                                         }
+                                                    </td>
+
+
+                                                    <td>
+
+                                                        {
+                                                            user.role ===
+                                                            "receptionist"
+                                                                ? (
+
+                                                                    <div
+                                                                        style={{
+                                                                            display:
+                                                                                "flex",
+
+                                                                            gap:
+                                                                                "8px",
+
+                                                                            flexWrap:
+                                                                                "wrap"
+                                                                        }}
+                                                                    >
+
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() =>
+                                                                                resetPassword(
+                                                                                    user
+                                                                                )
+                                                                            }
+                                                                        >
+                                                                            Reset Password
+                                                                        </button>
+
+
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() =>
+                                                                                deleteUser(
+                                                                                    user
+                                                                                )
+                                                                            }
+                                                                        >
+                                                                            Delete
+                                                                        </button>
+
+                                                                    </div>
+
+                                                                )
+                                                                : (
+
+                                                                    <span>
+                                                                        Current Admin
+                                                                    </span>
+
+                                                                )
+                                                        }
+
                                                     </td>
 
                                                 </tr>

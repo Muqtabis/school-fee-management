@@ -5,83 +5,167 @@ const path = require("path");
 // DATABASE
 // =====================================================
 
-const dataDir = path.join(__dirname, "data");
-const databasePath = path.join(dataDir, "school.db");
+const dataDir = path.join(
+    __dirname,
+    "data"
+);
+
+const databasePath = path.join(
+    dataDir,
+    "school.db"
+);
 
 const db = new sqlite3.Database(
     databasePath,
     (err) => {
+
         if (err) {
-            console.error("Database Connection Error:", err.message);
+
+            console.error(
+                "Database Connection Error:",
+                err.message
+            );
+
         } else {
-            console.log("Connected to SQLite Database");
+
+            console.log(
+                "Connected to SQLite Database"
+            );
+
         }
+
     }
 );
+
 
 // =====================================================
 // HELPERS
 // =====================================================
 
-function run(sql, params = []) {
-    return new Promise((resolve, reject) => {
-        db.run(sql, params, function (err) {
-            if (err) {
-                reject(err);
-                return;
-            }
+function run(
+    sql,
+    params = []
+) {
 
-            resolve(this);
-        });
-    });
-}
+    return new Promise(
+        (
+            resolve,
+            reject
+        ) => {
 
-function all(sql, params = []) {
-    return new Promise((resolve, reject) => {
-        db.all(sql, params, (err, rows) => {
-            if (err) {
-                reject(err);
-                return;
-            }
+            db.run(
+                sql,
+                params,
+                function (err) {
 
-            resolve(rows);
-        });
-    });
-}
+                    if (err) {
 
-async function columnExists(tableName, columnName) {
-    const columns = await all(
-        `PRAGMA table_info(${tableName})`
+                        reject(err);
+
+                        return;
+
+                    }
+
+                    resolve(this);
+
+                }
+            );
+
+        }
     );
+
+}
+
+
+function all(
+    sql,
+    params = []
+) {
+
+    return new Promise(
+        (
+            resolve,
+            reject
+        ) => {
+
+            db.all(
+                sql,
+                params,
+                (
+                    err,
+                    rows
+                ) => {
+
+                    if (err) {
+
+                        reject(err);
+
+                        return;
+
+                    }
+
+                    resolve(rows);
+
+                }
+            );
+
+        }
+    );
+
+}
+
+
+async function columnExists(
+    tableName,
+    columnName
+) {
+
+    const columns =
+        await all(
+            `PRAGMA table_info(${tableName})`
+        );
+
 
     return columns.some(
-        column => column.name === columnName
+        column =>
+            column.name === columnName
     );
+
 }
+
 
 async function addColumnIfMissing(
     tableName,
     columnName,
     definition
 ) {
-    const exists = await columnExists(
-        tableName,
-        columnName
-    );
+
+    const exists =
+        await columnExists(
+            tableName,
+            columnName
+        );
+
 
     if (exists) {
+
         return;
+
     }
+
 
     await run(`
         ALTER TABLE ${tableName}
         ADD COLUMN ${columnName} ${definition}
     `);
 
+
     console.log(
         `Added ${columnName} to ${tableName}`
     );
+
 }
+
 
 // =====================================================
 // FOREIGN KEYS
@@ -91,12 +175,15 @@ db.run(
     "PRAGMA foreign_keys = ON"
 );
 
+
 // =====================================================
 // DATABASE INITIALIZATION
 // =====================================================
 
 async function initializeDatabase() {
+
     try {
+
         // =================================================
         // STUDENTS
         // =================================================
@@ -128,8 +215,10 @@ async function initializeDatabase() {
                 archivedBy INTEGER,
 
                 archiveReason TEXT
+
             )
         `);
+
 
         // =================================================
         // USERS
@@ -150,8 +239,10 @@ async function initializeDatabase() {
 
                 createdAt DATETIME
                     DEFAULT CURRENT_TIMESTAMP
+
             )
         `);
+
 
         // =================================================
         // ACADEMIC YEARS
@@ -173,8 +264,10 @@ async function initializeDatabase() {
 
                 createdAt DATETIME
                     DEFAULT CURRENT_TIMESTAMP
+
             )
         `);
+
 
         // =================================================
         // FEE COMPONENTS
@@ -194,8 +287,10 @@ async function initializeDatabase() {
 
                 isOptional INTEGER
                     DEFAULT 0
+
             )
         `);
+
 
         // =================================================
         // CLASS FEE STRUCTURES
@@ -220,8 +315,10 @@ async function initializeDatabase() {
 
                 FOREIGN KEY(academicYearId)
                     REFERENCES academic_years(id)
+
             )
         `);
+
 
         // =================================================
         // CLASS FEE ITEMS
@@ -250,8 +347,10 @@ async function initializeDatabase() {
 
                 FOREIGN KEY(componentId)
                     REFERENCES fee_components(id)
+
             )
         `);
+
 
         // =================================================
         // STUDENT ENROLLMENTS
@@ -286,8 +385,10 @@ async function initializeDatabase() {
 
                 FOREIGN KEY(academicYearId)
                     REFERENCES academic_years(id)
+
             )
         `);
+
 
         // =================================================
         // STUDENT FEE ACCOUNTS
@@ -309,8 +410,10 @@ async function initializeDatabase() {
                 FOREIGN KEY(enrollmentId)
                     REFERENCES student_enrollments(id)
                     ON DELETE CASCADE
+
             )
         `);
+
 
         // =================================================
         // STUDENT FEE ITEMS
@@ -339,8 +442,10 @@ async function initializeDatabase() {
 
                 FOREIGN KEY(componentId)
                     REFERENCES fee_components(id)
+
             )
         `);
+
 
         // =================================================
         // PAYMENTS
@@ -377,8 +482,10 @@ async function initializeDatabase() {
 
                 FOREIGN KEY(feeAccountId)
                     REFERENCES student_fee_accounts(id)
+
             )
         `);
+
 
         // =================================================
         // NOTIFICATIONS
@@ -416,8 +523,10 @@ async function initializeDatabase() {
 
                 FOREIGN KEY(paymentId)
                     REFERENCES payments(id)
+
             )
         `);
+
 
         // =================================================
         // EXPENSES
@@ -453,8 +562,10 @@ async function initializeDatabase() {
 
                 createdAt DATETIME
                     DEFAULT CURRENT_TIMESTAMP
+
             )
         `);
+
 
         // =================================================
         // AUDIT LOGS
@@ -477,8 +588,38 @@ async function initializeDatabase() {
 
                 createdAt DATETIME
                     DEFAULT CURRENT_TIMESTAMP
+
             )
         `);
+
+
+        // =================================================
+        // PASSWORD RESET TOKENS
+        // =================================================
+
+        await run(`
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                userId INTEGER NOT NULL,
+
+                tokenHash TEXT NOT NULL,
+
+                expiresAt DATETIME NOT NULL,
+
+                usedAt DATETIME,
+
+                createdAt DATETIME
+                    DEFAULT CURRENT_TIMESTAMP,
+
+                FOREIGN KEY(userId)
+                    REFERENCES users(id)
+                    ON DELETE CASCADE
+
+            )
+        `);
+
 
         // =================================================
         // MIGRATIONS
@@ -486,11 +627,13 @@ async function initializeDatabase() {
 
         await migrateDatabase();
 
+
         // =================================================
         // DEFAULT FEE COMPONENTS
         // =================================================
 
         await seedFeeComponents();
+
 
         // =================================================
         // INDEXES
@@ -498,19 +641,25 @@ async function initializeDatabase() {
 
         await createIndexes();
 
+
         console.log(
             "Database initialization completed."
         );
 
+
     } catch (error) {
+
         console.error(
             "Database initialization failed:",
             error
         );
 
         throw error;
+
     }
+
 }
+
 
 // =====================================================
 // MIGRATIONS
@@ -518,11 +667,16 @@ async function initializeDatabase() {
 
 async function migrateDatabase() {
 
+    // -------------------------------------------------
+    // STUDENTS
+    // -------------------------------------------------
+
     await addColumnIfMissing(
         "students",
         "rollNumber",
         "TEXT"
     );
+
 
     await addColumnIfMissing(
         "students",
@@ -530,11 +684,13 @@ async function migrateDatabase() {
         "TEXT NOT NULL DEFAULT 'active'"
     );
 
+
     await addColumnIfMissing(
         "students",
         "archivedAt",
         "TEXT"
     );
+
 
     await addColumnIfMissing(
         "students",
@@ -542,11 +698,17 @@ async function migrateDatabase() {
         "INTEGER"
     );
 
+
     await addColumnIfMissing(
         "students",
         "archiveReason",
         "TEXT"
     );
+
+
+    // -------------------------------------------------
+    // PAYMENTS
+    // -------------------------------------------------
 
     await addColumnIfMissing(
         "payments",
@@ -554,17 +716,20 @@ async function migrateDatabase() {
         "INTEGER"
     );
 
+
     await addColumnIfMissing(
         "payments",
         "remarks",
         "TEXT"
     );
 
+
     await addColumnIfMissing(
         "payments",
         "status",
         "TEXT NOT NULL DEFAULT 'completed'"
     );
+
 
     await addColumnIfMissing(
         "payments",
@@ -572,17 +737,24 @@ async function migrateDatabase() {
         "TEXT"
     );
 
+
     await addColumnIfMissing(
         "payments",
         "voidedBy",
         "INTEGER"
     );
 
+
     await addColumnIfMissing(
         "payments",
         "voidReason",
         "TEXT"
     );
+
+
+    // -------------------------------------------------
+    // EXPENSES
+    // -------------------------------------------------
 
     await addColumnIfMissing(
         "expenses",
@@ -590,11 +762,13 @@ async function migrateDatabase() {
         "TEXT NOT NULL DEFAULT 'completed'"
     );
 
+
     await addColumnIfMissing(
         "expenses",
         "voidedAt",
         "TEXT"
     );
+
 
     await addColumnIfMissing(
         "expenses",
@@ -602,11 +776,17 @@ async function migrateDatabase() {
         "INTEGER"
     );
 
+
     await addColumnIfMissing(
         "expenses",
         "voidReason",
         "TEXT"
     );
+
+
+    // -------------------------------------------------
+    // DATA NORMALIZATION
+    // -------------------------------------------------
 
     await run(`
         UPDATE students
@@ -615,6 +795,7 @@ async function migrateDatabase() {
         OR status = ''
     `);
 
+
     await run(`
         UPDATE payments
         SET status = 'completed'
@@ -622,13 +803,16 @@ async function migrateDatabase() {
         OR status = ''
     `);
 
+
     await run(`
         UPDATE expenses
         SET status = 'completed'
         WHERE status IS NULL
         OR status = ''
     `);
+
 }
+
 
 // =====================================================
 // DEFAULT FEE COMPONENTS
@@ -637,16 +821,63 @@ async function migrateDatabase() {
 async function seedFeeComponents() {
 
     const components = [
-        ["tuition", "Tuition Fee", 1, 0],
-        ["admission", "Admission Fee", 2, 0],
-        ["transport", "Transport Fee", 3, 1],
-        ["books", "Books Fee", 4, 1],
-        ["uniform", "Uniform Fee", 5, 1],
-        ["exam", "Exam Fee", 6, 1],
-        ["activity", "Activity Fee", 7, 1]
+
+        [
+            "tuition",
+            "Tuition Fee",
+            1,
+            0
+        ],
+
+        [
+            "admission",
+            "Admission Fee",
+            2,
+            0
+        ],
+
+        [
+            "transport",
+            "Transport Fee",
+            3,
+            1
+        ],
+
+        [
+            "books",
+            "Books Fee",
+            4,
+            1
+        ],
+
+        [
+            "uniform",
+            "Uniform Fee",
+            5,
+            1
+        ],
+
+        [
+            "exam",
+            "Exam Fee",
+            6,
+            1
+        ],
+
+        [
+            "activity",
+            "Activity Fee",
+            7,
+            1
+        ]
+
     ];
 
-    for (const component of components) {
+
+    for (
+        const component
+        of components
+    ) {
 
         await run(
             `
@@ -661,8 +892,11 @@ async function seedFeeComponents() {
             `,
             component
         );
+
     }
+
 }
+
 
 // =====================================================
 // INDEXES
@@ -676,11 +910,13 @@ async function createIndexes() {
         ON students(status)
     `);
 
+
     await run(`
         CREATE INDEX IF NOT EXISTS
         idx_students_roll
         ON students(rollNumber)
     `);
+
 
     await run(`
         CREATE INDEX IF NOT EXISTS
@@ -691,6 +927,7 @@ async function createIndexes() {
         )
     `);
 
+
     await run(`
         CREATE INDEX IF NOT EXISTS
         idx_enrollment_year
@@ -698,6 +935,7 @@ async function createIndexes() {
             academicYearId
         )
     `);
+
 
     await run(`
         CREATE INDEX IF NOT EXISTS
@@ -707,6 +945,7 @@ async function createIndexes() {
         )
     `);
 
+
     await run(`
         CREATE INDEX IF NOT EXISTS
         idx_fee_items_account
@@ -715,11 +954,13 @@ async function createIndexes() {
         )
     `);
 
+
     await run(`
         CREATE INDEX IF NOT EXISTS
         idx_payments_student
         ON payments(studentId)
     `);
+
 
     await run(`
         CREATE INDEX IF NOT EXISTS
@@ -727,11 +968,13 @@ async function createIndexes() {
         ON payments(feeAccountId)
     `);
 
+
     await run(`
         CREATE INDEX IF NOT EXISTS
         idx_payments_date
         ON payments(paymentDate)
     `);
+
 
     await run(`
         CREATE INDEX IF NOT EXISTS
@@ -739,17 +982,20 @@ async function createIndexes() {
         ON payments(status)
     `);
 
+
     await run(`
         CREATE INDEX IF NOT EXISTS
         idx_expenses_date
         ON expenses(expenseDate)
     `);
 
+
     await run(`
         CREATE INDEX IF NOT EXISTS
         idx_expenses_status
         ON expenses(status)
     `);
+
 
     await run(`
         CREATE INDEX IF NOT EXISTS
@@ -759,13 +1005,39 @@ async function createIndexes() {
             entityId
         )
     `);
+
+
+    // =================================================
+    // PASSWORD RESET TOKEN INDEX
+    // =================================================
+
+    await run(`
+        CREATE INDEX IF NOT EXISTS
+        idx_password_reset_token
+        ON password_reset_tokens(tokenHash)
+    `);
+
+
+    await run(`
+        CREATE INDEX IF NOT EXISTS
+        idx_password_reset_user
+        ON password_reset_tokens(userId)
+    `);
+
 }
+
 
 // =====================================================
 // EXPORT
 // =====================================================
 
 module.exports = db;
+
+module.exports.runQuery =
+    run;
+
+module.exports.allQuery =
+    all;
 
 module.exports.initializeDatabase =
     initializeDatabase;

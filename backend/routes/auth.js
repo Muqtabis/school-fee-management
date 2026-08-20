@@ -1,4 +1,5 @@
-const express = require("express");
+const express =
+    require("express");
 
 const router =
     express.Router();
@@ -23,7 +24,41 @@ router.post(
 
 
 // =====================================================
+// PUBLIC SIGNUP
+// DISABLED BY CONTROLLER
+// =====================================================
+
+router.post(
+    "/signup",
+    authController.signup
+);
+
+
+// =====================================================
+// FORGOT PASSWORD
+// PUBLIC ROUTE
+// =====================================================
+
+router.post(
+    "/forgot-password",
+    authController.forgotPassword
+);
+
+
+// =====================================================
+// RESET PASSWORD
+// PUBLIC ROUTE
+// =====================================================
+
+router.post(
+    "/reset-password/:token",
+    authController.resetPassword
+);
+
+
+// =====================================================
 // PROFILE
+// AUTHENTICATED USERS ONLY
 // =====================================================
 
 router.get(
@@ -33,28 +68,5 @@ router.get(
 );
 
 
-// =====================================================
-// PUBLIC SIGNUP DISABLED
-// =====================================================
-
-router.post(
-    "/signup",
-    (
-        req,
-        res
-    ) => {
-
-        res.status(403).json({
-
-            success: false,
-
-            message:
-                "Public signup is disabled. An administrator must create user accounts."
-
-        });
-
-    }
-);
-
-
-module.exports = router;
+module.exports =
+    router;

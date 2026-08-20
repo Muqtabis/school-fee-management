@@ -4,18 +4,45 @@ import {
     Navigate
 } from "react-router-dom";
 
-import LoginPage from "./pages/LoginPage";
-import DashboardPage from "./pages/DashboardPage";
-import StudentsPage from "./pages/StudentsPage";
-import PaymentsPage from "./pages/PaymentsPage";
-import ExpensesPage from "./pages/ExpensesPage";
-import ReportsPage from "./pages/ReportsPage";
-import SettingsPage from "./pages/SettingsPage";
-import NotificationsPage from "./pages/NotificationsPage";
-import UsersPage from "./pages/UsersPage";
-import FeesPage from "./pages/FeesPage";
 
-import ProtectedRoute from "./components/ProtectedRoute";
+import LoginPage
+    from "./pages/LoginPage";
+
+import ForgotPasswordPage
+    from "./pages/ForgotPasswordPage";
+
+import ResetPasswordPage
+    from "./pages/ResetPasswordPage";
+
+import DashboardPage
+    from "./pages/DashboardPage";
+
+import StudentsPage
+    from "./pages/StudentsPage";
+
+import PaymentsPage
+    from "./pages/PaymentsPage";
+
+import ExpensesPage
+    from "./pages/ExpensesPage";
+
+import ReportsPage
+    from "./pages/ReportsPage";
+
+import SettingsPage
+    from "./pages/SettingsPage";
+
+import NotificationsPage
+    from "./pages/NotificationsPage";
+
+import UsersPage
+    from "./pages/UsersPage";
+
+import FeesPage
+    from "./pages/FeesPage";
+
+import ProtectedRoute
+    from "./components/ProtectedRoute";
 
 
 function App() {
@@ -24,15 +51,24 @@ function App() {
 
         <Routes>
 
+            {/* =================================================
+                ROOT
+            ================================================= */}
+
             <Route
                 path="/"
                 element={
                     <Navigate
                         to="/login"
+                        replace
                     />
                 }
             />
 
+
+            {/* =================================================
+                LOGIN
+            ================================================= */}
 
             <Route
                 path="/login"
@@ -41,6 +77,35 @@ function App() {
                 }
             />
 
+
+            {/* =================================================
+                FORGOT PASSWORD
+            ================================================= */}
+
+            <Route
+                path="/forgot-password"
+                element={
+                    <ForgotPasswordPage />
+                }
+            />
+
+
+            {/* =================================================
+                RESET PASSWORD
+            ================================================= */}
+
+            <Route
+                path="/reset-password/:token"
+                element={
+                    <ResetPasswordPage />
+                }
+            />
+
+
+            {/* =================================================
+                SIGNUP
+                DISABLED
+            ================================================= */}
 
             <Route
                 path="/signup"
@@ -53,106 +118,233 @@ function App() {
             />
 
 
+            {/* =================================================
+                DASHBOARD
+                ADMIN ONLY
+            ================================================= */}
+
             <Route
                 path="/dashboard"
                 element={
-                    <ProtectedRoute>
-                        <DashboardPage />
-                    </ProtectedRoute>
-                }
-            />
 
-
-            <Route
-                path="/students"
-                element={
-                    <ProtectedRoute>
-                        <StudentsPage />
-                    </ProtectedRoute>
-                }
-            />
-
-
-            <Route
-                path="/fees"
-                element={
-                    <ProtectedRoute>
-                        <FeesPage />
-                    </ProtectedRoute>
-                }
-            />
-
-
-            <Route
-                path="/payments"
-                element={
-                    <ProtectedRoute>
-                        <PaymentsPage />
-                    </ProtectedRoute>
-                }
-            />
-
-
-            <Route
-                path="/expenses"
-                element={
-                    <ProtectedRoute>
-                        <ExpensesPage />
-                    </ProtectedRoute>
-                }
-            />
-
-
-            <Route
-                path="/reports"
-                element={
-                    <ProtectedRoute>
-                        <ReportsPage />
-                    </ProtectedRoute>
-                }
-            />
-
-
-            <Route
-                path="/notifications"
-                element={
-                    <ProtectedRoute>
-                        <NotificationsPage />
-                    </ProtectedRoute>
-                }
-            />
-
-
-            <Route
-                path="/settings"
-                element={
-                    <ProtectedRoute>
-                        <SettingsPage />
-                    </ProtectedRoute>
-                }
-            />
-
-
-            <Route
-                path="/users"
-                element={
                     <ProtectedRoute
                         roles={[
                             "admin"
                         ]}
                     >
-                        <UsersPage />
+
+                        <DashboardPage />
+
                     </ProtectedRoute>
+
                 }
             />
 
 
+            {/* =================================================
+                STUDENTS
+                ADMIN + RECEPTIONIST
+            ================================================= */}
+
+            <Route
+                path="/students"
+                element={
+
+                    <ProtectedRoute
+                        roles={[
+                            "admin",
+                            "receptionist"
+                        ]}
+                    >
+
+                        <StudentsPage />
+
+                    </ProtectedRoute>
+
+                }
+            />
+
+
+            {/* =================================================
+                FEES
+                ADMIN + RECEPTIONIST
+            ================================================= */}
+
+            <Route
+                path="/fees"
+                element={
+
+                    <ProtectedRoute
+                        roles={[
+                            "admin",
+                            "receptionist"
+                        ]}
+                    >
+
+                        <FeesPage />
+
+                    </ProtectedRoute>
+
+                }
+            />
+
+
+            {/* =================================================
+                PAYMENTS
+                ADMIN + RECEPTIONIST
+            ================================================= */}
+
+            <Route
+                path="/payments"
+                element={
+
+                    <ProtectedRoute
+                        roles={[
+                            "admin",
+                            "receptionist"
+                        ]}
+                    >
+
+                        <PaymentsPage />
+
+                    </ProtectedRoute>
+
+                }
+            />
+
+
+            {/* =================================================
+                EXPENSES
+                ADMIN + RECEPTIONIST
+            ================================================= */}
+
+            <Route
+                path="/expenses"
+                element={
+
+                    <ProtectedRoute
+                        roles={[
+                            "admin",
+                            "receptionist"
+                        ]}
+                    >
+
+                        <ExpensesPage />
+
+                    </ProtectedRoute>
+
+                }
+            />
+
+
+            {/* =================================================
+                REPORTS
+                ADMIN + RECEPTIONIST
+            ================================================= */}
+
+            <Route
+                path="/reports"
+                element={
+
+                    <ProtectedRoute
+                        roles={[
+                            "admin",
+                            "receptionist"
+                        ]}
+                    >
+
+                        <ReportsPage />
+
+                    </ProtectedRoute>
+
+                }
+            />
+
+
+            {/* =================================================
+                NOTIFICATIONS
+                ADMIN + RECEPTIONIST
+            ================================================= */}
+
+            <Route
+                path="/notifications"
+                element={
+
+                    <ProtectedRoute
+                        roles={[
+                            "admin",
+                            "receptionist"
+                        ]}
+                    >
+
+                        <NotificationsPage />
+
+                    </ProtectedRoute>
+
+                }
+            />
+
+
+            {/* =================================================
+                SETTINGS
+                ADMIN + RECEPTIONIST
+            ================================================= */}
+
+            <Route
+                path="/settings"
+                element={
+
+                    <ProtectedRoute
+                        roles={[
+                            "admin",
+                            "receptionist"
+                        ]}
+                    >
+
+                        <SettingsPage />
+
+                    </ProtectedRoute>
+
+                }
+            />
+
+
+            {/* =================================================
+                USERS
+                ADMIN ONLY
+            ================================================= */}
+
+            <Route
+                path="/users"
+                element={
+
+                    <ProtectedRoute
+                        roles={[
+                            "admin"
+                        ]}
+                    >
+
+                        <UsersPage />
+
+                    </ProtectedRoute>
+
+                }
+            />
+
+
+            {/* =================================================
+                UNKNOWN ROUTE
+            ================================================= */}
+
             <Route
                 path="*"
                 element={
+
                     <Navigate
-                        to="/dashboard"
+                        to="/login"
+                        replace
                     />
+
                 }
             />
 

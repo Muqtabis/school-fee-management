@@ -8,6 +8,7 @@ const logAudit =
 
 // =====================================================
 // GET USERS
+// ADMIN ONLY
 // =====================================================
 
 exports.getUsers = (
@@ -34,6 +35,11 @@ exports.getUsers = (
 
             if (err) {
 
+                console.error(
+                    "Get Users Error:",
+                    err
+                );
+
                 return res.status(500).json({
                     success: false,
                     message:
@@ -51,7 +57,8 @@ exports.getUsers = (
 
 
 // =====================================================
-// CREATE USER
+// CREATE RECEPTIONIST
+// ADMIN ONLY
 // =====================================================
 
 exports.createUser = async (
@@ -62,8 +69,7 @@ exports.createUser = async (
     const {
         name,
         email,
-        password,
-        role
+        password
     } = req.body;
 
 
@@ -83,27 +89,13 @@ exports.createUser = async (
 
 
     if (
-        password.length < 6
+        password.length < 8
     ) {
 
         return res.status(400).json({
             success: false,
             message:
-                "Password must contain at least 6 characters."
-        });
-
-    }
-
-
-    if (
-        !["admin", "receptionist"]
-            .includes(role)
-    ) {
-
-        return res.status(400).json({
-            success: false,
-            message:
-                "Invalid user role."
+                "Password must contain at least 8 characters."
         });
 
     }
@@ -129,6 +121,11 @@ exports.createUser = async (
 
             if (checkErr) {
 
+                console.error(
+                    "Check User Error:",
+                    checkErr
+                );
+
                 return res.status(500).json({
                     success: false,
                     message:
@@ -149,94 +146,139 @@ exports.createUser = async (
             }
 
 
-            const hashedPassword =
-                await bcrypt.hash(
-                    password,
-                    12
-                );
+            try {
+
+                const hashedPassword =
+                    await bcrypt.hash(
+                        password,
+                        12
+                    );
 
 
-            db.run(
-                `
-                INSERT INTO users
-                (
-                    name,
-                    email,
-                    password,
-                    role
-                )
-                VALUES (?, ?, ?, ?)
-                `,
-                [
-                    name.trim(),
-                    normalizedEmail,
-                    hashedPassword,
-                    role
-                ],
-                function (
-                    err
-                ) {
+                db.run(
+                    `
+                    INSERT INTO users
+                    (
+                        name,
+                        email,
+                        password,
+                        role
+                    )
+                    VALUES (?, ?, ?, ?)
+                    `,
+                    [
+                        name.trim(),
+                        normalizedEmail,
+                        hashedPassword,
+                        "receptionist"
+                    ],
+                    function (
+                        err
+                    ) {
 
-                    if (err) {
+                        if (err) {
 
-                        return res.status(500).json({
-                            success: false,
-                            message:
-                                "Unable to create user."
-                        });
+                            console.error(
+                                "Create User Error:",
+                                err
+                            );
 
-                    }
-
-
-                    const userId =
-                        this.lastID;
-
-
-                    logAudit({
-
-                        userId:
-                            req.user.id,
-
-                        action:
-                            "USER_CREATED",
-
-                        entityType:
-                            "user",
-
-                        entityId:
-                            userId,
-
-                        details: {
-
-                            name:
-                                name.trim(),
-
-                            email:
-                                normalizedEmail,
-
-                            role
+                            return res.status(500).json({
+                                success: false,
+                                message:
+                                    "Unable to create user."
+                            });
 
                         }
 
-                    })
-                        .then(() => {
 
-                            res.status(201).json({
+                        const userId =
+                            this.lastID;
 
-                                success: true,
 
-                                message:
-                                    "User created successfully.",
+                        logAudit({
 
-                                id:
-                                    userId
+                            userId:
+                                req.user.id,
 
-                            });
+                            action:
+                                "USER_CREATED",
 
-                        });
+                            entityType:
+                                "user",
 
-                }
-            );
+                            entityId:
+                                userId,
+
+                            details: {
+
+                                name:
+                                    name.trim(),
+
+                                email:
+                                    normalizedEmail,
+
+                                role:
+                                    "receptionist"
+
+                            }
+
+                        })
+                            .then(() => {
+
+                                res.status(201).json({
+
+                                    success: true,
+
+                                    message:
+                                        "Receptionist created successfully.",
+
+                                    id:
+                                        userId
+
+                                });
+
+                            })
+                            .catch(
+                                auditError => {
+
+                                    console.error(
+                                        "Audit Error:",
+                                        auditError
+                                    );
+
+                                    res.status(201).json({
+
+                                        success: true,
+
+                                        message:
+                                            "Receptionist created successfully.",
+
+                                        id:
+                                            userId
+
+                                    });
+
+                                }
+                            );
+
+                    }
+                );
+
+            } catch (error) {
+
+                console.error(
+                    "Password Hash Error:",
+                    error
+                );
+
+                return res.status(500).json({
+                    success: false,
+                    message:
+                        "Unable to create user."
+                });
+
+            }
 
         }
     );
@@ -245,10 +287,11 @@ exports.createUser = async (
 
 
 // =====================================================
-// CHANGE USER ROLE
+// RESET RECEPTIONIST PASSWORD
+// ADMIN ONLY
 // =====================================================
 
-exports.changeRole = (
+exports.resetPassword = async (
     req,
     res
 ) => {
@@ -258,34 +301,46 @@ exports.changeRole = (
             req.params.id
         );
 
-    const {
-        role
-    } = req.body;
-
 
     if (
-        !["admin", "receptionist"]
-            .includes(role)
+        !Number.isInteger(userId)
     ) {
 
         return res.status(400).json({
             success: false,
             message:
-                "Invalid user role."
+                "Invalid user ID."
+        });
+
+    }
+
+
+    const {
+        password
+    } = req.body;
+
+
+    if (
+        !password
+    ) {
+
+        return res.status(400).json({
+            success: false,
+            message:
+                "New password is required."
         });
 
     }
 
 
     if (
-        userId ===
-        req.user.id
+        password.length < 8
     ) {
 
         return res.status(400).json({
             success: false,
             message:
-                "You cannot change your own role."
+                "Password must contain at least 8 characters."
         });
 
     }
@@ -293,17 +348,26 @@ exports.changeRole = (
 
     db.get(
         `
-        SELECT id, name, email, role
+        SELECT
+            id,
+            name,
+            email,
+            role
         FROM users
         WHERE id = ?
         `,
         [userId],
-        (
+        async (
             err,
             user
         ) => {
 
             if (err) {
+
+                console.error(
+                    "Find User Error:",
+                    err
+                );
 
                 return res.status(500).json({
                     success: false,
@@ -325,26 +389,265 @@ exports.changeRole = (
             }
 
 
+            // Admin cannot use this endpoint
+            // to reset another admin's password.
+
+            if (
+                user.role !== "receptionist"
+            ) {
+
+                return res.status(403).json({
+                    success: false,
+                    message:
+                        "Only receptionist passwords can be reset here."
+                });
+
+            }
+
+
+            try {
+
+                const hashedPassword =
+                    await bcrypt.hash(
+                        password,
+                        12
+                    );
+
+
+                db.run(
+                    `
+                    UPDATE users
+                    SET password = ?
+                    WHERE id = ?
+                    `,
+                    [
+                        hashedPassword,
+                        userId
+                    ],
+                    function (
+                        updateErr
+                    ) {
+
+                        if (updateErr) {
+
+                            console.error(
+                                "Reset Password Error:",
+                                updateErr
+                            );
+
+                            return res.status(500).json({
+                                success: false,
+                                message:
+                                    "Unable to reset password."
+                            });
+
+                        }
+
+
+                        logAudit({
+
+                            userId:
+                                req.user.id,
+
+                            action:
+                                "USER_PASSWORD_RESET",
+
+                            entityType:
+                                "user",
+
+                            entityId:
+                                userId,
+
+                            details: {
+
+                                email:
+                                    user.email,
+
+                                role:
+                                    user.role
+
+                            }
+
+                        })
+                            .then(() => {
+
+                                res.json({
+
+                                    success: true,
+
+                                    message:
+                                        "Receptionist password reset successfully."
+
+                                });
+
+                            })
+                            .catch(
+                                auditError => {
+
+                                    console.error(
+                                        "Audit Error:",
+                                        auditError
+                                    );
+
+                                    res.json({
+
+                                        success: true,
+
+                                        message:
+                                            "Receptionist password reset successfully."
+
+                                    });
+
+                                }
+                            );
+
+                    }
+                );
+
+            } catch (error) {
+
+                console.error(
+                    "Password Hash Error:",
+                    error
+                );
+
+                return res.status(500).json({
+                    success: false,
+                    message:
+                        "Unable to reset password."
+                });
+
+            }
+
+        }
+    );
+
+};
+
+
+// =====================================================
+// DELETE RECEPTIONIST
+// ADMIN ONLY
+// =====================================================
+
+exports.deleteUser = (
+    req,
+    res
+) => {
+
+    const userId =
+        Number(
+            req.params.id
+        );
+
+
+    if (
+        !Number.isInteger(userId)
+    ) {
+
+        return res.status(400).json({
+            success: false,
+            message:
+                "Invalid user ID."
+        });
+
+    }
+
+
+    if (
+        userId ===
+        req.user.id
+    ) {
+
+        return res.status(400).json({
+            success: false,
+            message:
+                "You cannot delete your own account."
+        });
+
+    }
+
+
+    db.get(
+        `
+        SELECT
+            id,
+            name,
+            email,
+            role
+        FROM users
+        WHERE id = ?
+        `,
+        [userId],
+        (
+            err,
+            user
+        ) => {
+
+            if (err) {
+
+                console.error(
+                    "Find User Error:",
+                    err
+                );
+
+                return res.status(500).json({
+                    success: false,
+                    message:
+                        "Unable to find user."
+                });
+
+            }
+
+
+            if (!user) {
+
+                return res.status(404).json({
+                    success: false,
+                    message:
+                        "User not found."
+                });
+
+            }
+
+
+            // Only receptionist accounts
+            // can be deleted from Users page.
+
+            if (
+                user.role !== "receptionist"
+            ) {
+
+                return res.status(403).json({
+                    success: false,
+                    message:
+                        "Only receptionist accounts can be deleted."
+                });
+
+            }
+
+
             db.run(
                 `
-                UPDATE users
-                SET role = ?
+                DELETE FROM users
                 WHERE id = ?
                 `,
-                [
-                    role,
-                    userId
-                ],
+                [userId],
                 function (
-                    updateErr
+                    deleteErr
                 ) {
 
-                    if (updateErr) {
+                    if (deleteErr) {
+
+                        console.error(
+                            "Delete User Error:",
+                            deleteErr
+                        );
 
                         return res.status(500).json({
                             success: false,
                             message:
-                                "Unable to update role."
+                                "Unable to delete user."
                         });
 
                     }
@@ -356,7 +659,7 @@ exports.changeRole = (
                             req.user.id,
 
                         action:
-                            "USER_ROLE_CHANGED",
+                            "USER_DELETED",
 
                         entityType:
                             "user",
@@ -366,11 +669,14 @@ exports.changeRole = (
 
                         details: {
 
-                            oldRole:
-                                user.role,
+                            name:
+                                user.name,
 
-                            newRole:
-                                role
+                            email:
+                                user.email,
+
+                            role:
+                                user.role
 
                         }
 
@@ -382,14 +688,238 @@ exports.changeRole = (
                                 success: true,
 
                                 message:
-                                    "User role updated."
+                                    "Receptionist deleted successfully."
 
                             });
 
-                        });
+                        })
+                        .catch(
+                            auditError => {
+
+                                console.error(
+                                    "Audit Error:",
+                                    auditError
+                                );
+
+                                res.json({
+
+                                    success: true,
+
+                                    message:
+                                        "Receptionist deleted successfully."
+
+                                });
+
+                            }
+                        );
 
                 }
             );
+
+        }
+    );
+
+};
+
+
+// =====================================================
+// CHANGE OWN PASSWORD
+// ADMIN / LOGGED-IN USER
+// =====================================================
+
+exports.changeOwnPassword = async (
+    req,
+    res
+) => {
+
+    const {
+        currentPassword,
+        newPassword
+    } = req.body;
+
+
+    if (
+        !currentPassword ||
+        !newPassword
+    ) {
+
+        return res.status(400).json({
+            success: false,
+            message:
+                "Current password and new password are required."
+        });
+
+    }
+
+
+    if (
+        newPassword.length < 8
+    ) {
+
+        return res.status(400).json({
+            success: false,
+            message:
+                "New password must contain at least 8 characters."
+        });
+
+    }
+
+
+    db.get(
+        `
+        SELECT
+            id,
+            password,
+            role
+        FROM users
+        WHERE id = ?
+        `,
+        [req.user.id],
+        async (
+            err,
+            user
+        ) => {
+
+            if (err) {
+
+                return res.status(500).json({
+                    success: false,
+                    message:
+                        "Unable to load account."
+                });
+
+            }
+
+
+            if (!user) {
+
+                return res.status(404).json({
+                    success: false,
+                    message:
+                        "User account not found."
+                });
+
+            }
+
+
+            try {
+
+                const validPassword =
+                    await bcrypt.compare(
+                        currentPassword,
+                        user.password
+                    );
+
+
+                if (!validPassword) {
+
+                    return res.status(401).json({
+                        success: false,
+                        message:
+                            "Current password is incorrect."
+                    });
+
+                }
+
+
+                const hashedPassword =
+                    await bcrypt.hash(
+                        newPassword,
+                        12
+                    );
+
+
+                db.run(
+                    `
+                    UPDATE users
+                    SET password = ?
+                    WHERE id = ?
+                    `,
+                    [
+                        hashedPassword,
+                        req.user.id
+                    ],
+                    function (
+                        updateErr
+                    ) {
+
+                        if (updateErr) {
+
+                            return res.status(500).json({
+                                success: false,
+                                message:
+                                    "Unable to change password."
+                            });
+
+                        }
+
+
+                        logAudit({
+
+                            userId:
+                                req.user.id,
+
+                            action:
+                                "PASSWORD_CHANGED",
+
+                            entityType:
+                                "user",
+
+                            entityId:
+                                req.user.id,
+
+                            details: {
+
+                                role:
+                                    user.role
+
+                            }
+
+                        })
+                            .then(() => {
+
+                                res.json({
+
+                                    success: true,
+
+                                    message:
+                                        "Password changed successfully."
+
+                                });
+
+                            })
+                            .catch(
+                                () => {
+
+                                    res.json({
+
+                                        success: true,
+
+                                        message:
+                                            "Password changed successfully."
+
+                                    });
+
+                                }
+                            );
+
+                    }
+                );
+
+            } catch (error) {
+
+                console.error(
+                    "Change Password Error:",
+                    error
+                );
+
+                return res.status(500).json({
+                    success: false,
+                    message:
+                        "Unable to change password."
+                });
+
+            }
 
         }
     );

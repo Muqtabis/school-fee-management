@@ -13,22 +13,33 @@ if (!JWT_SECRET) {
 // AUTHENTICATE JWT
 // =====================================================
 
-function authenticateToken(req, res, next) {
+function authenticateToken(
+    req,
+    res,
+    next
+) {
 
     const authHeader =
         req.headers.authorization;
 
+
     if (!authHeader) {
 
         return res.status(401).json({
+
             success: false,
-            message: "Authentication required."
+
+            message:
+                "Authentication required."
+
         });
 
     }
 
+
     const parts =
         authHeader.split(" ");
+
 
     if (
         parts.length !== 2 ||
@@ -36,14 +47,20 @@ function authenticateToken(req, res, next) {
     ) {
 
         return res.status(401).json({
+
             success: false,
-            message: "Invalid authorization format."
+
+            message:
+                "Invalid authorization format."
+
         });
 
     }
 
+
     const token =
         parts[1];
+
 
     try {
 
@@ -53,15 +70,43 @@ function authenticateToken(req, res, next) {
                 JWT_SECRET
             );
 
-        req.user = decoded;
+
+        // =================================================
+        // ONLY VALID APPLICATION ROLES
+        // =================================================
+
+        if (
+            decoded.role !== "admin" &&
+            decoded.role !== "receptionist"
+        ) {
+
+            return res.status(403).json({
+
+                success: false,
+
+                message:
+                    "Invalid user role."
+
+            });
+
+        }
+
+
+        req.user =
+            decoded;
+
 
         next();
 
     } catch (error) {
 
         return res.status(401).json({
+
             success: false,
-            message: "Invalid or expired token."
+
+            message:
+                "Invalid or expired token."
+
         });
 
     }
@@ -73,18 +118,29 @@ function authenticateToken(req, res, next) {
 // ROLE AUTHORIZATION
 // =====================================================
 
-function requireRole(...allowedRoles) {
+function requireRole(
+    ...allowedRoles
+) {
 
-    return (req, res, next) => {
+    return (
+        req,
+        res,
+        next
+    ) => {
 
         if (!req.user) {
 
             return res.status(401).json({
+
                 success: false,
-                message: "Authentication required."
+
+                message:
+                    "Authentication required."
+
             });
 
         }
+
 
         if (
             !allowedRoles.includes(
@@ -93,11 +149,16 @@ function requireRole(...allowedRoles) {
         ) {
 
             return res.status(403).json({
+
                 success: false,
-                message: "You do not have permission for this action."
+
+                message:
+                    "You do not have permission for this action."
+
             });
 
         }
+
 
         next();
 
@@ -107,15 +168,36 @@ function requireRole(...allowedRoles) {
 
 
 // =====================================================
-// ADMIN
+// ADMIN ONLY
 // =====================================================
 
 const requireAdmin =
     requireRole("admin");
 
 
+// =====================================================
+// ADMIN + RECEPTIONIST
+// =====================================================
+
+const requireStaff =
+    requireRole(
+        "admin",
+        "receptionist"
+    );
+
+
+// =====================================================
+// EXPORT
+// =====================================================
+
 module.exports = {
+
     authenticateToken,
+
     requireRole,
-    requireAdmin
+
+    requireAdmin,
+
+    requireStaff
+
 };

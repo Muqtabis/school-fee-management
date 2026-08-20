@@ -13,6 +13,7 @@ function Sidebar() {
     const navigate =
         useNavigate();
 
+
     const {
         user,
         logout
@@ -20,19 +21,11 @@ function Sidebar() {
         useAuth();
 
 
+    // =====================================================
+    // BASE MENU
+    // =====================================================
+
     const menuItems = [
-
-        {
-            name:
-                "Dashboard",
-
-            path:
-                "/dashboard",
-
-            icon:
-                "🏠"
-
-        },
 
         {
             name:
@@ -47,6 +40,7 @@ function Sidebar() {
         },
 
         {
+
             name:
                 "Fee Management",
 
@@ -59,6 +53,7 @@ function Sidebar() {
         },
 
         {
+
             name:
                 "Payments",
 
@@ -71,6 +66,7 @@ function Sidebar() {
         },
 
         {
+
             name:
                 "Expenses",
 
@@ -83,6 +79,7 @@ function Sidebar() {
         },
 
         {
+
             name:
                 "Reports",
 
@@ -95,6 +92,7 @@ function Sidebar() {
         },
 
         {
+
             name:
                 "Notifications",
 
@@ -107,6 +105,7 @@ function Sidebar() {
         },
 
         {
+
             name:
                 "Settings",
 
@@ -121,10 +120,28 @@ function Sidebar() {
     ];
 
 
+    // =====================================================
+    // ADMIN ONLY MENU
+    // =====================================================
+
     if (
         user?.role ===
         "admin"
     ) {
+
+        menuItems.unshift({
+
+            name:
+                "Dashboard",
+
+            path:
+                "/dashboard",
+
+            icon:
+                "🏠"
+
+        });
+
 
         menuItems.push({
 
@@ -142,6 +159,10 @@ function Sidebar() {
     }
 
 
+    // =====================================================
+    // LOGOUT
+    // =====================================================
+
     const handleLogout =
         () => {
 
@@ -154,11 +175,16 @@ function Sidebar() {
         };
 
 
+    // =====================================================
+    // UI
+    // =====================================================
+
     return (
 
         <aside
             className="sidebar"
         >
+
 
             <div
                 className="sidebar-header"
@@ -180,44 +206,59 @@ function Sidebar() {
             >
 
                 {
+
                     menuItems.map(
                         item => (
 
                             <NavLink
+
                                 key={
                                     item.path
                                 }
+
                                 to={
                                     item.path
                                 }
+
                                 className={
                                     ({
                                         isActive
                                     }) =>
+
                                         isActive
+
                                             ? "menu-item active"
+
                                             : "menu-item"
+
                                 }
+
                             >
 
                                 <span
                                     className="menu-icon"
                                 >
+
                                     {
                                         item.icon
                                     }
+
                                 </span>
 
+
                                 <span>
+
                                     {
                                         item.name
                                     }
+
                                 </span>
 
                             </NavLink>
 
                         )
                     )
+
                 }
 
             </nav>
@@ -228,15 +269,21 @@ function Sidebar() {
             >
 
                 <button
+
                     className="logout-btn"
+
                     onClick={
                         handleLogout
                     }
+
                 >
+
                     Logout
+
                 </button>
 
             </div>
+
 
         </aside>
 

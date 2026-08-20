@@ -8,10 +8,15 @@ const expenseController =
     require("../controllers/expenseController");
 
 const {
-    requireRole
+    requireRole,
+    requireAdmin
 } =
     require("../middleware/authMiddleware");
 
+
+// =====================================================
+// ADMIN + RECEPTIONIST
+// =====================================================
 
 router.use(
     requireRole(
@@ -23,6 +28,7 @@ router.use(
 
 // =====================================================
 // LIST
+// ADMIN + RECEPTIONIST
 // =====================================================
 
 router.get(
@@ -32,17 +38,20 @@ router.get(
 
 
 // =====================================================
-// SUMMARY
+// EXPENSE SUMMARY
+// ADMIN ONLY
 // =====================================================
 
 router.get(
     "/summary",
+    requireAdmin,
     expenseController.expenseSummary
 );
 
 
 // =====================================================
-// SINGLE
+// SINGLE EXPENSE
+// ADMIN + RECEPTIONIST
 // =====================================================
 
 router.get(
@@ -52,7 +61,8 @@ router.get(
 
 
 // =====================================================
-// CREATE
+// CREATE EXPENSE
+// ADMIN + RECEPTIONIST
 // =====================================================
 
 router.post(
@@ -62,7 +72,8 @@ router.post(
 
 
 // =====================================================
-// EDIT ACTIVE EXPENSE
+// EDIT EXPENSE
+// ADMIN + RECEPTIONIST
 // =====================================================
 
 router.put(
@@ -72,12 +83,13 @@ router.put(
 
 
 // =====================================================
-// REVERSE
-// ADMIN + RECEPTIONIST
+// REVERSE EXPENSE
+// ADMIN ONLY
 // =====================================================
 
 router.post(
     "/:id/reverse",
+    requireAdmin,
     expenseController.reverseExpense
 );
 
@@ -93,7 +105,7 @@ router.delete(
         res
     ) => {
 
-        res.status(405).json({
+        return res.status(405).json({
 
             success: false,
 
