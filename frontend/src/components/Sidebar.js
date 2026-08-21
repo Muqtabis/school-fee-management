@@ -195,7 +195,7 @@ function Sidebar() {
                 </h2>
 
                 <p>
-                    Fee Management
+                   FEE MANAGEMENT ERP
                 </p>
 
             </div>
