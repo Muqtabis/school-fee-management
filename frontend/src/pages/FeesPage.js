@@ -4,19 +4,11 @@ import Navbar from "../components/Navbar";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 
-const classes = [
-    "LKG",
-    "UKG",
-    "1",
-    "2",
-    "3",
-    "4",
-    "5",
-    "6",
-    "7",
-    "8",
-    "9",
-    "10"
+const STATIC_CLASSES = [
+    "LKG", "UKG", 
+    "1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", 
+    "5A", "5B", "6A", "6B", "7A", "7B", "8A", "8B", 
+    "9A", "9B", "10A", "10B"
 ];
 
 function FeesPage() {
@@ -37,12 +29,8 @@ function FeesPage() {
         endDate: ""
     });
 
-    // NEW: State for creating a new class structure
-    const [newStructureClass, setNewStructureClass] = useState("");
+    const [selectedClass, setSelectedClass] = useState("");
 
-    // =====================================================
-    // LOAD ACADEMIC YEARS
-    // =====================================================
     const loadYears = async () => {
         try {
             setLoading(true);
@@ -63,9 +51,6 @@ function FeesPage() {
         loadYears();
     }, []);
 
-    // =====================================================
-    // LOAD STRUCTURES
-    // =====================================================
     const loadStructures = async (yearId) => {
         if (!yearId) {
             setStructures([]);
@@ -79,7 +64,6 @@ function FeesPage() {
         } catch (error) {
             console.error("Unable to load structures:", error);
             setStructures([]);
-            alert(error.response?.data?.message || "Unable to load fee structures.");
         }
     };
 
@@ -91,9 +75,6 @@ function FeesPage() {
         }
     }, [selectedYear]);
 
-    // =====================================================
-    // OPEN STRUCTURE
-    // =====================================================
     const openStructure = async (structure) => {
         try {
             const res = await api.get(`/fees/structures/${structure.id}`);
@@ -105,9 +86,6 @@ function FeesPage() {
         }
     };
 
-    // =====================================================
-    // EDIT AMOUNT
-    // =====================================================
     const changeAmount = (componentId, value) => {
         setStructureItems(current =>
             current.map(item =>
@@ -118,9 +96,6 @@ function FeesPage() {
         );
     };
 
-    // =====================================================
-    // SAVE STRUCTURE
-    // =====================================================
     const saveStructure = async () => {
         if (!selectedStructure) return;
         try {
@@ -133,8 +108,6 @@ function FeesPage() {
             });
 
             alert("Fee structure saved successfully.");
-
-            // Reload structure list and currently opened structure
             await loadStructures(selectedYear.id);
             const updated = await api.get(`/fees/structures/${selectedStructure.id}`);
             setSelectedStructure(updated.data.structure);
@@ -147,9 +120,6 @@ function FeesPage() {
         }
     };
 
-    // =====================================================
-    // CREATE ACADEMIC YEAR
-    // =====================================================
     const createYear = async (e) => {
         e.preventDefault();
         if (!newYear.name.trim()) {
@@ -171,20 +141,19 @@ function FeesPage() {
         }
     };
 
-    // =====================================================
-    // CREATE STRUCTURE (NEW)
-    // =====================================================
     const createStructure = async (e) => {
         e.preventDefault();
-        if (!selectedYear || !newStructureClass) return;
+        if (!selectedYear || !selectedClass) {
+            alert("Please select a class.");
+            return;
+        }
 
         try {
             await api.post("/fees/structures", {
                 academicYearId: selectedYear.id,
-                className: newStructureClass
+                className: selectedClass
             });
-            
-            setNewStructureClass("");
+            setSelectedClass("");
             alert("Class fee structure created successfully.");
             await loadStructures(selectedYear.id);
         } catch (error) {
@@ -193,13 +162,8 @@ function FeesPage() {
         }
     };
 
-    // =====================================================
-    // ACTIVATE YEAR
-    // =====================================================
     const activateYear = async (year) => {
-        const confirmed = window.confirm(
-            `Make ${year.name} the active academic year?\n\nThe current active year will become closed.`
-        );
+        const confirmed = window.confirm(`Make ${year.name} the active academic year?`);
         if (!confirmed) return;
 
         try {
@@ -212,17 +176,12 @@ function FeesPage() {
         }
     };
 
-    // =====================================================
-    // PREPARE YEAR
-    // =====================================================
     const prepareYear = async (year) => {
         if (year.status === "closed") {
             alert("Closed academic years cannot be prepared.");
             return;
         }
-        const confirmed = window.confirm(
-            `Prepare student fee accounts for ${year.name}?\n\nThis will create enrollments and fee accounts for active students.\n\nIt does NOT collect payments.`
-        );
+        const confirmed = window.confirm(`Prepare student fee accounts for ${year.name}?`);
         if (!confirmed) return;
 
         try {
@@ -234,25 +193,16 @@ function FeesPage() {
         }
     };
 
-    // =====================================================
-    // COPY STRUCTURE
-    // =====================================================
     const copyStructure = async (structure) => {
         if (!selectedYear) return;
-
-        const targets = years.filter(
-            year => Number(year.id) !== Number(selectedYear.id) && year.status !== "closed"
-        );
+        const targets = years.filter(year => Number(year.id) !== Number(selectedYear.id) && year.status !== "closed");
 
         if (targets.length === 0) {
             alert("There is no available target academic year.");
             return;
         }
 
-        const targetName = window.prompt(
-            `Enter target academic year name:\n\n${targets.map(year => year.name).join("\n")}`
-        );
-
+        const targetName = window.prompt(`Enter target academic year name:\n\n${targets.map(year => year.name).join("\n")}`);
         if (!targetName) return;
 
         const target = targets.find(year => year.name.trim() === targetName.trim());
@@ -270,26 +220,14 @@ function FeesPage() {
         }
     };
 
-    // =====================================================
-    // MONEY FORMAT
-    // =====================================================
     const money = value =>
         `₹${Number(value || 0).toLocaleString("en-IN", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
         })}`;
 
-    // =====================================================
-    // STRUCTURE TOTAL
-    // =====================================================
-    const total = structureItems.reduce(
-        (sum, item) => sum + Number(item.amount || 0),
-        0
-    );
+    const total = structureItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
-    // =====================================================
-    // LOADING
-    // =====================================================
     if (loading) {
         return (
             <div className="dashboard">
@@ -302,16 +240,17 @@ function FeesPage() {
         );
     }
 
-    // =====================================================
-    // PAGE
-    // =====================================================
+    // Filter out already added structures from the dropdown selection
+    const availableClasses = STATIC_CLASSES.filter(
+        c => !structures.some(s => s.className === c)
+    );
+
     return (
         <div className="dashboard">
             <Sidebar />
             <div className="main-content">
                 <Navbar />
                 <div className="page-content">
-                    {/* PAGE HEADER */}
                     <div className="page-header">
                         <div>
                             <h2>Fee Management</h2>
@@ -332,7 +271,7 @@ function FeesPage() {
                                 className="filter-select"
                                 value={selectedYear?.id || ""}
                                 onChange={e => {
-                                    const year = years.find(year => Number(year.id) === Number(e.target.value));
+                                    const year = years.find(y => Number(y.id) === Number(e.target.value));
                                     setSelectedYear(year || null);
                                     setSelectedStructure(null);
                                     setStructureItems([]);
@@ -360,52 +299,15 @@ function FeesPage() {
                         </div>
                     </div>
 
-                    {/* CREATE YEAR */}
-                    {isAdmin && (
-                        <div className="report-panel" style={{ marginBottom: "20px" }}>
-                            <h3>Add Upcoming Academic Year</h3>
-                            <form
-                                onSubmit={createYear}
-                                style={{
-                                    display: "grid",
-                                    gridTemplateColumns: "repeat(3, 1fr)",
-                                    gap: "12px",
-                                    marginTop: "15px"
-                                }}
-                            >
-                                <input
-                                    placeholder="2027-28"
-                                    value={newYear.name}
-                                    onChange={e => setNewYear({ ...newYear, name: e.target.value })}
-                                    required
-                                />
-                                <input
-                                    type="date"
-                                    value={newYear.startDate}
-                                    onChange={e => setNewYear({ ...newYear, startDate: e.target.value })}
-                                />
-                                <input
-                                    type="date"
-                                    value={newYear.endDate}
-                                    onChange={e => setNewYear({ ...newYear, endDate: e.target.value })}
-                                />
-                                <button type="submit" className="primary-btn" style={{ gridColumn: "1 / 4" }}>
-                                    Create Upcoming Year
-                                </button>
-                            </form>
-                        </div>
-                    )}
-
                     {/* STRUCTURES */}
                     <div className="report-panel">
                         <div className="report-panel-header">
                             <div>
-                                <h3>Class Fee Structures</h3>
+                                <h3>Class & Section Fee Structures</h3>
                                 <p>{selectedYear?.name || "No academic year selected"}</p>
                             </div>
                         </div>
 
-                        {/* NEW: Add Structure Form */}
                         {isAdmin && selectedYear && selectedYear.status !== "closed" && (
                             <form 
                                 onSubmit={createStructure} 
@@ -413,19 +315,18 @@ function FeesPage() {
                             >
                                 <select
                                     className="filter-select"
-                                    value={newStructureClass}
-                                    onChange={(e) => setNewStructureClass(e.target.value)}
+                                    value={selectedClass}
+                                    onChange={(e) => setSelectedClass(e.target.value)}
                                     required
+                                    style={{ maxWidth: "250px" }}
                                 >
-                                    <option value="">Select Class to Add</option>
-                                    {classes.map(c => (
-                                        <option key={c} value={c}>
-                                            {c === "LKG" || c === "UKG" ? c : `${c} Standard`}
-                                        </option>
+                                    <option value="">Select Class to Configure</option>
+                                    {availableClasses.map(c => (
+                                        <option key={c} value={c}>{c}</option>
                                     ))}
                                 </select>
                                 <button type="submit" className="primary-btn">
-                                    Add Class Structure
+                                    + Add Structure
                                 </button>
                             </form>
                         )}
@@ -439,7 +340,7 @@ function FeesPage() {
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th>Class</th>
+                                            <th>Class / Section</th>
                                             <th>Standard Total</th>
                                             <th>Actions</th>
                                         </tr>
@@ -447,21 +348,21 @@ function FeesPage() {
                                     <tbody>
                                         {structures.map(structure => (
                                             <tr key={structure.id}>
-                                                <td>
-                                                    {structure.className === "LKG" || structure.className === "UKG"
-                                                        ? structure.className
-                                                        : `${structure.className} Standard`}
-                                                </td>
+                                                <td><strong>{structure.className}</strong></td>
                                                 <td>{money(structure.totalAmount)}</td>
                                                 <td>
-                                                    <button className="edit-btn" onClick={() => openStructure(structure)}>
-                                                        View / Edit
-                                                    </button>
-                                                    {isAdmin && (
-                                                        <button className="history-btn" onClick={() => copyStructure(structure)}>
-                                                            Copy
+                                                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                                                        <button className="edit-btn" onClick={() => openStructure(structure)}>
+                                                            View / Edit
                                                         </button>
-                                                    )}
+                                                        {isAdmin && (
+                                                            <>
+                                                                <button className="history-btn" onClick={() => copyStructure(structure)}>
+                                                                    Copy
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -475,14 +376,9 @@ function FeesPage() {
                     {selectedStructure && (
                         <div className="modal-overlay">
                             <div className="history-modal">
-                                {/* HEADER */}
                                 <div className="modal-header">
                                     <div>
-                                        <h2>
-                                            {selectedStructure.className === "LKG" || selectedStructure.className === "UKG"
-                                                ? selectedStructure.className
-                                                : `${selectedStructure.className} Standard`}
-                                        </h2>
+                                        <h2>Class: {selectedStructure.className}</h2>
                                         <p>{selectedStructure.academicYearName}</p>
                                     </div>
                                     <button
@@ -496,7 +392,6 @@ function FeesPage() {
                                     </button>
                                 </div>
 
-                                {/* TABLE */}
                                 <div className="table-container">
                                     <table>
                                         <thead>
@@ -527,7 +422,6 @@ function FeesPage() {
                                                 </tr>
                                             ))}
                                         </tbody>
-                                        {/* TOTAL */}
                                         <tfoot>
                                             <tr>
                                                 <th colSpan="2">Standard Total</th>
@@ -537,7 +431,6 @@ function FeesPage() {
                                     </table>
                                 </div>
 
-                                {/* ACTIONS */}
                                 <div className="modal-actions">
                                     <button
                                         className="cancel-btn"

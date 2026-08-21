@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import api from "../services/api";
 
 function PaymentForm({ onClose }) {
@@ -19,12 +19,12 @@ function PaymentForm({ onClose }) {
     });
 
     const classes = [
-        "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"
+        "LKG", "UKG", 
+    "1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", 
+    "5A", "5B", "6A", "6B", "7A", "7B", "8A", "8B", 
+    "9A", "9B", "10A", "10B"
     ];
 
-    // =====================================================
-    // LOAD
-    // =====================================================
     useEffect(() => {
         loadData();
     }, []);
@@ -38,22 +38,20 @@ function PaymentForm({ onClose }) {
 
             setStudents(Array.isArray(studentResponse.data) ? studentResponse.data : []);
             const years = Array.isArray(yearResponse.data) ? yearResponse.data : [];
-            const current = years.find(year => year.status === "active");
+            const current = years.find((year) => year.status === "active");
             setActiveYear(current || null);
         } catch (error) {
             console.error("Unable to load payment data:", error);
         }
     };
 
-    // =====================================================
-    // CLASS
-    // =====================================================
     const handleClassChange = (e) => {
         const selectedClass = e.target.value;
         setFormData({
             ...formData,
             className: selectedClass,
-            studentId: ""
+            studentId: "",
+            amount: ""
         });
         setFeeSummary(null);
 
@@ -63,17 +61,14 @@ function PaymentForm({ onClose }) {
         }
 
         const filtered = students.filter(
-            student => String(student.className).toUpperCase() === String(selectedClass).toUpperCase()
+            (student) => String(student.className).toUpperCase() === String(selectedClass).toUpperCase()
         );
         setFilteredStudents(filtered);
     };
 
-    // =====================================================
-    // STUDENT
-    // =====================================================
     const handleStudentChange = async (e) => {
         const studentId = e.target.value;
-        setFormData({ ...formData, studentId });
+        setFormData({ ...formData, studentId, amount: "" });
 
         if (studentId) {
             await fetchFeeSummary(studentId);
@@ -82,9 +77,6 @@ function PaymentForm({ onClose }) {
         }
     };
 
-    // =====================================================
-    // FEE SUMMARY
-    // =====================================================
     const fetchFeeSummary = async (studentId) => {
         try {
             setLoadingSummary(true);
@@ -98,9 +90,94 @@ function PaymentForm({ onClose }) {
         }
     };
 
+    // Selected student object from students state
+    const selectedStudent = useMemo(() => {
+        return students.find((s) => Number(s.id) === Number(formData.studentId)) || null;
+    }, [students, formData.studentId]);
+
     // =====================================================
-    // INPUT & SUBMIT
+    // REAL-TIME 4-PART FIFO SETTLEMENT CALCULATION
     // =====================================================
+    const financialOverview = useMemo(() => {
+        if (!selectedStudent && !feeSummary) return null;
+
+        const studentPrevDues = Number(selectedStudent?.previousDues || 0);
+        const studentConcession = Number(selectedStudent?.concessionAmount || 0);
+
+        // Standard Class Base from API items or totalFee
+        let standardBase = Number(feeSummary?.totalFee || 0);
+        if (Array.isArray(feeSummary?.items) && feeSummary.items.length > 0) {
+            standardBase = feeSummary.items.reduce((sum, item) => {
+                if (item.itemType === "carry_forward" || item.componentName?.toLowerCase().includes("previous")) {
+                    return sum;
+                }
+                return sum + Number(item.amount || 0);
+            }, 0);
+        }
+
+        const netAcademicFee = Math.max(0, standardBase - studentConcession);
+        const totalAssessedDemand = studentPrevDues + netAcademicFee;
+        const previouslyPaid = Number(feeSummary?.totalPaid || 0);
+        const currentPayAmount = Number(formData.amount || 0);
+        const currentBalanceDue = Math.max(0, totalAssessedDemand - previouslyPaid);
+
+        // 3-Term Academic Breakdown
+        const term1Total = Math.floor(netAcademicFee / 3);
+        const term2Total = Math.floor(netAcademicFee / 3);
+        const term3Total = netAcademicFee - (term1Total + term2Total);
+
+        // Cumulative Payment Pool for FIFO Waterfall
+        let pool = previouslyPaid + currentPayAmount;
+
+        const prevPaidSoFar = Math.min(studentPrevDues, pool);
+        pool = Math.max(0, pool - studentPrevDues);
+
+        const term1PaidSoFar = Math.min(term1Total, pool);
+        pool = Math.max(0, pool - term1Total);
+
+        const term2PaidSoFar = Math.min(term2Total, pool);
+        pool = Math.max(0, pool - term2Total);
+
+        const term3PaidSoFar = Math.min(term3Total, pool);
+
+        const buckets = [
+            {
+                name: "Previous Dues",
+                total: studentPrevDues,
+                paid: prevPaidSoFar,
+                due: Math.max(0, studentPrevDues - prevPaidSoFar),
+                isPrevious: true
+            },
+            {
+                name: "Term 1 Fee",
+                total: term1Total,
+                paid: term1PaidSoFar,
+                due: Math.max(0, term1Total - term1PaidSoFar)
+            },
+            {
+                name: "Term 2 Fee",
+                total: term2Total,
+                paid: term2PaidSoFar,
+                due: Math.max(0, term2Total - term2PaidSoFar)
+            },
+            {
+                name: "Term 3 Fee",
+                total: term3Total,
+                paid: term3PaidSoFar,
+                due: Math.max(0, term3Total - term3PaidSoFar)
+            }
+        ];
+
+        return {
+            totalAssessedDemand,
+            previouslyPaid,
+            currentBalanceDue,
+            studentPrevDues,
+            studentConcession,
+            buckets
+        };
+    }, [selectedStudent, feeSummary, formData.amount]);
+
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
@@ -139,7 +216,7 @@ function PaymentForm({ onClose }) {
         }
     };
 
-    const money = value =>
+    const money = (value) =>
         `₹${Number(value || 0).toLocaleString("en-IN", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
@@ -147,16 +224,18 @@ function PaymentForm({ onClose }) {
 
     return (
         <div className="modal-overlay">
-            <div className="payment-modal">
+            <div className="payment-modal" style={{ maxWidth: "650px" }}>
                 <div className="modal-header">
                     <div>
                         <h2>Collect Fee</h2>
-                        <p>Record a student fee payment</p>
+                        <p>Record a fee payment with 4-part term reconciliation</p>
                     </div>
-                    <button type="button" className="close-btn" onClick={onClose}>✕</button>
+                    <button type="button" className="close-btn" onClick={onClose}>
+                        ✕
+                    </button>
                 </div>
 
-                <div className="fee-summary" style={{ marginBottom: "18px" }}>
+                <div className="fee-summary" style={{ marginBottom: "16px" }}>
                     <div>
                         <span>Active Academic Year</span>
                         <strong>{activeYear?.name || "Not configured"}</strong>
@@ -164,102 +243,142 @@ function PaymentForm({ onClose }) {
                 </div>
 
                 <form className="payment-form" onSubmit={handleSubmit}>
-                    <div className="form-group">
-                        <label>Class</label>
-                        <select value={formData.className} onChange={handleClassChange} required>
-                            <option value="">Select Class</option>
-                            {classes.map(className => (
-                                <option key={className} value={className}>
-                                    {className === "LKG" || className === "UKG" ? className : `${className} Standard`}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
+                    {/* CLASS & STUDENT */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                        <div className="form-group">
+                            <label>Class *</label>
+                            <select value={formData.className} onChange={handleClassChange} required>
+                                <option value="">Select Class</option>
+                                {classes.map((c) => (
+                                    <option key={c} value={c}>
+                                        {c === "LKG" || c === "UKG" ? c : `${c} Standard`}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
 
-                    <div className="form-group">
-                        <label>Student</label>
-                        <select value={formData.studentId} onChange={handleStudentChange} required disabled={!formData.className}>
-                            <option value="">
-                                {!formData.className
-                                    ? "Select Class First"
-                                    : filteredStudents.length === 0
+                        <div className="form-group">
+                            <label>Student *</label>
+                            <select
+                                value={formData.studentId}
+                                onChange={handleStudentChange}
+                                required
+                                disabled={!formData.className}
+                            >
+                                <option value="">
+                                    {!formData.className
+                                        ? "Select Class First"
+                                        : filteredStudents.length === 0
                                         ? "No Students in this Class"
                                         : "Select Student"}
-                            </option>
-                            {filteredStudents.map(student => (
-                                <option key={student.id} value={student.id}>
-                                    {student.rollNumber ? `Roll ${student.rollNumber} - ` : ""}
-                                    {student.studentName}
                                 </option>
-                            ))}
-                        </select>
+                                {filteredStudents.map((student) => (
+                                    <option key={student.id} value={student.id}>
+                                        {student.rollNumber ? `Roll ${student.rollNumber} - ` : ""}
+                                        {student.studentName}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
 
-                    {/* FEE SUMMARY SECTION */}
+                    {/* DYNAMIC FEE SUMMARY & 4-PART SETTLEMENT */}
                     {formData.studentId && (
-                        <div className="fee-summary">
+                        <div className="fee-summary" style={{ marginTop: "10px" }}>
                             <div className="fee-summary-header">
                                 <div>
-                                    <span className="fee-summary-label">Fee Account</span>
+                                    <span className="fee-summary-label">Student Fee Ledger</span>
                                     <span className="fee-summary-subtitle">
                                         {feeSummary?.academicYear?.name || activeYear?.name || ""}
                                     </span>
                                 </div>
-                                {loadingSummary && <span>Loading...</span>}
+                                {loadingSummary && <span>Loading ledger...</span>}
                             </div>
 
-                            {feeSummary && !loadingSummary ? (
+                            {financialOverview && !loadingSummary && (
                                 <>
                                     <div className="fee-summary-grid">
                                         <div className="fee-summary-item">
-                                            <span>Total Fee</span>
-                                            <strong>{money(feeSummary.totalFee)}</strong>
+                                            <span>Total Demand</span>
+                                            <strong>{money(financialOverview.totalAssessedDemand)}</strong>
                                         </div>
                                         <div className="fee-summary-item">
-                                            <span>Total Paid</span>
-                                            <strong className="fee-paid">{money(feeSummary.totalPaid)}</strong>
+                                            <span>Paid Till Date</span>
+                                            <strong className="fee-paid">{money(financialOverview.previouslyPaid)}</strong>
                                         </div>
                                         <div className="fee-summary-item remaining">
-                                            <span>Remaining</span>
-                                            <strong className="fee-remaining">{money(feeSummary.balance)}</strong>
+                                            <span>Current Due</span>
+                                            <strong className="fee-remaining">
+                                                {money(financialOverview.currentBalanceDue)}
+                                            </strong>
                                         </div>
                                     </div>
 
-                                    {/* COMPONENT BREAKDOWN */}
-                                    <div style={{ marginTop: "15px" }}>
-                                        {feeSummary.items && feeSummary.items.length > 0 ? (
-                                            feeSummary.items.map(item => (
-                                                <div key={item.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #eee" }}>
-                                                    <span>{item.componentName}</span>
-                                                    <strong>{money(item.amount)}</strong>
+                                    {/* 4-PART TERM ALLOCATION */}
+                                    <div style={{ marginTop: "14px" }}>
+                                        <span style={{ fontSize: "12px", fontWeight: "700", color: "#475569", textTransform: "uppercase" }}>
+                                            Installment Settlement Tracker
+                                        </span>
+                                        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px", marginTop: "6px" }}>
+                                            {financialOverview.buckets.map((item, idx) => (
+                                                <div
+                                                    key={idx}
+                                                    style={{
+                                                        padding: "8px",
+                                                        borderRadius: "6px",
+                                                        border: "1px solid",
+                                                        borderColor: item.due === 0 && item.total > 0 ? "#86EFAC" : item.isPrevious ? "#BFDBFE" : "#E2E8F0",
+                                                        backgroundColor: item.due === 0 && item.total > 0 ? "#F0FDF4" : item.isPrevious ? "#EFF6FF" : "#F8FAFC"
+                                                    }}
+                                                >
+                                                    <div style={{ fontSize: "10px", fontWeight: "700", color: item.isPrevious ? "#1E40AF" : "#64748B" }}>
+                                                        {item.name.toUpperCase()}
+                                                    </div>
+                                                    <div style={{ fontSize: "12px", fontWeight: "700", marginTop: "2px" }}>
+                                                        {money(item.total)}
+                                                    </div>
+                                                    <div style={{ fontSize: "11px", color: item.due === 0 && item.total > 0 ? "#16A34A" : "#DC2626", marginTop: "2px" }}>
+                                                        {item.due === 0 && item.total > 0 ? "✓ Cleared" : `Due: ${money(item.due)}`}
+                                                    </div>
                                                 </div>
-                                            ))
-                                        ) : (
-                                            <div style={{ padding: "10px", textAlign: "center", color: "#e74c3c", backgroundColor: "#fdf0ed", borderRadius: "5px" }}>
-                                                <strong>No Fee Components Found</strong><br/>
-                                                <span style={{ fontSize: "0.85rem" }}>Close this modal, go to the <b>Fee Management</b> page, and click "<b>Prepare Student Accounts</b>" to sync prices to this student.</span>
-                                            </div>
-                                        )}
+                                            ))}
+                                        </div>
                                     </div>
                                 </>
-                            ) : !loadingSummary ? (
-                                <div>Unable to load fee information.</div>
-                            ) : null}
+                            )}
                         </div>
                     )}
 
-                    <div className="form-group">
-                        <label>Payment Date</label>
-                        <input type="date" name="paymentDate" value={formData.paymentDate} onChange={handleChange} required />
+                    {/* PAYMENT INPUTS */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "14px" }}>
+                        <div className="form-group">
+                            <label>Payment Date *</label>
+                            <input
+                                type="date"
+                                name="paymentDate"
+                                value={formData.paymentDate}
+                                onChange={handleChange}
+                                required
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label>Amount (₹) *</label>
+                            <input
+                                type="number"
+                                name="amount"
+                                value={formData.amount}
+                                onChange={handleChange}
+                                min="1"
+                                step="0.01"
+                                placeholder="Enter payment amount"
+                                required
+                            />
+                        </div>
                     </div>
 
                     <div className="form-group">
-                        <label>Amount</label>
-                        <input type="number" name="amount" value={formData.amount} onChange={handleChange} min="1" step="0.01" placeholder="Enter amount" required />
-                    </div>
-
-                    <div className="form-group">
-                        <label>Payment Mode</label>
+                        <label>Payment Mode *</label>
                         <select name="paymentMode" value={formData.paymentMode} onChange={handleChange}>
                             <option>Cash</option>
                             <option>UPI</option>
@@ -271,13 +390,25 @@ function PaymentForm({ onClose }) {
 
                     <div className="form-group">
                         <label>Remarks</label>
-                        <textarea name="remarks" rows="3" value={formData.remarks} onChange={handleChange} placeholder="Optional remarks..." />
+                        <textarea
+                            name="remarks"
+                            rows="2"
+                            value={formData.remarks}
+                            onChange={handleChange}
+                            placeholder="Optional notes or transaction reference ID..."
+                        />
                     </div>
 
-                    <div className="modal-actions">
-                        <button type="button" className="cancel-btn" onClick={onClose}>Cancel</button>
-                        <button type="submit" className="save-btn" disabled={loading || !activeYear || loadingSummary}>
-                            {loading ? "Saving..." : "Collect Fee"}
+                    <div className="modal-actions" style={{ marginTop: "18px" }}>
+                        <button type="button" className="cancel-btn" onClick={onClose}>
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            className="save-btn"
+                            disabled={loading || !activeYear || loadingSummary}
+                        >
+                            {loading ? "Recording Payment..." : "Collect Fee"}
                         </button>
                     </div>
                 </form>

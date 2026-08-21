@@ -239,7 +239,7 @@ function App() {
 
             {/* =================================================
                 REPORTS
-                ADMIN + RECEPTIONIST
+                ADMIN
             ================================================= */}
 
             <Route
@@ -249,7 +249,7 @@ function App() {
                     <ProtectedRoute
                         roles={[
                             "admin",
-                            "receptionist"
+                            
                         ]}
                     >
 
