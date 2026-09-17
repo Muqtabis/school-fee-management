@@ -81,6 +81,8 @@ async function addColumnIfMissing(tableName, columnName, definition) {
 
 async function initializeDatabase() {
     try {
+        console.log("Starting database initialization...");
+
         // STUDENTS
         await run(`
             CREATE TABLE IF NOT EXISTS students (
@@ -319,7 +321,9 @@ async function initializeDatabase() {
 
 async function migrateDatabase() {
     await addColumnIfMissing("classes", "section", "TEXT");
-    await addColumnIfMissing("classes", "createdAt", "DATETIME DEFAULT CURRENT_TIMESTAMP");
+    await addColumnIfMissing("classes", "createdAt", "DATETIME");
+    await run(`UPDATE classes SET createdAt = CURRENT_TIMESTAMP WHERE createdAt IS NULL`);
+
     await addColumnIfMissing("students", "rollNumber", "TEXT");
     await addColumnIfMissing("students", "status", "TEXT NOT NULL DEFAULT 'active'");
     await addColumnIfMissing("students", "archivedAt", "TEXT");
