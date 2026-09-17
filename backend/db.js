@@ -390,6 +390,3 @@ module.exports = db;
 module.exports.runQuery = run;
 module.exports.allQuery = all;
 module.exports.initializeDatabase = initializeDatabase;
-module.exports.seedDefaultData = seedDefaultData;
-module.exports.seedFeeComponents = seedFeeComponents;
-module.exports.createIndexes = createIndexes;
