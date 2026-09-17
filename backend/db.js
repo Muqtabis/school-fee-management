@@ -317,6 +317,7 @@ async function initializeDatabase() {
 // =====================================================
 
 async function migrateDatabase() {
+    await addColumnIfMissing("classes", "section", "TEXT");
     await addColumnIfMissing("students", "rollNumber", "TEXT");
     await addColumnIfMissing("students", "status", "TEXT NOT NULL DEFAULT 'active'");
     await addColumnIfMissing("students", "archivedAt", "TEXT");
@@ -389,3 +390,6 @@ module.exports = db;
 module.exports.runQuery = run;
 module.exports.allQuery = all;
 module.exports.initializeDatabase = initializeDatabase;
+module.exports.seedDefaultData = seedDefaultData;
+module.exports.seedFeeComponents = seedFeeComponents;
+module.exports.createIndexes = createIndexes;
