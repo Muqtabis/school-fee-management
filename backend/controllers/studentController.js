@@ -1,5 +1,7 @@
 const db = require("../db");
 const logAudit = require("../utils/auditLogger");
+const xlsx = require("xlsx");
+const fs = require("fs");
 
 // =====================================================
 // GET ALL STUDENTS
@@ -10,9 +12,6 @@ exports.getStudents = (req, res) => {
     let sql = `SELECT * FROM students WHERE 1 = 1`;
     const params = [];
 
-    // =================================================
-    // STATUS
-    // =================================================
     if (includeArchived !== "true") {
         if (status === "archived") {
             sql += ` AND status = 'archived'`;
@@ -28,17 +27,11 @@ exports.getStudents = (req, res) => {
         }
     }
 
-    // =================================================
-    // CLASS FILTER
-    // =================================================
     if (className && className !== "All") {
         sql += ` AND className = ?`;
         params.push(className);
     }
 
-    // =================================================
-    // SEARCH
-    // =================================================
     if (search) {
         sql += `
             AND (
@@ -55,26 +48,24 @@ exports.getStudents = (req, res) => {
         params.push(searchValue, searchValue, searchValue, searchValue, searchValue, searchValue, searchValue);
     }
 
-    // =================================================
-    // SORT
-    // =================================================
     sql += `
         ORDER BY
             CASE
-                WHEN className = 'LKG' THEN 1
-                WHEN className = 'UKG' THEN 2
-                WHEN className = '1' THEN 3
-                WHEN className = '2' THEN 4
-                WHEN className = '3' THEN 5
-                WHEN className = '4' THEN 6
-                WHEN className = '5' THEN 7
-                WHEN className = '6' THEN 8
-                WHEN className = '7' THEN 9
-                WHEN className = '8' THEN 10
-                WHEN className = '9' THEN 11
-                WHEN className = '10' THEN 12
+                WHEN UPPER(className) LIKE 'LKG%' THEN 1
+                WHEN UPPER(className) LIKE 'UKG%' THEN 2
+                WHEN UPPER(className) LIKE '1%' THEN 3
+                WHEN UPPER(className) LIKE '2%' THEN 4
+                WHEN UPPER(className) LIKE '3%' THEN 5
+                WHEN UPPER(className) LIKE '4%' THEN 6
+                WHEN UPPER(className) LIKE '5%' THEN 7
+                WHEN UPPER(className) LIKE '6%' THEN 8
+                WHEN UPPER(className) LIKE '7%' THEN 9
+                WHEN UPPER(className) LIKE '8%' THEN 10
+                WHEN UPPER(className) LIKE '9%' THEN 11
+                WHEN UPPER(className) LIKE '10%' THEN 12
                 ELSE 99
             END,
+            className ASC,
             rollNumber ASC
     `;
 
@@ -128,7 +119,6 @@ exports.addStudent = (req, res) => {
         return res.status(400).json({ success: false, message: "Fee values cannot be negative." });
     }
 
-    // CHECK ROLL NUMBER CONFLICT
     db.get(
         `SELECT id FROM students WHERE rollNumber = ? AND className = ? AND (status IS NULL OR status = 'active')`,
         [cleanRollNumber, className],
@@ -141,7 +131,6 @@ exports.addStudent = (req, res) => {
                 return res.status(409).json({ success: false, message: "This roll number is already assigned to another active student in this class." });
             }
 
-            // INSERT STUDENT
             db.run(
                 `
                 INSERT INTO students (
@@ -235,7 +224,6 @@ exports.updateStudent = (req, res) => {
                         return res.status(409).json({ success: false, message: "This roll number is already assigned to another active student in this class." });
                     }
 
-                    // UPDATE
                     db.run(
                         `
                         UPDATE students SET
@@ -379,4 +367,139 @@ exports.restoreStudent = (req, res) => {
 // =====================================================
 exports.deleteStudent = (req, res) => {
     return res.status(405).json({ success: false, message: "Permanent student deletion is disabled. Use Archive instead." });
+};
+
+// =====================================================
+// IMPORT STUDENTS FROM EXCEL (EXACT MATCH & AUTO-CREATE)
+// =====================================================
+exports.importStudents = async (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ success: false, message: "No Excel file uploaded." });
+    }
+
+    try {
+        const workbook = xlsx.readFile(req.file.path);
+        let importedCount = 0;
+        let skippedCount = 0;
+        let classesCreated = 0;
+
+        for (const rawSheetName of workbook.SheetNames) {
+            // Ignore unused sheets
+            if (['Discontinue', 'SWA', 'TC Out 2026-27'].includes(rawSheetName)) {
+                continue;
+            }
+
+            const sheet = workbook.Sheets[rawSheetName];
+            
+            // RTE Std has 3 title rows (headers on row 4 -> range: 3), others have 2 title rows (headers on row 3 -> range: 2)
+            const headerRange = rawSheetName === 'RTE Std' ? 3 : 2;
+            const rows = xlsx.utils.sheet_to_json(sheet, { range: headerRange, defval: "" });
+
+            for (const row of rows) {
+                const studentName = String(row["STUDENT NAME "] || row["STUDENT NAME"] || "").trim();
+                const rollNumber = String(row["Sl. No"] || row["Sl.No"] || row["SL.NO."] || row["SL NO"] || row["Roll No"] || "").trim();
+                
+                if (!studentName || !rollNumber) continue;
+
+                // Grab the exact class name
+                let className = "";
+                if (rawSheetName === 'RTE Std') {
+                    className = "RTE Std"; // Force ALL students on this sheet into the RTE Std class
+                } else {
+                    // Use the exact Excel tab name directly since you formatted it
+                    className = rawSheetName.trim();
+                }
+
+                // Auto-create the exact class in SQLite if it doesn't exist yet
+                await new Promise((resolve) => {
+                    db.get(`SELECT id FROM classes WHERE className = ?`, [className], (err, row) => {
+                        if (err) {
+                            console.error("Select class error:", err);
+                            resolve();
+                        } else if (!row) {
+                            // Insert the class safely
+                            db.run(`INSERT INTO classes (className, section) VALUES (?, '')`, [className], function(insertErr) {
+                                if (insertErr) {
+                                    console.error(`Failed to create class ${className}:`, insertErr.message);
+                                } else {
+                                    classesCreated++;
+                                }
+                                resolve();
+                            });
+                        } else {
+                            resolve();
+                        }
+                    });
+                });
+
+                const admissionNumber = String(row["ADM .NO"] || row["ADM.NO"] || "").trim();
+                const satsNumber = String(row["SATS NO."] || row["SATS NO"] || "").trim();
+                const fatherName = String(row["FATHER NAME"] || "").trim();
+                const motherName = String(row["MOTHER NAME "] || row["MOTHER NAME"] || "").trim();
+                const gender = String(row["GENDER"] || "").trim();
+                const address = String(row["ADDRESS"] || "").trim();
+                const contact1 = String(row["CONTACT"] || row["CONTACT "] || "").trim();
+                const remark = String(row["REMARK"] || "").trim();
+
+                let dob = row["DOB"] || "";
+                if (typeof dob === 'number') {
+                    const date = new Date(Math.round((dob - 25569) * 86400 * 1000));
+                    dob = date.toISOString().split('T')[0];
+                } else {
+                    dob = String(dob).trim();
+                }
+
+                const existing = await new Promise((resolve, reject) => {
+                    db.get(
+                        `SELECT id FROM students WHERE rollNumber = ? AND className = ? AND (status IS NULL OR status = 'active')`,
+                        [rollNumber, className],
+                        (err, conflictRow) => {
+                            if (err) reject(err);
+                            else resolve(conflictRow);
+                        }
+                    );
+                });
+
+                if (existing) {
+                    skippedCount++;
+                    continue;
+                }
+
+                await new Promise((resolve, reject) => {
+                    db.run(
+                        `
+                        INSERT INTO students (
+                            studentName, rollNumber, className, fatherName, contact1, 
+                            previousDues, tuitionFee, status, admissionNumber, satsNumber, 
+                            motherName, gender, dob, address, remark, concessionAmount, concessionReason
+                        ) VALUES (?, ?, ?, ?, ?, 0, 0, 'active', ?, ?, ?, ?, ?, ?, ?, 0, '')
+                        `,
+                        [
+                            studentName, rollNumber, className, fatherName, contact1,
+                            admissionNumber, satsNumber, motherName, gender, dob, address, remark
+                        ],
+                        function (err) {
+                            if (err) reject(err);
+                            else {
+                                importedCount++;
+                                resolve();
+                            }
+                        }
+                    );
+                });
+            }
+        }
+
+        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+
+        res.json({
+            success: true,
+            message: `Import complete! Successfully added ${importedCount} students and auto-created ${classesCreated} exact classes.`
+        });
+
+    } catch (error) {
+        console.error("Excel Import Error:", error);
+        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        res.status(500).json({ success: false, message: "Failed to process the Excel file." });
+    }
 };

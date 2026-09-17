@@ -4,7 +4,7 @@ const api = axios.create({
   baseURL:
     process.env.REACT_APP_API_URL ||
     import.meta.env?.VITE_API_URL ||
-    "https://theage-backend.southindia.cloudapp.azure.com"
+    "http://104.211.228.44:5000/api" // <--- Updated to your Azure VM IP
 });
 
 // Attach token from sessionStorage to all outgoing requests

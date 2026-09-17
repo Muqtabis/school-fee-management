@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import StudentForm from "../components/StudentForm";
@@ -24,8 +24,12 @@ function StudentsPage() {
     const [selectedClass, setSelectedClass] = useState("All");
     const [searchKeyword, setSearchKeyword] = useState("");
     const [historyStudent, setHistoryStudent] = useState(null);
-    const [profileStudent, setProfileStudent] = useState(null); // NEW: Profile State
+    const [profileStudent, setProfileStudent] = useState(null);
     const [showArchived, setShowArchived] = useState(false);
+
+    // EXCEL IMPORT STATES & REFS
+    const fileInputRef = useRef(null);
+    const [isImporting, setIsImporting] = useState(false);
 
     useEffect(() => {
         fetchStudents();
@@ -133,6 +137,36 @@ function StudentsPage() {
         setShowForm(true);
     };
 
+    // =====================================================
+    // EXCEL IMPORT HANDLER
+    // =====================================================
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        setIsImporting(true);
+        try {
+            const res = await api.post("/students/import", formData, {
+                headers: { "Content-Type": "multipart/form-data" }
+            });
+            alert(res.data.message || "Import successful!");
+            
+            // AUTOMATICALLY REFRESH BOTH TABLES AFTER IMPORT
+            fetchStudents(); 
+            fetchClasses(); // <--- ADDED: This guarantees the dropdown populates immediately
+            
+        } catch (error) {
+            console.error("Import error:", error);
+            alert(error.response?.data?.message || "Failed to import students.");
+        } finally {
+            setIsImporting(false);
+            if (fileInputRef.current) fileInputRef.current.value = ""; // Reset the input
+        }
+    };
+
     return (
         <div className="dashboard">
             <Sidebar />
@@ -147,9 +181,30 @@ function StudentsPage() {
                             <p>Manage students, complete profiles, and fee accounts.</p>
                         </div>
                         {!showArchived && (
-                            <button className="primary-btn" onClick={handleAddStudent}>
-                                + Add Student
-                            </button>
+                            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                                {/* HIDDEN FILE INPUT */}
+                                <input
+                                    type="file"
+                                    accept=".xlsx, .xls"
+                                    style={{ display: "none" }}
+                                    ref={fileInputRef}
+                                    onChange={handleFileUpload}
+                                />
+                                
+                                {/* IMPORT BUTTON */}
+                                <button 
+                                    className="primary-btn" 
+                                    style={{ backgroundColor: "#10B981", borderColor: "#059669", color: "white" }}
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={isImporting}
+                                >
+                                    {isImporting ? "⏳ Importing..." : "📥 Import Excel"}
+                                </button>
+                                
+                                <button className="primary-btn" onClick={handleAddStudent}>
+                                    + Add Student
+                                </button>
+                            </div>
                         )}
                     </div>
 
