@@ -318,6 +318,7 @@ async function initializeDatabase() {
 
 async function migrateDatabase() {
     await addColumnIfMissing("classes", "section", "TEXT");
+    await addColumnIfMissing("classes", "createdAt", "DATETIME DEFAULT CURRENT_TIMESTAMP");
     await addColumnIfMissing("students", "rollNumber", "TEXT");
     await addColumnIfMissing("students", "status", "TEXT NOT NULL DEFAULT 'active'");
     await addColumnIfMissing("students", "archivedAt", "TEXT");
