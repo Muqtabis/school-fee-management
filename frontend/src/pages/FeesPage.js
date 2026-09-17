@@ -4,18 +4,15 @@ import Navbar from "../components/Navbar";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 
-const STATIC_CLASSES = [
-    "LKG", "UKG", 
-    "1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", 
-    "5A", "5B", "6A", "6B", "7A", "7B", "8A", "8B", 
-    "9A", "9B", "10A", "10B"
-];
-
 function FeesPage() {
     const { user } = useAuth();
     const isAdmin = user?.role === "admin";
 
+    // Data State
     const [years, setYears] = useState([]);
+    const [classes, setClasses] = useState([]); 
+    const [feeComponents, setFeeComponents] = useState([]); 
+    
     const [selectedYear, setSelectedYear] = useState(null);
     const [structures, setStructures] = useState([]);
     const [selectedStructure, setSelectedStructure] = useState(null);
@@ -23,33 +20,46 @@ function FeesPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
-    const [newYear, setNewYear] = useState({
-        name: "",
-        startDate: "",
-        endDate: ""
-    });
-
+    // Form State
+    const [newYear, setNewYear] = useState({ name: "", startDate: "", endDate: "" });
+    const [newComponent, setNewComponent] = useState({ name: "", isOptional: false });
     const [selectedClass, setSelectedClass] = useState("");
 
+    useEffect(() => {
+        const loadInitialData = async () => {
+            try {
+                setLoading(true);
+                await Promise.all([
+                    loadYears(),
+                    loadClasses(),
+                    loadComponents()
+                ]);
+            } catch (error) {
+                console.error("Error loading initial data:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadInitialData();
+    }, []);
+
     const loadYears = async () => {
-        try {
-            setLoading(true);
-            const res = await api.get("/fees/academic-years");
-            const data = Array.isArray(res.data) ? res.data : [];
-            setYears(data);
-            const active = data.find(year => year.status === "active");
-            setSelectedYear(active || data[0] || null);
-        } catch (error) {
-            console.error("Unable to load academic years:", error);
-            alert(error.response?.data?.message || "Unable to load academic years.");
-        } finally {
-            setLoading(false);
-        }
+        const res = await api.get("/fees/academic-years");
+        const data = Array.isArray(res.data) ? res.data : [];
+        setYears(data);
+        const active = data.find(year => year.status === "active");
+        setSelectedYear(active || data[0] || null);
     };
 
-    useEffect(() => {
-        loadYears();
-    }, []);
+    const loadClasses = async () => {
+        const res = await api.get("/classes");
+        setClasses(Array.isArray(res.data) ? res.data : []);
+    };
+
+    const loadComponents = async () => {
+        const res = await api.get("/fees/components");
+        setFeeComponents(Array.isArray(res.data) ? res.data : []);
+    };
 
     const loadStructures = async (yearId) => {
         if (!yearId) {
@@ -57,9 +67,7 @@ function FeesPage() {
             return;
         }
         try {
-            const res = await api.get("/fees/structures", {
-                params: { academicYearId: yearId }
-            });
+            const res = await api.get("/fees/structures", { params: { academicYearId: yearId } });
             setStructures(Array.isArray(res.data) ? res.data : []);
         } catch (error) {
             console.error("Unable to load structures:", error);
@@ -75,25 +83,94 @@ function FeesPage() {
         }
     }, [selectedYear]);
 
+    // --- FEE COMPONENT CRUD ---
+    const createComponent = async (e) => {
+        e.preventDefault();
+        if (!newComponent.name.trim()) return alert("Component name is required.");
+        
+        try {
+            await api.post("/fees/components", {
+                componentName: newComponent.name,
+                isOptional: newComponent.isOptional
+            });
+            setNewComponent({ name: "", isOptional: false });
+            await loadComponents();
+        } catch (error) {
+            alert(error.response?.data?.message || "Unable to create fee component.");
+        }
+    };
+
+    const deleteComponent = async (id) => {
+        if (!window.confirm("Delete this fee component? It will be removed from future structures.")) return;
+        try {
+            await api.delete(`/fees/components/${id}`);
+            await loadComponents();
+        } catch (error) {
+            alert(error.response?.data?.message || "Unable to delete component.");
+        }
+    };
+
+    // --- ACADEMIC YEAR CRUD ---
+    const createYear = async (e) => {
+        e.preventDefault();
+        if (!newYear.name.trim()) return alert("Academic year name is required.");
+        try {
+            await api.post("/fees/academic-years", {
+                name: newYear.name.trim(),
+                startDate: newYear.startDate || null,
+                endDate: newYear.endDate || null
+            });
+            setNewYear({ name: "", startDate: "", endDate: "" });
+            alert("Academic year created successfully.");
+            await loadYears();
+        } catch (error) {
+            alert(error.response?.data?.message || "Unable to create academic year.");
+        }
+    };
+
+    const activateYear = async (year) => {
+        if (!window.confirm(`Make ${year.name} the active academic year?`)) return;
+        try {
+            await api.post(`/fees/academic-years/${year.id}/activate`);
+            alert(`${year.name} is now active.`);
+            await loadYears();
+        } catch (error) {
+            alert(error.response?.data?.message || "Unable to activate academic year.");
+        }
+    };
+
+    const prepareYear = async (year) => {
+        if (year.status === "closed") return alert("Closed academic years cannot be prepared.");
+        if (!window.confirm(`Prepare student fee accounts for ${year.name}?`)) return;
+        try {
+            const res = await api.post(`/fees/academic-years/${year.id}/prepare`);
+            alert(res.data.message);
+        } catch (error) {
+            alert(error.response?.data?.message || "Unable to prepare academic year.");
+        }
+    };
+
+    // --- STRUCTURE CRUD ---
+    const createStructure = async (e) => {
+        e.preventDefault();
+        if (!selectedYear || !selectedClass) return alert("Please select a class.");
+        try {
+            await api.post("/fees/structures", { academicYearId: selectedYear.id, className: selectedClass });
+            setSelectedClass("");
+            await loadStructures(selectedYear.id);
+        } catch (error) {
+            alert(error.response?.data?.message || "Unable to create fee structure.");
+        }
+    };
+
     const openStructure = async (structure) => {
         try {
             const res = await api.get(`/fees/structures/${structure.id}`);
             setSelectedStructure(res.data.structure);
             setStructureItems(Array.isArray(res.data.items) ? res.data.items : []);
         } catch (error) {
-            console.error(error);
             alert(error.response?.data?.message || "Unable to load fee structure.");
         }
-    };
-
-    const changeAmount = (componentId, value) => {
-        setStructureItems(current =>
-            current.map(item =>
-                item.componentId === componentId
-                    ? { ...item, amount: value }
-                    : item
-            )
-        );
     };
 
     const saveStructure = async () => {
@@ -106,126 +183,50 @@ function FeesPage() {
                     amount: Number(item.amount || 0)
                 }))
             });
-
             alert("Fee structure saved successfully.");
             await loadStructures(selectedYear.id);
             const updated = await api.get(`/fees/structures/${selectedStructure.id}`);
             setSelectedStructure(updated.data.structure);
             setStructureItems(updated.data.items);
         } catch (error) {
-            console.error(error);
             alert(error.response?.data?.message || "Unable to save fee structure.");
         } finally {
             setSaving(false);
         }
     };
 
-    const createYear = async (e) => {
-        e.preventDefault();
-        if (!newYear.name.trim()) {
-            alert("Academic year name is required.");
-            return;
-        }
-        try {
-            await api.post("/fees/academic-years", {
-                name: newYear.name.trim(),
-                startDate: newYear.startDate || null,
-                endDate: newYear.endDate || null
-            });
-            setNewYear({ name: "", startDate: "", endDate: "" });
-            alert("Academic year created successfully.");
-            await loadYears();
-        } catch (error) {
-            console.error(error);
-            alert(error.response?.data?.message || "Unable to create academic year.");
-        }
-    };
-
-    const createStructure = async (e) => {
-        e.preventDefault();
-        if (!selectedYear || !selectedClass) {
-            alert("Please select a class.");
-            return;
-        }
-
-        try {
-            await api.post("/fees/structures", {
-                academicYearId: selectedYear.id,
-                className: selectedClass
-            });
-            setSelectedClass("");
-            alert("Class fee structure created successfully.");
-            await loadStructures(selectedYear.id);
-        } catch (error) {
-            console.error(error);
-            alert(error.response?.data?.message || "Unable to create fee structure.");
-        }
-    };
-
-    const activateYear = async (year) => {
-        const confirmed = window.confirm(`Make ${year.name} the active academic year?`);
-        if (!confirmed) return;
-
-        try {
-            await api.post(`/fees/academic-years/${year.id}/activate`);
-            alert(`${year.name} is now active.`);
-            await loadYears();
-        } catch (error) {
-            console.error(error);
-            alert(error.response?.data?.message || "Unable to activate academic year.");
-        }
-    };
-
-    const prepareYear = async (year) => {
-        if (year.status === "closed") {
-            alert("Closed academic years cannot be prepared.");
-            return;
-        }
-        const confirmed = window.confirm(`Prepare student fee accounts for ${year.name}?`);
-        if (!confirmed) return;
-
-        try {
-            const res = await api.post(`/fees/academic-years/${year.id}/prepare`);
-            alert(res.data.message);
-        } catch (error) {
-            console.error(error);
-            alert(error.response?.data?.message || "Unable to prepare academic year.");
-        }
-    };
-
     const copyStructure = async (structure) => {
         if (!selectedYear) return;
         const targets = years.filter(year => Number(year.id) !== Number(selectedYear.id) && year.status !== "closed");
-
-        if (targets.length === 0) {
-            alert("There is no available target academic year.");
-            return;
-        }
-
-        const targetName = window.prompt(`Enter target academic year name:\n\n${targets.map(year => year.name).join("\n")}`);
+        if (targets.length === 0) return alert("There is no available target academic year.");
+        
+        const targetName = window.prompt(`Enter target academic year name:\n\n${targets.map(y => y.name).join("\n")}`);
         if (!targetName) return;
-
+        
         const target = targets.find(year => year.name.trim() === targetName.trim());
-        if (!target) {
-            alert("Target academic year not found.");
-            return;
-        }
+        if (!target) return alert("Target academic year not found.");
 
         try {
             await api.post(`/fees/structures/${structure.id}/copy/${target.id}`);
             alert("Fee structure copied successfully.");
         } catch (error) {
-            console.error(error);
             alert(error.response?.data?.message || "Unable to copy fee structure.");
         }
     };
 
-    const money = value =>
-        `₹${Number(value || 0).toLocaleString("en-IN", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        })}`;
+    const changeAmount = (componentId, value) => {
+        setStructureItems(current =>
+            current.map(item => item.componentId === componentId ? { ...item, amount: value } : item )
+        );
+    };
 
+    const formatClass = (c) => {
+        if (c.name) return c.name;
+        if (c.className) return c.section ? `${c.className} ${c.section}`.trim() : c.className;
+        return "Unknown";
+    };
+
+    const money = value => `₹${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const total = structureItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
     if (loading) {
@@ -240,10 +241,7 @@ function FeesPage() {
         );
     }
 
-    // Filter out already added structures from the dropdown selection
-    const availableClasses = STATIC_CLASSES.filter(
-        c => !structures.some(s => s.className === c)
-    );
+    const availableClasses = classes.filter(c => !structures.some(s => s.className === formatClass(c)));
 
     return (
         <div className="dashboard">
@@ -251,22 +249,40 @@ function FeesPage() {
             <div className="main-content">
                 <Navbar />
                 <div className="page-content">
-                    <div className="page-header">
+                    
+                    {/* HEADER */}
+                    <div className="page-header" style={{ marginBottom: "20px" }}>
                         <div>
                             <h2>Fee Management</h2>
-                            <p>Academic years, class fee structures and student fee accounts.</p>
+                            <p>Configure Academic Years, Master Fee Components, and Class Prices.</p>
                         </div>
                     </div>
 
-                    {/* ACADEMIC YEAR */}
-                    <div className="report-panel" style={{ marginBottom: "20px" }}>
-                        <div className="report-panel-header">
+                    {/* PANEL 1: ACADEMIC YEAR */}
+                    <div className="report-panel" style={{ marginBottom: "24px" }}>
+                        <div className="report-panel-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <div>
-                                <h3>Academic Year</h3>
-                                <p>Only the active year can receive payments.</p>
+                                <h3>1. Academic Year Configuration</h3>
+                                <p>Select or create an academic year.</p>
                             </div>
+                            
+                            {isAdmin && (
+                                <form onSubmit={createYear} style={{ display: "flex", gap: "8px" }}>
+                                    <input
+                                        type="text"
+                                        placeholder="New Year (e.g., 2026-27)"
+                                        value={newYear.name}
+                                        onChange={e => setNewYear({ ...newYear, name: e.target.value })}
+                                        className="search-input"
+                                        style={{ minWidth: "220px", marginBottom: "0" }}
+                                        required
+                                    />
+                                    <button type="submit" className="primary-btn">+ Create Year</button>
+                                </form>
+                            )}
                         </div>
-                        <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+
+                        <div style={{ padding: "20px", display: "flex", gap: "12px", alignItems: "center", borderTop: "1px solid #E2E8F0" }}>
                             <select
                                 className="filter-select"
                                 value={selectedYear?.id || ""}
@@ -276,66 +292,155 @@ function FeesPage() {
                                     setSelectedStructure(null);
                                     setStructureItems([]);
                                 }}
+                                style={{ minWidth: "250px", marginBottom: "0" }}
                             >
-                                <option value="">Select Academic Year</option>
+                                <option value="">Select Academic Year...</option>
                                 {years.map(year => (
                                     <option key={year.id} value={year.id}>
-                                        {year.name} - {year.status}
+                                        {year.name} (Status: {year.status.charAt(0).toUpperCase() + year.status.slice(1)})
                                     </option>
                                 ))}
                             </select>
 
                             {isAdmin && selectedYear && selectedYear.status !== "active" && (
-                                <button className="primary-btn" onClick={() => activateYear(selectedYear)}>
-                                    Make Active
-                                </button>
+                                <button className="primary-btn" onClick={() => activateYear(selectedYear)}>Make Active</button>
                             )}
 
                             {isAdmin && selectedYear && selectedYear.status !== "closed" && (
-                                <button className="clear-btn" onClick={() => prepareYear(selectedYear)}>
-                                    Prepare Student Accounts
-                                </button>
+                                <button className="clear-btn" onClick={() => prepareYear(selectedYear)}>Prepare Student Accounts</button>
                             )}
                         </div>
                     </div>
 
-                    {/* STRUCTURES */}
+                    {/* PANEL 2: MASTER FEE COMPONENTS */}
+                    <div className="report-panel" style={{ marginBottom: "24px" }}>
+                        <div className="report-panel-header">
+                            <div>
+                                <h3>2. Master Fee Components</h3>
+                                <p>Define custom categories (e.g., Lab Fee, Sports Fee) to apply to your classes.</p>
+                            </div>
+                        </div>
+                        
+                        {isAdmin && (
+                            <div style={{ padding: "20px", backgroundColor: "#F8FAFC", borderBottom: "1px solid #E2E8F0" }}>
+                                <form onSubmit={createComponent} style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+                                    <input
+                                        type="text"
+                                        placeholder="Enter New Fee Category Name"
+                                        value={newComponent.name}
+                                        onChange={e => setNewComponent({ ...newComponent, name: e.target.value })}
+                                        className="search-input"
+                                        style={{ flex: 1, marginBottom: "0", padding: "10px" }}
+                                        required
+                                    />
+                                    <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "#334155", fontWeight: "500", cursor: "pointer" }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={newComponent.isOptional}
+                                            onChange={e => setNewComponent({ ...newComponent, isOptional: e.target.checked })}
+                                            style={{ width: "16px", height: "16px" }}
+                                        />
+                                        Optional Fee?
+                                    </label>
+                                    <button type="submit" className="primary-btn" style={{ padding: "10px 20px" }}>
+                                        + Add Component
+                                    </button>
+                                </form>
+                            </div>
+                        )}
+
+                        <div className="table-container">
+                            {feeComponents.length === 0 ? (
+                                <div style={{ padding: "30px", textAlign: "center", color: "#64748B" }}>
+                                    No fee components configured yet. Add one above to get started.
+                                </div>
+                            ) : (
+                                <table style={{ width: "100%" }}>
+                                    <thead>
+                                        <tr>
+                                            <th>Fee Category Name</th>
+                                            <th>Type</th>
+                                            {isAdmin && <th style={{ textAlign: "right", paddingRight: "24px" }}>Action</th>}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {feeComponents.map(comp => (
+                                            <tr key={comp.id}>
+                                                <td style={{ fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>{comp.componentName}</td>
+                                                <td>
+                                                    <span style={{ 
+                                                        padding: "4px 10px", 
+                                                        borderRadius: "20px", 
+                                                        fontSize: "12px", 
+                                                        fontWeight: "600", 
+                                                        backgroundColor: comp.isOptional ? "#FEF3C7" : "#E2E8F0",
+                                                        color: comp.isOptional ? "#D97706" : "#475569"
+                                                    }}>
+                                                        {comp.isOptional ? "Optional" : "Mandatory"}
+                                                    </span>
+                                                </td>
+                                                {isAdmin && (
+                                                    <td style={{ textAlign: "right", paddingRight: "24px" }}>
+                                                        <button 
+                                                            onClick={() => deleteComponent(comp.id)}
+                                                            style={{ 
+                                                                background: "#FEF2F2", 
+                                                                border: "1px solid #FECACA", 
+                                                                color: "#EF4444", 
+                                                                padding: "6px 12px",
+                                                                borderRadius: "4px",
+                                                                cursor: "pointer", 
+                                                                fontSize: "13px",
+                                                                fontWeight: "500"
+                                                            }}
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </td>
+                                                )}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* PANEL 3: CLASS STRUCTURES */}
                     <div className="report-panel">
                         <div className="report-panel-header">
                             <div>
-                                <h3>Class & Section Fee Structures</h3>
-                                <p>{selectedYear?.name || "No academic year selected"}</p>
+                                <h3>3. Class Fee Structures</h3>
+                                <p>{selectedYear ? `Configuring structures for ${selectedYear.name}` : "Please select an Academic Year above."}</p>
                             </div>
                         </div>
 
                         {isAdmin && selectedYear && selectedYear.status !== "closed" && (
-                            <form 
-                                onSubmit={createStructure} 
-                                style={{ display: "flex", gap: "12px", marginBottom: "15px", padding: "0 20px" }}
-                            >
-                                <select
-                                    className="filter-select"
-                                    value={selectedClass}
-                                    onChange={(e) => setSelectedClass(e.target.value)}
-                                    required
-                                    style={{ maxWidth: "250px" }}
-                                >
-                                    <option value="">Select Class to Configure</option>
-                                    {availableClasses.map(c => (
-                                        <option key={c} value={c}>{c}</option>
-                                    ))}
-                                </select>
-                                <button type="submit" className="primary-btn">
-                                    + Add Structure
-                                </button>
-                            </form>
+                            <div style={{ padding: "16px 20px", backgroundColor: "#F8FAFC", borderBottom: "1px solid #E2E8F0" }}>
+                                <form onSubmit={createStructure} style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                                    <select
+                                        className="filter-select"
+                                        value={selectedClass}
+                                        onChange={(e) => setSelectedClass(e.target.value)}
+                                        required
+                                        style={{ minWidth: "250px", marginBottom: "0", backgroundColor: "#fff" }}
+                                    >
+                                        <option value="">Select Class to Configure...</option>
+                                        {availableClasses.map(c => {
+                                            const displayClass = formatClass(c);
+                                            return <option key={c.id} value={displayClass}>{displayClass}</option>;
+                                        })}
+                                    </select>
+                                    <button type="submit" className="primary-btn">+ Add Class Structure</button>
+                                </form>
+                            </div>
                         )}
 
                         <div className="table-container">
-                            {structures.length === 0 ? (
-                                <div style={{ padding: "30px", textAlign: "center" }}>
-                                    No fee structures found for this academic year.
-                                </div>
+                            {!selectedYear ? (
+                                <div style={{ padding: "40px", textAlign: "center", color: "#64748B" }}>Select an academic year to view class fees.</div>
+                            ) : structures.length === 0 ? (
+                                <div style={{ padding: "40px", textAlign: "center", color: "#64748B" }}>No fee structures found for {selectedYear.name}.</div>
                             ) : (
                                 <table>
                                     <thead>
@@ -352,16 +457,8 @@ function FeesPage() {
                                                 <td>{money(structure.totalAmount)}</td>
                                                 <td>
                                                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                                                        <button className="edit-btn" onClick={() => openStructure(structure)}>
-                                                            View / Edit
-                                                        </button>
-                                                        {isAdmin && (
-                                                            <>
-                                                                <button className="history-btn" onClick={() => copyStructure(structure)}>
-                                                                    Copy
-                                                                </button>
-                                                            </>
-                                                        )}
+                                                        <button className="edit-btn" onClick={() => openStructure(structure)}>View / Edit Prices</button>
+                                                        {isAdmin && <button className="history-btn" onClick={() => copyStructure(structure)}>Copy Template</button>}
                                                     </div>
                                                 </td>
                                             </tr>
@@ -372,40 +469,44 @@ function FeesPage() {
                         </div>
                     </div>
 
-                    {/* STRUCTURE EDITOR MODAL */}
+                    {/* ========================================= */}
+                    {/* STRUCTURE EDITOR MODAL (FLOATS ON TOP)    */}
+                    {/* ========================================= */}
                     {selectedStructure && (
                         <div className="modal-overlay">
-                            <div className="history-modal">
+                            <div className="history-modal" style={{ maxWidth: "700px" }}>
                                 <div className="modal-header">
                                     <div>
-                                        <h2>Class: {selectedStructure.className}</h2>
-                                        <p>{selectedStructure.academicYearName}</p>
+                                        <h2>Configure Prices: Class {selectedStructure.className}</h2>
+                                        <p>{selectedStructure.academicYearName} • All your Master Components appear here.</p>
                                     </div>
-                                    <button
-                                        className="close-btn"
-                                        onClick={() => {
-                                            setSelectedStructure(null);
-                                            setStructureItems([]);
-                                        }}
-                                    >
-                                        ✕
-                                    </button>
+                                    <button className="close-btn" onClick={() => { setSelectedStructure(null); setStructureItems([]); }}>✕</button>
                                 </div>
 
-                                <div className="table-container">
+                                <div className="table-container" style={{ maxHeight: "60vh", overflowY: "auto" }}>
                                     <table>
                                         <thead>
                                             <tr>
                                                 <th>Fee Component</th>
-                                                <th>Optional</th>
-                                                <th>Amount</th>
+                                                <th>Type</th>
+                                                <th>Amount (₹)</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {structureItems.map(item => (
                                                 <tr key={item.componentId}>
-                                                    <td>{item.componentName}</td>
-                                                    <td>{item.isOptional ? "Yes" : "No"}</td>
+                                                    <td style={{ fontWeight: "500" }}>{item.componentName}</td>
+                                                    <td>
+                                                        <span style={{ 
+                                                            padding: "4px 8px", 
+                                                            borderRadius: "4px", 
+                                                            fontSize: "11px", 
+                                                            backgroundColor: item.isOptional ? "#FEF3C7" : "#F1F5F9",
+                                                            color: item.isOptional ? "#D97706" : "#475569"
+                                                        }}>
+                                                            {item.isOptional ? "Optional" : "Mandatory"}
+                                                        </span>
+                                                    </td>
                                                     <td>
                                                         {isAdmin && selectedStructure.academicYearStatus !== "closed" ? (
                                                             <input
@@ -414,6 +515,8 @@ function FeesPage() {
                                                                 step="0.01"
                                                                 value={item.amount}
                                                                 onChange={e => changeAmount(item.componentId, e.target.value)}
+                                                                className="search-input"
+                                                                style={{ width: "140px", marginBottom: "0", padding: "8px" }}
                                                             />
                                                         ) : (
                                                             money(item.amount)
@@ -423,27 +526,19 @@ function FeesPage() {
                                             ))}
                                         </tbody>
                                         <tfoot>
-                                            <tr>
-                                                <th colSpan="2">Standard Total</th>
-                                                <th>{money(total)}</th>
+                                            <tr style={{ backgroundColor: "#F8FAFC" }}>
+                                                <th colSpan="2" style={{ textAlign: "right", fontSize: "14px", color: "#475569" }}>Total Class Demand:</th>
+                                                <th style={{ color: "#2563EB", fontSize: "18px", padding: "16px" }}>{money(total)}</th>
                                             </tr>
                                         </tfoot>
                                     </table>
                                 </div>
 
-                                <div className="modal-actions">
-                                    <button
-                                        className="cancel-btn"
-                                        onClick={() => {
-                                            setSelectedStructure(null);
-                                            setStructureItems([]);
-                                        }}
-                                    >
-                                        Close
-                                    </button>
+                                <div className="modal-actions" style={{ padding: "20px", borderTop: "1px solid #E2E8F0" }}>
+                                    <button className="cancel-btn" onClick={() => { setSelectedStructure(null); setStructureItems([]); }}>Close</button>
                                     {isAdmin && selectedStructure.academicYearStatus !== "closed" && (
-                                        <button className="save-btn" onClick={saveStructure} disabled={saving}>
-                                            {saving ? "Saving..." : "Save Fee Structure"}
+                                        <button className="save-btn" onClick={saveStructure} disabled={saving} style={{ padding: "10px 24px" }}>
+                                            {saving ? "Saving Prices..." : "Save Fee Prices"}
                                         </button>
                                     )}
                                 </div>

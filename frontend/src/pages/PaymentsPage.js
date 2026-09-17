@@ -7,6 +7,7 @@ import api from "../services/api";
 
 function PaymentsPage() {
     const [payments, setPayments] = useState([]);
+    const [classes, setClasses] = useState([]); // NEW: Dynamic classes state
     const [showForm, setShowForm] = useState(false);
     const [filters, setFilters] = useState({
         search: "",
@@ -17,10 +18,6 @@ function PaymentsPage() {
     });
     const [activeYear, setActiveYear] = useState("");
 
-    const classes = [
-        "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"
-    ];
-
     useEffect(() => {
         loadInitialData();
     }, []);
@@ -28,7 +25,8 @@ function PaymentsPage() {
     const loadInitialData = async () => {
         await Promise.all([
             fetchPayments(),
-            fetchActiveYear()
+            fetchActiveYear(),
+            fetchClasses() // Fetching dynamic classes concurrently
         ]);
     };
 
@@ -39,6 +37,15 @@ function PaymentsPage() {
             setActiveYear(active?.name || "");
         } catch (error) {
             console.error(error);
+        }
+    };
+
+    const fetchClasses = async () => {
+        try {
+            const res = await api.get("/classes");
+            setClasses(Array.isArray(res.data) ? res.data : []);
+        } catch (error) {
+            console.error("Unable to fetch classes:", error);
         }
     };
 
@@ -136,9 +143,9 @@ function PaymentsPage() {
                             className="filter-select"
                         >
                             <option value="All">All Classes</option>
-                            {classes.map(className => (
-                                <option key={className} value={className}>
-                                    {className === "LKG" || className === "UKG" ? className : `${className} Standard`}
+                            {classes.map(c => (
+                                <option key={c.id} value={c.name}>
+                                    {c.name.includes("LKG") || c.name.includes("UKG") ? c.name : `${c.name} Standard`}
                                 </option>
                             ))}
                         </select>

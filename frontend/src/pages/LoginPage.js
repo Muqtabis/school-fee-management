@@ -232,39 +232,22 @@ export default function LoginPage() {
                     }}
                 >
 
-                    <div
+                    {/* SCHOOL LOGO IMAGE */}
+                    <img
+                        src="/logo.png"
+                        alt="The Age School Logo"
                         style={{
-
-                            width: "55px",
-
-                            height: "55px",
-
-                            margin:
-                                "0 auto 12px",
-
-                            borderRadius: "50%",
-
-                            background:
-                                "#17365d",
-
-                            color: "#ffffff",
-
-                            display: "flex",
-
-                            alignItems: "center",
-
-                            justifyContent: "center",
-
-                            fontWeight: "bold",
-
-                            fontSize: "17px"
-
+                            width: "65px",
+                            height: "65px",
+                            objectFit: "contain",
+                            margin: "0 auto 12px",
+                            display: "block"
                         }}
-                    >
-
-                        TAS
-
-                    </div>
+                        onError={(e) => {
+                            // Fallback if logo.png is missing
+                            e.target.style.display = 'none';
+                        }}
+                    />
 
 
                     <h1
@@ -299,7 +282,7 @@ export default function LoginPage() {
                         }}
                     >
 
-                        Fee Management System
+                        The Age School ERP
 
                     </p>
 
@@ -561,6 +544,7 @@ export default function LoginPage() {
                                 padding: "5px"
 
                             }}
+
                         >
 
                             {showPassword

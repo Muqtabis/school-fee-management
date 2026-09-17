@@ -4,7 +4,7 @@ function Footer() {
 
         <footer className="footer">
 
-            © {new Date().getFullYear()} The Age School Fee Management System
+            © {new Date().getFullYear()} The Age School ERP
 
         </footer>
 

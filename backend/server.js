@@ -72,6 +72,12 @@ app.use(
     require("./routes/students")
 );
 
+// NEW: Classes Route Mounted Here
+app.use(
+    "/classes",
+    require("./routes/classes")
+);
+
 app.use(
     "/fees",
     require("./routes/fees")

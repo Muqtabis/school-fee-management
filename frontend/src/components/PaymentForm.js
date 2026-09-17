@@ -3,6 +3,7 @@ import api from "../services/api";
 
 function PaymentForm({ onClose }) {
     const [students, setStudents] = useState([]);
+    const [classes, setClasses] = useState([]); // NEW: Dynamic classes state
     const [filteredStudents, setFilteredStudents] = useState([]);
     const [feeSummary, setFeeSummary] = useState(null);
     const [activeYear, setActiveYear] = useState(null);
@@ -18,25 +19,22 @@ function PaymentForm({ onClose }) {
         remarks: ""
     });
 
-    const classes = [
-        "LKG", "UKG", 
-    "1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", 
-    "5A", "5B", "6A", "6B", "7A", "7B", "8A", "8B", 
-    "9A", "9B", "10A", "10B"
-    ];
-
     useEffect(() => {
         loadData();
     }, []);
 
     const loadData = async () => {
         try {
-            const [studentResponse, yearResponse] = await Promise.all([
+            // Fetch students, academic years, and classes all at once
+            const [studentResponse, yearResponse, classResponse] = await Promise.all([
                 api.get("/students"),
-                api.get("/fees/academic-years")
+                api.get("/fees/academic-years"),
+                api.get("/classes")
             ]);
 
             setStudents(Array.isArray(studentResponse.data) ? studentResponse.data : []);
+            setClasses(Array.isArray(classResponse.data) ? classResponse.data : []);
+            
             const years = Array.isArray(yearResponse.data) ? yearResponse.data : [];
             const current = years.find((year) => year.status === "active");
             setActiveYear(current || null);
@@ -250,8 +248,8 @@ function PaymentForm({ onClose }) {
                             <select value={formData.className} onChange={handleClassChange} required>
                                 <option value="">Select Class</option>
                                 {classes.map((c) => (
-                                    <option key={c} value={c}>
-                                        {c === "LKG" || c === "UKG" ? c : `${c} Standard`}
+                                    <option key={c.id} value={c.name}>
+                                        {c.name.includes("LKG") || c.name.includes("UKG") ? c.name : `${c.name} Standard`}
                                     </option>
                                 ))}
                             </select>

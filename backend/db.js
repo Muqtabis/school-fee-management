@@ -8,7 +8,6 @@ const fs = require("fs");
 
 const dataDir = path.join(__dirname, "data");
 
-// Ensure the data directory exists before opening connection
 if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
 }
@@ -85,17 +84,36 @@ async function initializeDatabase() {
         await run(`
             CREATE TABLE IF NOT EXISTS students (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                studentName TEXT NOT NULL,
+                admissionNumber TEXT,
+                satsNumber TEXT,
                 rollNumber TEXT,
+                studentName TEXT NOT NULL,
                 className TEXT NOT NULL,
+                gender TEXT,
+                dob TEXT,
                 fatherName TEXT,
+                motherName TEXT,
                 contact1 TEXT,
+                address TEXT,
+                remark TEXT,
                 previousDues REAL DEFAULT 0,
                 tuitionFee REAL DEFAULT 0,
+                concessionAmount REAL DEFAULT 0,
+                concessionReason TEXT,
                 status TEXT NOT NULL DEFAULT 'active',
                 archivedAt TEXT,
                 archivedBy INTEGER,
                 archiveReason TEXT
+            )
+        `);
+
+        // CLASSES
+        await run(`
+            CREATE TABLE IF NOT EXISTS classes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                className TEXT NOT NULL,
+                section TEXT,
+                createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         `);
 
@@ -305,6 +323,17 @@ async function migrateDatabase() {
     await addColumnIfMissing("students", "archivedBy", "INTEGER");
     await addColumnIfMissing("students", "archiveReason", "TEXT");
 
+    // NEW PROFILE & FEE MIGRATIONS
+    await addColumnIfMissing("students", "admissionNumber", "TEXT");
+    await addColumnIfMissing("students", "satsNumber", "TEXT");
+    await addColumnIfMissing("students", "motherName", "TEXT");
+    await addColumnIfMissing("students", "gender", "TEXT");
+    await addColumnIfMissing("students", "dob", "TEXT");
+    await addColumnIfMissing("students", "address", "TEXT");
+    await addColumnIfMissing("students", "remark", "TEXT");
+    await addColumnIfMissing("students", "concessionAmount", "REAL DEFAULT 0");
+    await addColumnIfMissing("students", "concessionReason", "TEXT");
+
     await addColumnIfMissing("payments", "feeAccountId", "INTEGER");
     await addColumnIfMissing("payments", "remarks", "TEXT");
     await addColumnIfMissing("payments", "status", "TEXT NOT NULL DEFAULT 'completed'");
@@ -327,22 +356,7 @@ async function migrateDatabase() {
 // =====================================================
 
 async function seedFeeComponents() {
-    const components = [
-        ["tuition", "Tuition Fee", 1, 0],
-        ["admission", "Admission Fee", 2, 0],
-        ["transport", "Transport Fee", 3, 1],
-        ["books", "Books Fee", 4, 1],
-        ["uniform", "Uniform Fee", 5, 1],
-        ["exam", "Exam Fee", 6, 1],
-        ["activity", "Activity Fee", 7, 1]
-    ];
-
-    for (const component of components) {
-        await run(
-            `INSERT OR IGNORE INTO fee_components (componentKey, componentName, sortOrder, isOptional) VALUES (?, ?, ?, ?)`,
-            component
-        );
-    }
+    return Promise.resolve();
 }
 
 // =====================================================

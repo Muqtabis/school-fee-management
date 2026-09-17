@@ -265,7 +265,6 @@ exports.getStructure = async (req, res) => {
             return res.status(404).json({ success: false, message: "Fee structure not found." });
         }
 
-        // Pulls all fee components so you can see them even if they are empty
         const items = await all(
             `
             SELECT 
@@ -580,5 +579,94 @@ exports.getStudentFeeAccount = async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ success: false, message: "Unable to load student fee account." });
+    }
+};
+
+// =====================================================
+// DYNAMIC FEE COMPONENTS
+// =====================================================
+
+exports.getFeeComponents = async (req, res) => {
+    try {
+        const components = await all(`SELECT * FROM fee_components ORDER BY sortOrder ASC, id ASC`);
+        res.json(components);
+    } catch (error) {
+        console.error("Error fetching components:", error);
+        res.status(500).json({ success: false, message: "Unable to load fee components." });
+    }
+};
+
+exports.createFeeComponent = async (req, res) => {
+    const { componentName, isOptional } = req.body;
+    
+    if (!componentName || !componentName.trim()) {
+        return res.status(400).json({ success: false, message: "Component name is required." });
+    }
+
+    try {
+        const cleanName = componentName.trim();
+        // Generate a safe unique key (e.g., "Library Fee" -> "library_fee")
+        const componentKey = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+
+        const existing = await get(`SELECT id FROM fee_components WHERE componentKey = ?`, [componentKey]);
+        if (existing) {
+            return res.status(409).json({ success: false, message: "A fee component with this or a similar name already exists." });
+        }
+
+        // Put the new component at the end of the list
+        const maxSort = await get(`SELECT MAX(sortOrder) as maxSort FROM fee_components`);
+        const nextSort = (maxSort?.maxSort || 0) + 1;
+
+        const result = await run(
+            `INSERT INTO fee_components (componentKey, componentName, sortOrder, isOptional) VALUES (?, ?, ?, ?)`,
+            [componentKey, cleanName, nextSort, isOptional ? 1 : 0]
+        );
+
+        await safeLogAudit({
+            userId: req.user?.id || null,
+            action: "FEE_COMPONENT_CREATED",
+            entityType: "fee_component",
+            entityId: result.lastID,
+            details: { name: cleanName }
+        });
+
+        res.status(201).json({ success: true, id: result.lastID, message: "Custom fee component created." });
+    } catch (error) {
+        console.error("Error creating component:", error);
+        res.status(500).json({ success: false, message: "Unable to create fee component." });
+    }
+};
+
+exports.deleteFeeComponent = async (req, res) => {
+    const id = Number(req.params.id);
+
+    if (!id || id <= 0) {
+        return res.status(400).json({ success: false, message: "Invalid component." });
+    }
+
+    try {
+        // Safety check: Prevent deleting a component if it's actively being used in a fee structure
+        const inUse = await get(`SELECT id FROM class_fee_items WHERE componentId = ? LIMIT 1`, [id]);
+        if (inUse) {
+            return res.status(409).json({ 
+                success: false, 
+                message: "Cannot delete this component because it is currently assigned to a Class Fee Structure. Remove it from the classes first." 
+            });
+        }
+
+        await run(`DELETE FROM fee_components WHERE id = ?`, [id]);
+
+        await safeLogAudit({
+            userId: req.user?.id || null,
+            action: "FEE_COMPONENT_DELETED",
+            entityType: "fee_component",
+            entityId: id,
+            details: { componentId: id }
+        });
+
+        res.json({ success: true, message: "Fee component deleted successfully." });
+    } catch (error) {
+        console.error("Error deleting component:", error);
+        res.status(500).json({ success: false, message: "Unable to delete fee component." });
     }
 };
