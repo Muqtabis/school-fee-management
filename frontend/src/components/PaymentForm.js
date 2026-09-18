@@ -3,12 +3,14 @@ import api from "../services/api";
 
 function PaymentForm({ onClose }) {
     const [students, setStudents] = useState([]);
-    const [classes, setClasses] = useState([]); // NEW: Dynamic classes state
+    const [classes, setClasses] = useState([]);
     const [filteredStudents, setFilteredStudents] = useState([]);
     const [feeSummary, setFeeSummary] = useState(null);
     const [activeYear, setActiveYear] = useState(null);
     const [loadingSummary, setLoadingSummary] = useState(false);
     const [loading, setLoading] = useState(false);
+
+    const [selectedComponents, setSelectedComponents] = useState({});
 
     const [formData, setFormData] = useState({
         className: "",
@@ -25,7 +27,6 @@ function PaymentForm({ onClose }) {
 
     const loadData = async () => {
         try {
-            // Fetch students, academic years, and classes all at once
             const [studentResponse, yearResponse, classResponse] = await Promise.all([
                 api.get("/students"),
                 api.get("/fees/academic-years"),
@@ -45,13 +46,9 @@ function PaymentForm({ onClose }) {
 
     const handleClassChange = (e) => {
         const selectedClass = e.target.value;
-        setFormData({
-            ...formData,
-            className: selectedClass,
-            studentId: "",
-            amount: ""
-        });
+        setFormData({ ...formData, className: selectedClass, studentId: "", amount: "" });
         setFeeSummary(null);
+        setSelectedComponents({});
 
         if (!selectedClass) {
             setFilteredStudents([]);
@@ -67,6 +64,7 @@ function PaymentForm({ onClose }) {
     const handleStudentChange = async (e) => {
         const studentId = e.target.value;
         setFormData({ ...formData, studentId, amount: "" });
+        setSelectedComponents({});
 
         if (studentId) {
             await fetchFeeSummary(studentId);
@@ -78,7 +76,7 @@ function PaymentForm({ onClose }) {
     const fetchFeeSummary = async (studentId) => {
         try {
             setLoadingSummary(true);
-            const res = await api.get(`/fees/student/${studentId}`);
+            const res = await api.get(`/payments/history/student/${studentId}`);
             setFeeSummary(res.data);
         } catch (error) {
             console.error("Fee account error:", error);
@@ -88,93 +86,176 @@ function PaymentForm({ onClose }) {
         }
     };
 
-    // Selected student object from students state
     const selectedStudent = useMemo(() => {
         return students.find((s) => Number(s.id) === Number(formData.studentId)) || null;
     }, [students, formData.studentId]);
 
     // =====================================================
-    // REAL-TIME 4-PART FIFO SETTLEMENT CALCULATION
+    // PRECISE COMPONENT-WISE LEDGER PARSER
     // =====================================================
-    const financialOverview = useMemo(() => {
-        if (!selectedStudent && !feeSummary) return null;
+    const parsedLedger = useMemo(() => {
+        if (!feeSummary || !feeSummary.items) return null;
 
         const studentPrevDues = Number(selectedStudent?.previousDues || 0);
-        const studentConcession = Number(selectedStudent?.concessionAmount || 0);
+        const concession = Number(selectedStudent?.concessionAmount || 0);
 
-        // Standard Class Base from API items or totalFee
-        let standardBase = Number(feeSummary?.totalFee || 0);
-        if (Array.isArray(feeSummary?.items) && feeSummary.items.length > 0) {
-            standardBase = feeSummary.items.reduce((sum, item) => {
-                if (item.itemType === "carry_forward" || item.componentName?.toLowerCase().includes("previous")) {
-                    return sum;
-                }
-                return sum + Number(item.amount || 0);
-            }, 0);
+        let totalTuitionAmount = 0;
+        const rawAdditionalItems = [];
+
+        feeSummary.items.forEach((item) => {
+            const itemAmt = Number(item.amount || 0);
+            if (itemAmt <= 0 || item.itemType === "carry_forward" || item.componentName?.toLowerCase().includes("previous")) return;
+
+            const name = String(item.componentName || "").toLowerCase();
+            const key = String(item.componentKey || "").toLowerCase();
+
+            if (key.includes("tution") || key.includes("tuition") || name.includes("tution") || name.includes("tuition")) {
+                totalTuitionAmount += itemAmt;
+            } else {
+                rawAdditionalItems.push({ name: item.componentName, amount: itemAmt });
+            }
+        });
+
+        const netTuition = Math.max(0, totalTuitionAmount - concession);
+        const term1Total = Math.floor(netTuition / 3);
+        const term2Total = Math.floor(netTuition / 3);
+        const term3Total = netTuition - (term1Total + term2Total);
+
+        let paidMap = {
+            "previous dues": 0,
+            "tuition fee (term 1)": 0,
+            "tuition fee (term 2)": 0,
+            "tuition fee (term 3)": 0
+        };
+        rawAdditionalItems.forEach(i => { paidMap[i.name.toLowerCase().trim()] = 0; });
+
+        let unassignedLegacyPool = 0;
+
+        (feeSummary.payments || []).forEach(p => {
+            if (p.status === "reversed") return;
+            if (Array.isArray(p.lineItems) && p.lineItems.length > 0) {
+                p.lineItems.forEach(li => {
+                    const cName = String(li.componentName || "").toLowerCase().trim();
+                    if (paidMap[cName] !== undefined) {
+                        paidMap[cName] += Number(li.amount || 0);
+                    } else if (cName.includes("previous")) {
+                        paidMap["previous dues"] += Number(li.amount || 0);
+                    } else if (cName.includes("term 1")) {
+                        paidMap["tuition fee (term 1)"] += Number(li.amount || 0);
+                    } else if (cName.includes("term 2")) {
+                        paidMap["tuition fee (term 2)"] += Number(li.amount || 0);
+                    } else if (cName.includes("term 3")) {
+                        paidMap["tuition fee (term 3)"] += Number(li.amount || 0);
+                    } else {
+                        const matchedKey = Object.keys(paidMap).find(k => k.toLowerCase() === cName);
+                        if (matchedKey) paidMap[matchedKey] += Number(li.amount || 0);
+                        else paidMap[cName] = (paidMap[cName] || 0) + Number(li.amount || 0);
+                    }
+                });
+            } else {
+                unassignedLegacyPool += Number(p.amount || 0);
+            }
+        });
+
+        if (unassignedLegacyPool > 0) {
+            ["tuition fee (term 1)", "tuition fee (term 2)", "tuition fee (term 3)"].forEach(termKey => {
+                const limit = term1Total;
+                const rem = limit - (paidMap[termKey] || 0);
+                const take = Math.min(rem, unassignedLegacyPool);
+                if (take > 0) { paidMap[termKey] += take; unassignedLegacyPool -= take; }
+            });
+            rawAdditionalItems.forEach(item => {
+                const n = item.name.toLowerCase().trim();
+                const rem = item.amount - (paidMap[n] || 0);
+                const take = Math.min(rem, unassignedLegacyPool);
+                if (take > 0) { paidMap[n] += take; unassignedLegacyPool -= take; }
+            });
+            const remPrev = studentPrevDues - (paidMap["previous dues"] || 0);
+            const takePrev = Math.min(remPrev, unassignedLegacyPool);
+            if (takePrev > 0) { paidMap["previous dues"] += takePrev; unassignedLegacyPool -= takePrev; }
         }
 
-        const netAcademicFee = Math.max(0, standardBase - studentConcession);
-        const totalAssessedDemand = studentPrevDues + netAcademicFee;
+        return {
+            studentPrevDues, concession, netTuition, term1Total, term2Total, term3Total,
+            rawAdditionalItems, paidMap
+        };
+    }, [feeSummary, selectedStudent]);
+
+    // =====================================================
+    // BUILD CLEAN COMPONENT LIST (VANISHES IF PAID 100%)
+    // =====================================================
+    const componentBreakdown = useMemo(() => {
+        if (!parsedLedger) return { tuitionTerms: [], additionalItems: [], previousDues: 0 };
+        const { studentPrevDues, term1Total, term2Total, term3Total, rawAdditionalItems, paidMap } = parsedLedger;
+
+        const prevDuesBal = Math.max(0, studentPrevDues - (paidMap["previous dues"] || 0));
+        
+        const tuitionTerms = [
+            { name: "Tuition Fee (Term 1)", total: term1Total, paid: paidMap["tuition fee (term 1)"] || 0 },
+            { name: "Tuition Fee (Term 2)", total: term2Total, paid: paidMap["tuition fee (term 2)"] || 0 },
+            { name: "Tuition Fee (Term 3)", total: term3Total, paid: paidMap["tuition fee (term 3)"] || 0 }
+        ].map(t => ({ ...t, amount: Math.max(0, t.total - t.paid) })).filter(t => t.amount > 0);
+
+        const additionalItems = rawAdditionalItems.map(item => {
+            const paid = paidMap[item.name.toLowerCase().trim()] || 0;
+            return { name: item.name, total: item.amount, amount: Math.max(0, item.amount - paid) };
+        }).filter(i => i.amount > 0);
+
+        return { previousDues: prevDuesBal, tuitionTerms, additionalItems };
+    }, [parsedLedger]);
+
+    // =====================================================
+    // SETTLEMENT TRACKER CALCULATIONS
+    // =====================================================
+    const financialOverview = useMemo(() => {
+        if (!parsedLedger) return null;
+        const { studentPrevDues, term1Total, term2Total, term3Total, netTuition, rawAdditionalItems, paidMap } = parsedLedger;
+
+        const totalAssessedDemand = studentPrevDues + netTuition + rawAdditionalItems.reduce((s,i)=>s+i.amount, 0);
         const previouslyPaid = Number(feeSummary?.totalPaid || 0);
         const currentPayAmount = Number(formData.amount || 0);
-        const currentBalanceDue = Math.max(0, totalAssessedDemand - previouslyPaid);
+        const currentBalanceDue = Math.max(0, totalAssessedDemand - previouslyPaid - currentPayAmount);
 
-        // 3-Term Academic Breakdown
-        const term1Total = Math.floor(netAcademicFee / 3);
-        const term2Total = Math.floor(netAcademicFee / 3);
-        const term3Total = netAcademicFee - (term1Total + term2Total);
-
-        // Cumulative Payment Pool for FIFO Waterfall
-        let pool = previouslyPaid + currentPayAmount;
-
-        const prevPaidSoFar = Math.min(studentPrevDues, pool);
-        pool = Math.max(0, pool - studentPrevDues);
-
-        const term1PaidSoFar = Math.min(term1Total, pool);
-        pool = Math.max(0, pool - term1Total);
-
-        const term2PaidSoFar = Math.min(term2Total, pool);
-        pool = Math.max(0, pool - term2Total);
-
-        const term3PaidSoFar = Math.min(term3Total, pool);
+        const getNow = (name) => selectedComponents[name] || 0;
 
         const buckets = [
-            {
-                name: "Previous Dues",
-                total: studentPrevDues,
-                paid: prevPaidSoFar,
-                due: Math.max(0, studentPrevDues - prevPaidSoFar),
-                isPrevious: true
-            },
-            {
-                name: "Term 1 Fee",
-                total: term1Total,
-                paid: term1PaidSoFar,
-                due: Math.max(0, term1Total - term1PaidSoFar)
-            },
-            {
-                name: "Term 2 Fee",
-                total: term2Total,
-                paid: term2PaidSoFar,
-                due: Math.max(0, term2Total - term2PaidSoFar)
-            },
-            {
-                name: "Term 3 Fee",
-                total: term3Total,
-                paid: term3PaidSoFar,
-                due: Math.max(0, term3Total - term3PaidSoFar)
-            }
+            { name: "Previous Dues", total: studentPrevDues, paid: (paidMap["previous dues"] || 0) + getNow("Previous Dues"), due: Math.max(0, studentPrevDues - ((paidMap["previous dues"] || 0) + getNow("Previous Dues"))), isPrevious: true },
+            { name: "Term 1 Fee", total: term1Total, paid: (paidMap["tuition fee (term 1)"] || 0) + getNow("Tuition Fee (Term 1)"), due: Math.max(0, term1Total - ((paidMap["tuition fee (term 1)"] || 0) + getNow("Tuition Fee (Term 1)"))) },
+            { name: "Term 2 Fee", total: term2Total, paid: (paidMap["tuition fee (term 2)"] || 0) + getNow("Tuition Fee (Term 2)"), due: Math.max(0, term2Total - ((paidMap["tuition fee (term 2)"] || 0) + getNow("Tuition Fee (Term 2)"))) },
+            { name: "Term 3 Fee", total: term3Total, paid: (paidMap["tuition fee (term 3)"] || 0) + getNow("Tuition Fee (Term 3)"), due: Math.max(0, term3Total - ((paidMap["tuition fee (term 3)"] || 0) + getNow("Tuition Fee (Term 3)"))) }
         ];
 
-        return {
-            totalAssessedDemand,
-            previouslyPaid,
-            currentBalanceDue,
-            studentPrevDues,
-            studentConcession,
-            buckets
-        };
-    }, [selectedStudent, feeSummary, formData.amount]);
+        return { totalAssessedDemand, previouslyPaid, currentBalanceDue, buckets };
+    }, [parsedLedger, selectedComponents, feeSummary, formData.amount]);
+
+    const handleToggleComponent = (componentName, maxAmount, isChecked) => {
+        setSelectedComponents((prev) => {
+            const updated = { ...prev };
+            if (isChecked) {
+                updated[componentName] = maxAmount;
+            } else {
+                delete updated[componentName];
+            }
+            const newTotal = Object.values(updated).reduce((sum, val) => sum + Number(val || 0), 0);
+            setFormData((f) => ({ ...f, amount: newTotal > 0 ? String(newTotal) : "" }));
+            return updated;
+        });
+    };
+
+    const handleComponentAmountChange = (componentName, value, maxAllowed) => {
+        let parsedVal = Number(value);
+        if (parsedVal > maxAllowed) parsedVal = maxAllowed;
+        if (parsedVal < 0) parsedVal = 0;
+
+        setSelectedComponents((prev) => {
+            const updated = { ...prev, [componentName]: parsedVal };
+            // If they type 0, uncheck the box entirely
+            if (parsedVal === 0) delete updated[componentName];
+            const newTotal = Object.values(updated).reduce((sum, val) => sum + Number(val || 0), 0);
+            setFormData((f) => ({ ...f, amount: newTotal > 0 ? String(newTotal) : "" }));
+            return updated;
+        });
+    };
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -183,18 +264,16 @@ function PaymentForm({ onClose }) {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        if (!activeYear) {
-            alert("There is no active academic year.");
-            return;
-        }
-        if (!formData.className || !formData.studentId) {
-            alert("Please select a class and a student.");
-            return;
-        }
-        if (!formData.amount || Number(formData.amount) <= 0) {
-            alert("Please enter a valid payment amount.");
-            return;
-        }
+        if (!activeYear) return alert("There is no active academic year.");
+        if (!formData.className || !formData.studentId) return alert("Please select a class and a student.");
+        if (!formData.amount || Number(formData.amount) <= 0) return alert("Please check and specify amounts to collect.");
+
+        const lineItems = Object.entries(selectedComponents)
+            .filter(([_, amt]) => Number(amt) > 0)
+            .map(([componentName, amount]) => ({
+                componentName,
+                amount: Number(amount)
+            }));
 
         try {
             setLoading(true);
@@ -203,7 +282,8 @@ function PaymentForm({ onClose }) {
                 paymentDate: formData.paymentDate,
                 amount: Number(formData.amount),
                 paymentMode: formData.paymentMode,
-                remarks: formData.remarks
+                remarks: formData.remarks,
+                lineItems: lineItems.length > 0 ? lineItems : undefined 
             });
             onClose();
         } catch (error) {
@@ -214,199 +294,166 @@ function PaymentForm({ onClose }) {
         }
     };
 
-    const money = (value) =>
-        `₹${Number(value || 0).toLocaleString("en-IN", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        })}`;
+    const money = (value) => `₹${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     return (
         <div className="modal-overlay">
-            <div className="payment-modal" style={{ maxWidth: "650px" }}>
-                <div className="modal-header">
+            <div className="payment-modal" style={{ maxWidth: "650px", maxHeight: "90vh", overflowY: "auto" }}>
+                <div className="modal-header" style={{ position: "sticky", top: 0, backgroundColor: "#fff", zIndex: 10 }}>
                     <div>
                         <h2>Collect Fee</h2>
-                        <p>Record a fee payment with 4-part term reconciliation</p>
+                        <p>Record itemized partial or full fee collections</p>
                     </div>
-                    <button type="button" className="close-btn" onClick={onClose}>
-                        ✕
-                    </button>
+                    <button type="button" className="close-btn" onClick={onClose}>✕</button>
                 </div>
 
                 <div className="fee-summary" style={{ marginBottom: "16px" }}>
-                    <div>
-                        <span>Active Academic Year</span>
-                        <strong>{activeYear?.name || "Not configured"}</strong>
-                    </div>
+                    <div><span>Active Academic Year</span><strong>{activeYear?.name || "Not configured"}</strong></div>
                 </div>
 
                 <form className="payment-form" onSubmit={handleSubmit}>
-                    {/* CLASS & STUDENT */}
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                         <div className="form-group">
                             <label>Class *</label>
                             <select value={formData.className} onChange={handleClassChange} required>
                                 <option value="">Select Class</option>
                                 {classes.map((c) => (
-                                    <option key={c.id} value={c.name}>
-                                        {c.name.includes("LKG") || c.name.includes("UKG") ? c.name : `${c.name} Standard`}
-                                    </option>
+                                    <option key={c.id} value={c.name}>{c.name.includes("LKG") || c.name.includes("UKG") ? c.name : `${c.name} Standard`}</option>
                                 ))}
                             </select>
                         </div>
-
                         <div className="form-group">
                             <label>Student *</label>
-                            <select
-                                value={formData.studentId}
-                                onChange={handleStudentChange}
-                                required
-                                disabled={!formData.className}
-                            >
-                                <option value="">
-                                    {!formData.className
-                                        ? "Select Class First"
-                                        : filteredStudents.length === 0
-                                        ? "No Students in this Class"
-                                        : "Select Student"}
-                                </option>
+                            <select value={formData.studentId} onChange={handleStudentChange} required disabled={!formData.className}>
+                                <option value="">{!formData.className ? "Select Class First" : filteredStudents.length === 0 ? "No Students" : "Select Student"}</option>
                                 {filteredStudents.map((student) => (
-                                    <option key={student.id} value={student.id}>
-                                        {student.rollNumber ? `Roll ${student.rollNumber} - ` : ""}
-                                        {student.studentName}
-                                    </option>
+                                    <option key={student.id} value={student.id}>{student.rollNumber ? `Roll ${student.rollNumber} - ` : ""}{student.studentName}</option>
                                 ))}
                             </select>
                         </div>
                     </div>
 
-                    {/* DYNAMIC FEE SUMMARY & 4-PART SETTLEMENT */}
                     {formData.studentId && (
                         <div className="fee-summary" style={{ marginTop: "10px" }}>
                             <div className="fee-summary-header">
-                                <div>
-                                    <span className="fee-summary-label">Student Fee Ledger</span>
-                                    <span className="fee-summary-subtitle">
-                                        {feeSummary?.academicYear?.name || activeYear?.name || ""}
-                                    </span>
-                                </div>
+                                <div><span className="fee-summary-label">Student Fee Ledger</span><span className="fee-summary-subtitle">{feeSummary?.academicYear?.name || activeYear?.name || ""}</span></div>
                                 {loadingSummary && <span>Loading ledger...</span>}
                             </div>
 
                             {financialOverview && !loadingSummary && (
                                 <>
                                     <div className="fee-summary-grid">
-                                        <div className="fee-summary-item">
-                                            <span>Total Demand</span>
-                                            <strong>{money(financialOverview.totalAssessedDemand)}</strong>
-                                        </div>
-                                        <div className="fee-summary-item">
-                                            <span>Paid Till Date</span>
-                                            <strong className="fee-paid">{money(financialOverview.previouslyPaid)}</strong>
-                                        </div>
-                                        <div className="fee-summary-item remaining">
-                                            <span>Current Due</span>
-                                            <strong className="fee-remaining">
-                                                {money(financialOverview.currentBalanceDue)}
-                                            </strong>
-                                        </div>
+                                        <div className="fee-summary-item"><span>Total Demand</span><strong>{money(financialOverview.totalAssessedDemand)}</strong></div>
+                                        <div className="fee-summary-item"><span>Paid Till Date</span><strong className="fee-paid">{money(financialOverview.previouslyPaid)}</strong></div>
+                                        <div className="fee-summary-item remaining"><span>Current Due</span><strong className="fee-remaining">{money(financialOverview.currentBalanceDue)}</strong></div>
                                     </div>
 
-                                    {/* 4-PART TERM ALLOCATION */}
                                     <div style={{ marginTop: "14px" }}>
-                                        <span style={{ fontSize: "12px", fontWeight: "700", color: "#475569", textTransform: "uppercase" }}>
-                                            Installment Settlement Tracker
-                                        </span>
+                                        <span style={{ fontSize: "12px", fontWeight: "700", color: "#475569", textTransform: "uppercase" }}>Installment Settlement Tracker</span>
                                         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px", marginTop: "6px" }}>
                                             {financialOverview.buckets.map((item, idx) => (
-                                                <div
-                                                    key={idx}
-                                                    style={{
-                                                        padding: "8px",
-                                                        borderRadius: "6px",
-                                                        border: "1px solid",
-                                                        borderColor: item.due === 0 && item.total > 0 ? "#86EFAC" : item.isPrevious ? "#BFDBFE" : "#E2E8F0",
-                                                        backgroundColor: item.due === 0 && item.total > 0 ? "#F0FDF4" : item.isPrevious ? "#EFF6FF" : "#F8FAFC"
-                                                    }}
-                                                >
-                                                    <div style={{ fontSize: "10px", fontWeight: "700", color: item.isPrevious ? "#1E40AF" : "#64748B" }}>
-                                                        {item.name.toUpperCase()}
-                                                    </div>
-                                                    <div style={{ fontSize: "12px", fontWeight: "700", marginTop: "2px" }}>
-                                                        {money(item.total)}
-                                                    </div>
-                                                    <div style={{ fontSize: "11px", color: item.due === 0 && item.total > 0 ? "#16A34A" : "#DC2626", marginTop: "2px" }}>
-                                                        {item.due === 0 && item.total > 0 ? "✓ Cleared" : `Due: ${money(item.due)}`}
-                                                    </div>
+                                                <div key={idx} style={{ padding: "8px", borderRadius: "6px", border: "1px solid", borderColor: item.due === 0 && item.total > 0 ? "#86EFAC" : item.isPrevious ? "#BFDBFE" : "#E2E8F0", backgroundColor: item.due === 0 && item.total > 0 ? "#F0FDF4" : item.isPrevious ? "#EFF6FF" : "#F8FAFC" }}>
+                                                    <div style={{ fontSize: "10px", fontWeight: "700", color: item.isPrevious ? "#1E40AF" : "#64748B" }}>{item.name.toUpperCase()}</div>
+                                                    <div style={{ fontSize: "12px", fontWeight: "700", marginTop: "2px" }}>{money(item.total)}</div>
+                                                    <div style={{ fontSize: "11px", color: item.due === 0 && item.total > 0 ? "#16A34A" : "#DC2626", marginTop: "2px" }}>{item.due === 0 && item.total > 0 ? "✓ Cleared" : `Due: ${money(item.due)}`}</div>
                                                 </div>
                                             ))}
                                         </div>
+                                    </div>
+
+                                    {/* CHECKBOXES WITH CUSTOM PARTIAL PAYMENT INPUTS */}
+                                    <div style={{ marginTop: "16px", borderTop: "1px solid #e2e8f0", paddingTop: "12px" }}>
+                                        <span style={{ fontSize: "12px", fontWeight: "700", color: "#475569", textTransform: "uppercase" }}>Select Fees To Collect (Customizable)</span>
+
+                                        {componentBreakdown.previousDues > 0 && (
+                                            <div style={{ marginTop: "8px", background: "#fef2f2", padding: "8px 12px", borderRadius: "6px", border: "1px solid #fecaca", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                                                    <input type="checkbox" checked={selectedComponents["Previous Dues"] !== undefined} onChange={(e) => handleToggleComponent("Previous Dues", componentBreakdown.previousDues, e.target.checked)} />
+                                                    <strong style={{ fontSize: "12px", color: "#b91c1c" }}>Previous Dues (Carry Forward)</strong>
+                                                </label>
+                                                {selectedComponents["Previous Dues"] !== undefined ? (
+                                                    <input type="number" value={selectedComponents["Previous Dues"]} onChange={(e) => handleComponentAmountChange("Previous Dues", e.target.value, componentBreakdown.previousDues)} style={{ width: "85px", padding: "2px 4px", fontSize: "12px", textAlign: "right" }} />
+                                                ) : (
+                                                    <span style={{ fontSize: "12px", fontWeight: "700", color: "#b91c1c" }}>{money(componentBreakdown.previousDues)}</span>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {componentBreakdown.tuitionTerms.length > 0 && (
+                                            <div style={{ marginTop: "10px" }}>
+                                                <div style={{ fontSize: "11px", fontWeight: "700", color: "#64748b", marginBottom: "6px" }}>TUITION FEE INSTALLMENTS</div>
+                                                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                                                    {componentBreakdown.tuitionTerms.map((term, idx) => (
+                                                        <div key={idx} style={{ padding: "8px", borderRadius: "6px", border: "1px solid #e2e8f0", background: selectedComponents[term.name] !== undefined ? "#f0fdf4" : "#f8fafc" }}>
+                                                            <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "11px", fontWeight: "700" }}>
+                                                                <input type="checkbox" checked={selectedComponents[term.name] !== undefined} onChange={(e) => handleToggleComponent(term.name, term.amount, e.target.checked)} />
+                                                                {term.name}
+                                                            </label>
+                                                            <div style={{ marginTop: "4px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                                                <span style={{ fontSize: "11px", color: "#15803d" }}>Due: {money(term.amount)}</span>
+                                                                {selectedComponents[term.name] !== undefined && (
+                                                                    <input type="number" value={selectedComponents[term.name]} onChange={(e) => handleComponentAmountChange(term.name, e.target.value, term.amount)} style={{ width: "65px", padding: "2px", fontSize: "11px", textAlign: "right" }} />
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {componentBreakdown.additionalItems.length > 0 && (
+                                            <div style={{ marginTop: "12px" }}>
+                                                <div style={{ fontSize: "11px", fontWeight: "700", color: "#64748b", marginBottom: "6px" }}>ADDITIONAL COMPONENTS</div>
+                                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                                                    {componentBreakdown.additionalItems.map((comp, idx) => (
+                                                        <div key={idx} style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #e2e8f0", background: selectedComponents[comp.name] !== undefined ? "#f0fdf4" : "#ffffff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                                            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "12px", fontWeight: "600" }}>
+                                                                <input type="checkbox" checked={selectedComponents[comp.name] !== undefined} onChange={(e) => handleToggleComponent(comp.name, comp.amount, e.target.checked)} />
+                                                                {comp.name}
+                                                            </label>
+                                                            {selectedComponents[comp.name] !== undefined ? (
+                                                                <input type="number" value={selectedComponents[comp.name]} onChange={(e) => handleComponentAmountChange(comp.name, e.target.value, comp.amount)} style={{ width: "75px", padding: "2px 4px", fontSize: "12px", textAlign: "right" }} />
+                                                            ) : (
+                                                                <span style={{ fontSize: "12px", fontWeight: "600", color: "#475569" }}>{money(comp.amount)}</span>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </>
                             )}
                         </div>
                     )}
 
-                    {/* PAYMENT INPUTS */}
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "14px" }}>
                         <div className="form-group">
                             <label>Payment Date *</label>
-                            <input
-                                type="date"
-                                name="paymentDate"
-                                value={formData.paymentDate}
-                                onChange={handleChange}
-                                required
-                            />
+                            <input type="date" name="paymentDate" value={formData.paymentDate} onChange={handleChange} required />
                         </div>
-
                         <div className="form-group">
                             <label>Amount (₹) *</label>
-                            <input
-                                type="number"
-                                name="amount"
-                                value={formData.amount}
-                                onChange={handleChange}
-                                min="1"
-                                step="0.01"
-                                placeholder="Enter payment amount"
-                                required
-                            />
+                            <input type="number" name="amount" value={formData.amount} readOnly style={{ backgroundColor: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold" }} placeholder="Auto-calculated from checkboxes" required />
                         </div>
                     </div>
 
                     <div className="form-group">
                         <label>Payment Mode *</label>
                         <select name="paymentMode" value={formData.paymentMode} onChange={handleChange}>
-                            <option>Cash</option>
-                            <option>UPI</option>
-                            <option>Card</option>
-                            <option>Bank Transfer</option>
-                            <option>Cheque</option>
+                            <option>Cash</option><option>UPI</option><option>Card</option><option>Bank Transfer</option><option>Cheque</option>
                         </select>
                     </div>
 
                     <div className="form-group">
                         <label>Remarks</label>
-                        <textarea
-                            name="remarks"
-                            rows="2"
-                            value={formData.remarks}
-                            onChange={handleChange}
-                            placeholder="Optional notes or transaction reference ID..."
-                        />
+                        <textarea name="remarks" rows="2" value={formData.remarks} onChange={handleChange} placeholder="Optional notes..." />
                     </div>
 
                     <div className="modal-actions" style={{ marginTop: "18px" }}>
-                        <button type="button" className="cancel-btn" onClick={onClose}>
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            className="save-btn"
-                            disabled={loading || !activeYear || loadingSummary}
-                        >
-                            {loading ? "Recording Payment..." : "Collect Fee"}
+                        <button type="button" className="cancel-btn" onClick={onClose}>Cancel</button>
+                        <button type="submit" className="save-btn" disabled={loading || !activeYear || loadingSummary || Number(formData.amount) <= 0}>
+                            {loading ? "Recording..." : "Collect Fee"}
                         </button>
                     </div>
                 </form>

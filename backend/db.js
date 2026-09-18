@@ -240,6 +240,17 @@ async function initializeDatabase() {
             )
         `);
 
+        // PAYMENT LINE ITEMS (NEW - Stores individual checkbox fee allocations safely)
+        await run(`
+            CREATE TABLE IF NOT EXISTS payment_line_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                paymentId INTEGER NOT NULL,
+                componentName TEXT NOT NULL,
+                amount REAL NOT NULL DEFAULT 0,
+                FOREIGN KEY(paymentId) REFERENCES payments(id) ON DELETE CASCADE
+            )
+        `);
+
         // NOTIFICATIONS
         await run(`
             CREATE TABLE IF NOT EXISTS notifications (
