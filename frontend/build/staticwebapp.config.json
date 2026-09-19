@@ -1,12 +1,6 @@
 {
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/static/*", "*.{png,jpg,jpeg,gif,svg,ico,css,js}"]
-  },
-  "responseOverrides": {
-    "404": {
-      "rewrite": "/index.html",
-      "statusCode": 200
-    }
+    "exclude": ["/static/js/*", "/static/css/*", "/static/media/*"]
   }
 }
