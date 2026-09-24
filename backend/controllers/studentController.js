@@ -1,7 +1,105 @@
 const db = require("../db");
+const { runQuery, allQuery } = require("../db");
 const logAudit = require("../utils/auditLogger");
 const xlsx = require("xlsx");
 const fs = require("fs");
+
+// =====================================================
+// ENROLLMENT / FEE-ACCOUNT SYNC
+//
+// The dashboard counts students and fees through the
+// student_enrollments -> student_fee_accounts -> student_fee_items
+// chain, not the raw students table. Historically that chain was
+// only filled by a manual "assess fees" batch on the Fees page,
+// so freshly added/imported students were invisible on the
+// dashboard until someone re-ran it. These helpers keep the chain
+// in sync as students are added, imported, archived and restored.
+// =====================================================
+
+async function getActiveYearId() {
+    const rows = await allQuery(
+        `SELECT id FROM academic_years WHERE status = 'active' ORDER BY id DESC LIMIT 1`
+    );
+    return rows.length ? rows[0].id : null;
+}
+
+// Ensure the student has an ACTIVE enrollment + fee account for the
+// active academic year, on the given class, and apply that class's
+// standard fee-structure items (if a structure exists). Idempotent.
+async function ensureEnrollment(studentId, className, rollNumber) {
+    const yearId = await getActiveYearId();
+    if (!yearId) return; // no active year -> nothing the dashboard counts anyway
+
+    const existing = await allQuery(
+        `SELECT id FROM student_enrollments WHERE studentId = ? AND academicYearId = ?`,
+        [studentId, yearId]
+    );
+
+    let enrollmentId;
+    if (existing.length === 0) {
+        const r = await runQuery(
+            `INSERT INTO student_enrollments (studentId, academicYearId, className, rollNumber, status) VALUES (?, ?, ?, ?, 'active')`,
+            [studentId, yearId, className, rollNumber || null]
+        );
+        enrollmentId = r.lastID;
+    } else {
+        enrollmentId = existing[0].id;
+        await runQuery(
+            `UPDATE student_enrollments SET status = 'active', className = ?, rollNumber = ? WHERE id = ?`,
+            [className, rollNumber || null, enrollmentId]
+        );
+    }
+
+    const acc = await allQuery(
+        `SELECT id FROM student_fee_accounts WHERE enrollmentId = ?`,
+        [enrollmentId]
+    );
+    let accountId;
+    if (acc.length === 0) {
+        const r = await runQuery(
+            `INSERT INTO student_fee_accounts (enrollmentId, status) VALUES (?, 'active')`,
+            [enrollmentId]
+        );
+        accountId = r.lastID;
+    } else {
+        accountId = acc[0].id;
+    }
+
+    // Apply the class fee structure's standard items, if defined for this
+    // year + class. Existing items are left as-is (a full re-price is still
+    // done by the Fees page batch); we only add missing standard items.
+    const structs = await allQuery(
+        `SELECT id FROM class_fee_structures WHERE academicYearId = ? AND className = ?`,
+        [yearId, className]
+    );
+    if (structs.length > 0) {
+        const items = await allQuery(
+            `SELECT componentId, amount FROM class_fee_items WHERE structureId = ?`,
+            [structs[0].id]
+        );
+        for (const it of items) {
+            const has = await allQuery(
+                `SELECT id FROM student_fee_items WHERE feeAccountId = ? AND componentId = ?`,
+                [accountId, it.componentId]
+            );
+            if (has.length === 0) {
+                await runQuery(
+                    `INSERT INTO student_fee_items (feeAccountId, componentId, amount, itemType) VALUES (?, ?, ?, 'standard')`,
+                    [accountId, it.componentId, it.amount]
+                );
+            }
+        }
+    }
+}
+
+// Flip the status of a student's enrollments (archive/restore) so the
+// dashboard's active-enrollment count and fee totals track the roster.
+async function setEnrollmentStatus(studentId, status) {
+    await runQuery(
+        `UPDATE student_enrollments SET status = ? WHERE studentId = ?`,
+        [status, studentId]
+    );
+}
 
 // =====================================================
 // GET ALL STUDENTS
@@ -53,6 +151,9 @@ exports.getStudents = (req, res) => {
             CASE
                 WHEN UPPER(className) LIKE 'LKG%' THEN 1
                 WHEN UPPER(className) LIKE 'UKG%' THEN 2
+                -- '10%' MUST be tested before '1%', or "10" falls into the "1"
+                -- bucket (CASE stops at the first match).
+                WHEN UPPER(className) LIKE '10%' THEN 12
                 WHEN UPPER(className) LIKE '1%' THEN 3
                 WHEN UPPER(className) LIKE '2%' THEN 4
                 WHEN UPPER(className) LIKE '3%' THEN 5
@@ -62,10 +163,10 @@ exports.getStudents = (req, res) => {
                 WHEN UPPER(className) LIKE '7%' THEN 9
                 WHEN UPPER(className) LIKE '8%' THEN 10
                 WHEN UPPER(className) LIKE '9%' THEN 11
-                WHEN UPPER(className) LIKE '10%' THEN 12
                 ELSE 99
             END,
             className ASC,
+            CAST(NULLIF(rollNumber, '') AS INTEGER) ASC,
             rollNumber ASC
     `;
 
@@ -101,7 +202,7 @@ exports.getStudent = (req, res) => {
 // =====================================================
 exports.addStudent = (req, res) => {
     const {
-        studentName, rollNumber, className, fatherName, contact1, previousDues, tuitionFee,
+        studentName, rollNumber, className, fatherName, contact1, contact2, previousDues, tuitionFee,
         admissionNumber, satsNumber, motherName, gender, dob, address, remark, concessionAmount, concessionReason
     } = req.body;
 
@@ -134,15 +235,16 @@ exports.addStudent = (req, res) => {
             db.run(
                 `
                 INSERT INTO students (
-                    studentName, rollNumber, className, fatherName, contact1, 
-                    previousDues, tuitionFee, status, admissionNumber, satsNumber, 
+                    studentName, rollNumber, className, fatherName, contact1, contact2,
+                    previousDues, tuitionFee, status, admissionNumber, satsNumber,
                     motherName, gender, dob, address, remark, concessionAmount, concessionReason
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `,
                 [
                     cleanStudentName, cleanRollNumber, className,
                     fatherName ? String(fatherName).trim() : "",
                     contact1 ? String(contact1).trim() : "",
+                    contact2 ? String(contact2).trim() : "",
                     numericPreviousDues, numericTuitionFee,
                     admissionNumber ? String(admissionNumber).trim() : "",
                     satsNumber ? String(satsNumber).trim() : "",
@@ -161,15 +263,28 @@ exports.addStudent = (req, res) => {
 
                     const studentId = this.lastID;
 
-                    logAudit({
-                        userId: req.user.id,
-                        action: "STUDENT_CREATED",
-                        entityType: "student",
-                        entityId: studentId,
-                        details: { studentName: cleanStudentName, rollNumber: cleanRollNumber, className }
-                    }).then(() => {
+                    // Create the enrollment/fee-account (and apply the class fee
+                    // structure) so the student shows on the dashboard at once,
+                    // then log + respond. Enrollment failure must not fail the add.
+                    (async () => {
+                        try {
+                            await ensureEnrollment(studentId, className, cleanRollNumber);
+                        } catch (enrErr) {
+                            console.error("Enrollment sync (add) failed:", enrErr);
+                        }
+                        try {
+                            await logAudit({
+                                userId: req.user.id,
+                                action: "STUDENT_CREATED",
+                                entityType: "student",
+                                entityId: studentId,
+                                details: { studentName: cleanStudentName, rollNumber: cleanRollNumber, className }
+                            });
+                        } catch (auditErr) {
+                            console.error("Audit log (STUDENT_CREATED) failed:", auditErr);
+                        }
                         res.status(201).json({ success: true, id: studentId, message: "Student added successfully." });
-                    });
+                    })();
                 }
             );
         }
@@ -181,7 +296,7 @@ exports.addStudent = (req, res) => {
 // =====================================================
 exports.updateStudent = (req, res) => {
     const {
-        studentName, rollNumber, className, fatherName, contact1, previousDues, tuitionFee,
+        studentName, rollNumber, className, fatherName, contact1, contact2, previousDues, tuitionFee,
         admissionNumber, satsNumber, motherName, gender, dob, address, remark, concessionAmount, concessionReason
     } = req.body;
 
@@ -227,7 +342,7 @@ exports.updateStudent = (req, res) => {
                     db.run(
                         `
                         UPDATE students SET
-                            studentName = ?, rollNumber = ?, className = ?, fatherName = ?, contact1 = ?,
+                            studentName = ?, rollNumber = ?, className = ?, fatherName = ?, contact1 = ?, contact2 = ?,
                             previousDues = ?, tuitionFee = ?, admissionNumber = ?, satsNumber = ?,
                             motherName = ?, gender = ?, dob = ?, address = ?, remark = ?,
                             concessionAmount = ?, concessionReason = ?
@@ -237,6 +352,7 @@ exports.updateStudent = (req, res) => {
                             cleanStudentName, cleanRollNumber, className,
                             fatherName ? String(fatherName).trim() : "",
                             contact1 ? String(contact1).trim() : "",
+                            contact2 ? String(contact2).trim() : "",
                             numericPreviousDues, numericTuitionFee,
                             admissionNumber ? String(admissionNumber).trim() : "",
                             satsNumber ? String(satsNumber).trim() : "",
@@ -257,15 +373,28 @@ exports.updateStudent = (req, res) => {
                                 return res.status(404).json({ success: false, message: "Student not found." });
                             }
 
-                            logAudit({
-                                userId: req.user.id,
-                                action: "STUDENT_UPDATED",
-                                entityType: "student",
-                                entityId: Number(req.params.id),
-                                details: { studentName: cleanStudentName, rollNumber: cleanRollNumber, className }
-                            }).then(() => {
+                            (async () => {
+                                // Keep the active-year enrollment's class/roll in sync
+                                // with the edited student (and apply the new class's
+                                // structure if the class changed).
+                                try {
+                                    await ensureEnrollment(Number(req.params.id), className, cleanRollNumber);
+                                } catch (enrErr) {
+                                    console.error("Enrollment sync (update) failed:", enrErr);
+                                }
+                                try {
+                                    await logAudit({
+                                        userId: req.user.id,
+                                        action: "STUDENT_UPDATED",
+                                        entityType: "student",
+                                        entityId: Number(req.params.id),
+                                        details: { studentName: cleanStudentName, rollNumber: cleanRollNumber, className }
+                                    });
+                                } catch (auditErr) {
+                                    console.error("Audit log (STUDENT_UPDATED) failed:", auditErr);
+                                }
                                 res.json({ success: true, message: "Student updated successfully." });
-                            });
+                            })();
                         }
                     );
                 }
@@ -301,15 +430,27 @@ exports.archiveStudent = (req, res) => {
                     if (updateErr) return res.status(500).json({ success: false, message: "Unable to archive student." });
                     if (this.changes === 0) return res.status(409).json({ success: false, message: "Student could not be archived." });
 
-                    logAudit({
-                        userId: req.user.id,
-                        action: "STUDENT_ARCHIVED",
-                        entityType: "student",
-                        entityId: studentId,
-                        details: { studentName: student.studentName, rollNumber: student.rollNumber, className: student.className, reason, archivedAt }
-                    }).then(() => {
+                    (async () => {
+                        // Deactivate the student's enrollments so they drop out of
+                        // the dashboard head-count and fee totals.
+                        try {
+                            await setEnrollmentStatus(studentId, "archived");
+                        } catch (enrErr) {
+                            console.error("Enrollment sync (archive) failed:", enrErr);
+                        }
+                        try {
+                            await logAudit({
+                                userId: req.user.id,
+                                action: "STUDENT_ARCHIVED",
+                                entityType: "student",
+                                entityId: studentId,
+                                details: { studentName: student.studentName, rollNumber: student.rollNumber, className: student.className, reason, archivedAt }
+                            });
+                        } catch (auditErr) {
+                            console.error("Audit log (STUDENT_ARCHIVED) failed:", auditErr);
+                        }
                         res.json({ success: true, message: "Student archived successfully." });
-                    });
+                    })();
                 }
             );
         }
@@ -345,15 +486,27 @@ exports.restoreStudent = (req, res) => {
                         function (updateErr) {
                             if (updateErr) return res.status(500).json({ success: false, message: "Unable to restore student." });
 
-                            logAudit({
-                                userId: req.user.id,
-                                action: "STUDENT_RESTORED",
-                                entityType: "student",
-                                entityId: studentId,
-                                details: { studentName: student.studentName, rollNumber: student.rollNumber, className: student.className }
-                            }).then(() => {
+                            (async () => {
+                                // Reactivate (or recreate) the enrollment so the
+                                // student re-enters the dashboard totals.
+                                try {
+                                    await ensureEnrollment(studentId, student.className, student.rollNumber);
+                                } catch (enrErr) {
+                                    console.error("Enrollment sync (restore) failed:", enrErr);
+                                }
+                                try {
+                                    await logAudit({
+                                        userId: req.user.id,
+                                        action: "STUDENT_RESTORED",
+                                        entityType: "student",
+                                        entityId: studentId,
+                                        details: { studentName: student.studentName, rollNumber: student.rollNumber, className: student.className }
+                                    });
+                                } catch (auditErr) {
+                                    console.error("Audit log (STUDENT_RESTORED) failed:", auditErr);
+                                }
                                 res.json({ success: true, message: "Student restored successfully." });
-                            });
+                            })();
                         }
                     );
                 }
@@ -465,12 +618,12 @@ exports.importStudents = async (req, res) => {
                     continue;
                 }
 
-                await new Promise((resolve, reject) => {
+                const newStudentId = await new Promise((resolve, reject) => {
                     db.run(
                         `
                         INSERT INTO students (
-                            studentName, rollNumber, className, fatherName, contact1, 
-                            previousDues, tuitionFee, status, admissionNumber, satsNumber, 
+                            studentName, rollNumber, className, fatherName, contact1,
+                            previousDues, tuitionFee, status, admissionNumber, satsNumber,
                             motherName, gender, dob, address, remark, concessionAmount, concessionReason
                         ) VALUES (?, ?, ?, ?, ?, 0, 0, 'active', ?, ?, ?, ?, ?, ?, ?, 0, '')
                         `,
@@ -482,11 +635,19 @@ exports.importStudents = async (req, res) => {
                             if (err) reject(err);
                             else {
                                 importedCount++;
-                                resolve();
+                                resolve(this.lastID);
                             }
                         }
                     );
                 });
+
+                // Enroll the imported student for the active year so the dashboard
+                // counts them. A sync failure must not abort the whole import.
+                try {
+                    await ensureEnrollment(newStudentId, className, rollNumber);
+                } catch (enrErr) {
+                    console.error(`Enrollment sync (import) failed for student ${newStudentId}:`, enrErr);
+                }
             }
         }
 

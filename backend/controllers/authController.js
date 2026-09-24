@@ -174,7 +174,8 @@ exports.login = (
 
                 if (
                     user.role !== "admin" &&
-                    user.role !== "receptionist"
+                    user.role !== "receptionist" &&
+                    user.role !== "teacher"
                 ) {
 
                     return res.status(403).json({
@@ -331,7 +332,8 @@ exports.profile = (
 
             if (
                 user.role !== "admin" &&
-                user.role !== "receptionist"
+                user.role !== "receptionist" &&
+                user.role !== "teacher"
             ) {
 
                 return res.status(403).json({

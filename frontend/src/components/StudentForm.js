@@ -13,6 +13,7 @@ function StudentForm({ student, onClose }) {
         fatherName: "",
         motherName: "",
         contact1: "",
+        contact2: "",
         address: "",
         remark: "",
         previousDues: "",
@@ -69,6 +70,7 @@ function StudentForm({ student, onClose }) {
                 fatherName: student.fatherName || "",
                 motherName: student.motherName || "",
                 contact1: student.contact1 || "",
+                contact2: student.contact2 || "",
                 address: student.address || "",
                 remark: student.remark || "",
                 previousDues: student.previousDues || "",
@@ -127,13 +129,9 @@ function StudentForm({ student, onClose }) {
         const concession = Number(formData.concessionAmount || 0);
         const previous = Number(formData.previousDues || 0);
         const netAcademicFee = Math.max(0, standardBase - concession);
-
-        const term1 = Math.floor(netAcademicFee / 3);
-        const term2 = Math.floor(netAcademicFee / 3);
-        const term3 = netAcademicFee - (term1 + term2);
         const totalPayable = previous + netAcademicFee;
 
-        return { standardBase, concession, previous, netAcademicFee, term1, term2, term3, totalPayable };
+        return { standardBase, concession, previous, netAcademicFee, totalPayable };
     }, [formData.className, formData.tuitionFee, formData.concessionAmount, formData.previousDues, classFeeStructures]);
 
     const money = (value) => `₹${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -244,15 +242,20 @@ function StudentForm({ student, onClose }) {
                         </div>
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "12px", marginBottom: "16px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
                         <div className="form-group">
-                            <label>Contact Number *</label>
-                            <input type="tel" name="contact1" value={formData.contact1} onChange={handleChange} required />
+                            <label>Primary Contact Number *</label>
+                            <input type="tel" name="contact1" value={formData.contact1} onChange={handleChange} placeholder="Main phone number" required />
                         </div>
                         <div className="form-group">
-                            <label>Home Address</label>
-                            <input type="text" name="address" value={formData.address} onChange={handleChange} placeholder="Full residential address" />
+                            <label>Secondary Contact Number <small style={{ color: "#64748B" }}>(Optional)</small></label>
+                            <input type="tel" name="contact2" value={formData.contact2} onChange={handleChange} placeholder="Alternate phone number" />
                         </div>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: "16px" }}>
+                        <label>Home Address</label>
+                        <input type="text" name="address" value={formData.address} onChange={handleChange} placeholder="Full residential address" />
                     </div>
                     
                     <div className="form-group" style={{ marginBottom: "24px" }}>
@@ -293,22 +296,14 @@ function StudentForm({ student, onClose }) {
                             </div>
                         )}
 
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", marginTop: "16px" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginTop: "16px" }}>
                             <div style={{ backgroundColor: "#EFF6FF", padding: "10px", borderRadius: "6px", textAlign: "center", border: "1px solid #BFDBFE" }}>
-                                <small style={{ color: "#1E40AF", fontSize: "11px", fontWeight: "700" }}>PREV DUES</small>
+                                <small style={{ color: "#1E40AF", fontSize: "11px", fontWeight: "700" }}>PREVIOUS DUES</small>
                                 <div style={{ fontSize: "14px", fontWeight: "700", color: "#1E3A8A", marginTop: "4px" }}>{money(calculations.previous)}</div>
                             </div>
                             <div style={{ backgroundColor: "#F1F5F9", padding: "10px", borderRadius: "6px", textAlign: "center", border: "1px solid #E2E8F0" }}>
-                                <small style={{ color: "#475569", fontSize: "11px", fontWeight: "700" }}>TERM 1</small>
-                                <div style={{ fontSize: "14px", fontWeight: "700", color: "#334155", marginTop: "4px" }}>{money(calculations.term1)}</div>
-                            </div>
-                            <div style={{ backgroundColor: "#F1F5F9", padding: "10px", borderRadius: "6px", textAlign: "center", border: "1px solid #E2E8F0" }}>
-                                <small style={{ color: "#475569", fontSize: "11px", fontWeight: "700" }}>TERM 2</small>
-                                <div style={{ fontSize: "14px", fontWeight: "700", color: "#334155", marginTop: "4px" }}>{money(calculations.term2)}</div>
-                            </div>
-                            <div style={{ backgroundColor: "#F1F5F9", padding: "10px", borderRadius: "6px", textAlign: "center", border: "1px solid #E2E8F0" }}>
-                                <small style={{ color: "#475569", fontSize: "11px", fontWeight: "700" }}>TERM 3</small>
-                                <div style={{ fontSize: "14px", fontWeight: "700", color: "#334155", marginTop: "4px" }}>{money(calculations.term3)}</div>
+                                <small style={{ color: "#475569", fontSize: "11px", fontWeight: "700" }}>NET TUITION FEE</small>
+                                <div style={{ fontSize: "14px", fontWeight: "700", color: "#334155", marginTop: "4px" }}>{money(calculations.netAcademicFee)}</div>
                             </div>
                         </div>
 

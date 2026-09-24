@@ -15,6 +15,13 @@ const {
 
 const app = express();
 
+// Behind nginx on the Azure VM the app sees one reverse-proxy hop. Trust exactly
+// that hop so req.ip resolves to the real client (via X-Forwarded-For) and the
+// login/password rate limiters bucket per-client instead of lumping every request
+// under nginx's single IP. Trust ONE hop only — never `true` — to avoid letting a
+// client spoof X-Forwarded-For past the limiter.
+app.set("trust proxy", 1);
+
 const PORT = Number(process.env.PORT) || 5000;
 
 // =====================================================
@@ -96,6 +103,27 @@ app.use(
 app.use(
     "/notifications",
     require("./routes/notifications")
+);
+
+// Examination & Results feature
+app.use(
+    "/teachers",
+    require("./routes/teachers")
+);
+
+app.use(
+    "/exams",
+    require("./routes/exams")
+);
+
+app.use(
+    "/attendance",
+    require("./routes/attendance")
+);
+
+app.use(
+    "/student-attendance",
+    require("./routes/studentAttendance")
 );
 
 // =====================================================

@@ -34,6 +34,30 @@ function ExpenseForm({
     const [loading, setLoading] =
         useState(false);
 
+    const [categories, setCategories] =
+        useState([]);
+
+
+    useEffect(() => {
+
+        const loadCategories = async () => {
+            try {
+                const res = await api.get("/expenses/categories");
+                setCategories(
+                    Array.isArray(res.data)
+                        ? res.data.map((c) => c.categoryName)
+                        : []
+                );
+            } catch (error) {
+                console.error("Unable to load categories:", error);
+                setCategories([]);
+            }
+        };
+
+        loadCategories();
+
+    }, []);
+
 
     useEffect(() => {
 
@@ -128,22 +152,6 @@ function ExpenseForm({
     };
 
 
-    const categories = [
-        "Salary",
-        "Electricity",
-        "Water",
-        "Internet",
-        "Stationery",
-        "Maintenance",
-        "Transport",
-        "School Supplies",
-        "Events",
-        "Rent",
-        "Repairs",
-        "Other"
-    ];
-
-
     return (
 
         <div className="modal-overlay">
@@ -214,7 +222,17 @@ function ExpenseForm({
                             onChange={
                                 handleChange
                             }
+                            required
                         >
+
+                            {/* Keep the current value selectable even if its
+                                category was later renamed or removed. */}
+                            {formData.category &&
+                                !categories.includes(formData.category) && (
+                                    <option value={formData.category}>
+                                        {formData.category}
+                                    </option>
+                                )}
 
                             {categories.map(
                                 (item) => (

@@ -339,6 +339,13 @@ exports.updateStructure = async (req, res) => {
             );
         }
 
+        // A component priced at 0 is treated as "removed from this class".
+        // Drop those rows so the component stops contributing to any total.
+        await run(
+            `DELETE FROM class_fee_items WHERE structureId = ? AND amount = 0`,
+            [structureId]
+        );
+
         await run(`UPDATE class_fee_structures SET updatedAt = CURRENT_TIMESTAMP WHERE id = ?`, [structureId]);
 
         await safeLogAudit({
@@ -477,7 +484,8 @@ exports.prepareAcademicYear = async (req, res) => {
 
                 if (structure) {
                     const structureItems = await all(`SELECT componentId, amount FROM class_fee_items WHERE structureId = ?`, [structure.id]);
-                    
+                    const validComponentIds = structureItems.map((s) => Number(s.componentId));
+
                     for (const item of structureItems) {
                         const existingItem = await get(
                             `SELECT id FROM student_fee_items WHERE feeAccountId = ? AND componentId = ?`,
@@ -497,6 +505,29 @@ exports.prepareAcademicYear = async (req, res) => {
                             );
                         }
                     }
+
+                    // Remove standard fee items whose component is no longer in the
+                    // class structure (e.g. a component priced to 0 / removed). This
+                    // clears the stale rows that kept inflating every total.
+                    if (validComponentIds.length > 0) {
+                        const placeholders = validComponentIds.map(() => "?").join(",");
+                        await run(
+                            `
+                            DELETE FROM student_fee_items
+                            WHERE feeAccountId = ?
+                              AND itemType = 'standard'
+                              AND componentId NOT IN (${placeholders})
+                            `,
+                            [accountId, ...validComponentIds]
+                        );
+                    } else {
+                        // Structure has no priced components: drop all standard items.
+                        await run(
+                            `DELETE FROM student_fee_items WHERE feeAccountId = ? AND itemType = 'standard'`,
+                            [accountId]
+                        );
+                    }
+
                     updated++;
                 }
             }
@@ -668,5 +699,63 @@ exports.deleteFeeComponent = async (req, res) => {
     } catch (error) {
         console.error("Error deleting component:", error);
         res.status(500).json({ success: false, message: "Unable to delete fee component." });
+    }
+};
+
+exports.updateFeeComponent = async (req, res) => {
+    const id = Number(req.params.id);
+
+    if (!id || id <= 0) {
+        return res.status(400).json({ success: false, message: "Invalid component." });
+    }
+
+    const { componentName, isOptional, sortOrder } = req.body;
+
+    if (!componentName || !componentName.trim()) {
+        return res.status(400).json({ success: false, message: "Component name is required." });
+    }
+
+    try {
+        const existing = await get(`SELECT id FROM fee_components WHERE id = ?`, [id]);
+        if (!existing) {
+            return res.status(404).json({ success: false, message: "Fee component not found." });
+        }
+
+        const cleanName = componentName.trim();
+
+        // componentKey stays stable (it links class/student fee items); only the
+        // display name, optional flag, and sort order are editable.
+        await run(
+            `
+            UPDATE fee_components
+            SET componentName = ?,
+                isOptional = ?,
+                sortOrder = COALESCE(?, sortOrder)
+            WHERE id = ?
+            `,
+            [
+                cleanName,
+                isOptional ? 1 : 0,
+                sortOrder === undefined || sortOrder === null || sortOrder === ""
+                    ? null
+                    : Number(sortOrder),
+                id
+            ]
+        );
+
+        await safeLogAudit({
+            userId: req.user?.id || null,
+            action: "FEE_COMPONENT_UPDATED",
+            entityType: "fee_component",
+            entityId: id,
+            details: { name: cleanName }
+        });
+
+        const updated = await get(`SELECT * FROM fee_components WHERE id = ?`, [id]);
+
+        res.json({ success: true, message: "Fee component updated successfully.", component: updated });
+    } catch (error) {
+        console.error("Error updating component:", error);
+        res.status(500).json({ success: false, message: "Unable to update fee component." });
     }
 };

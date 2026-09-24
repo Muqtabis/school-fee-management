@@ -10,6 +10,9 @@ import App from "./App";
 import AuthProvider
     from "./context/AuthContext";
 
+import { UIProvider }
+    from "./context/UIContext";
+
 
 import "./styles/index.css";
 
@@ -28,7 +31,11 @@ ReactDOM
 
                 <AuthProvider>
 
-                    <App />
+                    <UIProvider>
+
+                        <App />
+
+                    </UIProvider>
 
                 </AuthProvider>
 

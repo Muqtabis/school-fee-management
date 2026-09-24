@@ -25,6 +25,9 @@ function FeesPage() {
     const [newComponent, setNewComponent] = useState({ name: "", isOptional: false });
     const [selectedClass, setSelectedClass] = useState("");
 
+    // Inline component edit
+    const [editingComponent, setEditingComponent] = useState(null); // { id, name, isOptional }
+
     useEffect(() => {
         const loadInitialData = async () => {
             try {
@@ -107,6 +110,26 @@ function FeesPage() {
             await loadComponents();
         } catch (error) {
             alert(error.response?.data?.message || "Unable to delete component.");
+        }
+    };
+
+    const startEditComponent = (comp) => {
+        setEditingComponent({ id: comp.id, name: comp.componentName || "", isOptional: !!comp.isOptional });
+    };
+
+    const cancelEditComponent = () => setEditingComponent(null);
+
+    const saveEditComponent = async () => {
+        if (!editingComponent?.name.trim()) return alert("Component name is required.");
+        try {
+            await api.put(`/fees/components/${editingComponent.id}`, {
+                componentName: editingComponent.name.trim(),
+                isOptional: editingComponent.isOptional
+            });
+            setEditingComponent(null);
+            await loadComponents();
+        } catch (error) {
+            alert(error.response?.data?.message || "Unable to update component.");
         }
     };
 
@@ -260,14 +283,14 @@ function FeesPage() {
 
                     {/* PANEL 1: ACADEMIC YEAR */}
                     <div className="report-panel" style={{ marginBottom: "24px" }}>
-                        <div className="report-panel-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div className="report-panel-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
                             <div>
                                 <h3>1. Academic Year Configuration</h3>
                                 <p>Select or create an academic year.</p>
                             </div>
-                            
+
                             {isAdmin && (
-                                <form onSubmit={createYear} style={{ display: "flex", gap: "8px" }}>
+                                <form onSubmit={createYear} style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                                     <input
                                         type="text"
                                         placeholder="New Year (e.g., 2026-27)"
@@ -323,14 +346,14 @@ function FeesPage() {
                         
                         {isAdmin && (
                             <div style={{ padding: "20px", backgroundColor: "#F8FAFC", borderBottom: "1px solid #E2E8F0" }}>
-                                <form onSubmit={createComponent} style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+                                <form onSubmit={createComponent} style={{ display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap" }}>
                                     <input
                                         type="text"
                                         placeholder="Enter New Fee Category Name"
                                         value={newComponent.name}
                                         onChange={e => setNewComponent({ ...newComponent, name: e.target.value })}
                                         className="search-input"
-                                        style={{ flex: 1, marginBottom: "0", padding: "10px" }}
+                                        style={{ flex: 1, minWidth: "200px", marginBottom: "0", padding: "10px" }}
                                         required
                                     />
                                     <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "#334155", fontWeight: "500", cursor: "pointer" }}>
@@ -364,42 +387,85 @@ function FeesPage() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {feeComponents.map(comp => (
+                                        {feeComponents.map(comp => {
+                                            const isEditing = editingComponent?.id === comp.id;
+                                            return (
                                             <tr key={comp.id}>
-                                                <td style={{ fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>{comp.componentName}</td>
+                                                <td style={{ fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>
+                                                    {isEditing ? (
+                                                        <input
+                                                            type="text"
+                                                            value={editingComponent.name}
+                                                            onChange={e => setEditingComponent({ ...editingComponent, name: e.target.value })}
+                                                            className="search-input"
+                                                            style={{ marginBottom: 0, padding: "8px", width: "100%", boxSizing: "border-box" }}
+                                                        />
+                                                    ) : comp.componentName}
+                                                </td>
                                                 <td>
-                                                    <span style={{ 
-                                                        padding: "4px 10px", 
-                                                        borderRadius: "20px", 
-                                                        fontSize: "12px", 
-                                                        fontWeight: "600", 
-                                                        backgroundColor: comp.isOptional ? "#FEF3C7" : "#E2E8F0",
-                                                        color: comp.isOptional ? "#D97706" : "#475569"
-                                                    }}>
-                                                        {comp.isOptional ? "Optional" : "Mandatory"}
-                                                    </span>
+                                                    {isEditing ? (
+                                                        <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#334155", cursor: "pointer" }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={editingComponent.isOptional}
+                                                                onChange={e => setEditingComponent({ ...editingComponent, isOptional: e.target.checked })}
+                                                                style={{ width: "16px", height: "16px" }}
+                                                            />
+                                                            Optional
+                                                        </label>
+                                                    ) : (
+                                                        <span style={{
+                                                            padding: "4px 10px",
+                                                            borderRadius: "20px",
+                                                            fontSize: "12px",
+                                                            fontWeight: "600",
+                                                            backgroundColor: comp.isOptional ? "#FEF3C7" : "#E2E8F0",
+                                                            color: comp.isOptional ? "#D97706" : "#475569"
+                                                        }}>
+                                                            {comp.isOptional ? "Optional" : "Mandatory"}
+                                                        </span>
+                                                    )}
                                                 </td>
                                                 {isAdmin && (
                                                     <td style={{ textAlign: "right", paddingRight: "24px" }}>
-                                                        <button 
-                                                            onClick={() => deleteComponent(comp.id)}
-                                                            style={{ 
-                                                                background: "#FEF2F2", 
-                                                                border: "1px solid #FECACA", 
-                                                                color: "#EF4444", 
-                                                                padding: "6px 12px",
-                                                                borderRadius: "4px",
-                                                                cursor: "pointer", 
-                                                                fontSize: "13px",
-                                                                fontWeight: "500"
-                                                            }}
-                                                        >
-                                                            Delete
-                                                        </button>
+                                                        <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                                                            {isEditing ? (
+                                                                <>
+                                                                    <button
+                                                                        onClick={saveEditComponent}
+                                                                        style={{ background: "#0F172A", border: "none", color: "#fff", padding: "6px 12px", borderRadius: "4px", cursor: "pointer", fontSize: "13px", fontWeight: "500" }}
+                                                                    >
+                                                                        Save
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={cancelEditComponent}
+                                                                        style={{ background: "#F1F5F9", border: "1px solid #CBD5E1", color: "#475569", padding: "6px 12px", borderRadius: "4px", cursor: "pointer", fontSize: "13px", fontWeight: "500" }}
+                                                                    >
+                                                                        Cancel
+                                                                    </button>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <button
+                                                                        onClick={() => startEditComponent(comp)}
+                                                                        style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", color: "#2563EB", padding: "6px 12px", borderRadius: "4px", cursor: "pointer", fontSize: "13px", fontWeight: "500" }}
+                                                                    >
+                                                                        Edit
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => deleteComponent(comp.id)}
+                                                                        style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#EF4444", padding: "6px 12px", borderRadius: "4px", cursor: "pointer", fontSize: "13px", fontWeight: "500" }}
+                                                                    >
+                                                                        Delete
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                 )}
                                             </tr>
-                                        ))}
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             )}

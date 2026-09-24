@@ -84,7 +84,7 @@ export default function LoginPage() {
             } = res.data;
 
 
-            login(
+            await login(
                 token,
                 user
             );
@@ -120,6 +120,29 @@ export default function LoginPage() {
 
                 navigate(
                     "/fees",
+                    {
+                        replace: true
+                    }
+                );
+
+                return;
+
+            }
+
+
+            // =================================================
+            // TEACHER
+            // Land on Marks Entry; ProtectedRoute falls back to
+            // the first page the teacher is actually allowed
+            // (every teacher always has "My Attendance").
+            // =================================================
+
+            if (
+                user.role === "teacher"
+            ) {
+
+                navigate(
+                    "/marks-entry",
                     {
                         replace: true
                     }

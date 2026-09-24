@@ -9,13 +9,15 @@ const expenseController =
 
 const {
     requireRole,
-    requireAdmin
+    requireAdmin,
+    requirePage
 } =
     require("../middleware/authMiddleware");
 
 
 // =====================================================
-// ADMIN + RECEPTIONIST
+// ADMIN + RECEPTIONIST, WITH "expenses" PAGE ACCESS
+// (admin bypasses the page check)
 // =====================================================
 
 router.use(
@@ -23,6 +25,10 @@ router.use(
         "admin",
         "receptionist"
     )
+);
+
+router.use(
+    requirePage("expenses")
 );
 
 
@@ -46,6 +52,36 @@ router.get(
     "/summary",
     requireAdmin,
     expenseController.expenseSummary
+);
+
+
+// =====================================================
+// EXPENSE CATEGORIES (dynamic)
+// LIST: admin + receptionist  |  MUTATE: admin only
+// Declared before "/:id" so "categories" isn't captured as an id.
+// =====================================================
+
+router.get(
+    "/categories",
+    expenseController.getExpenseCategories
+);
+
+router.post(
+    "/categories",
+    requireAdmin,
+    expenseController.createExpenseCategory
+);
+
+router.put(
+    "/categories/:id",
+    requireAdmin,
+    expenseController.updateExpenseCategory
+);
+
+router.delete(
+    "/categories/:id",
+    requireAdmin,
+    expenseController.deleteExpenseCategory
 );
 
 

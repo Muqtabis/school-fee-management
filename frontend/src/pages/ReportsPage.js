@@ -33,11 +33,15 @@ function ReportsPage() {
     const fetchReport = async () => {
         try {
             setLoading(true);
+            // Each source is fetched independently so one restricted endpoint
+            // (e.g. /payments/report-summary is admin-only) cannot blank the whole
+            // page for roles that legitimately hold the Reports grant. Totals below
+            // are recomputed client-side from the payments/expenses the caller can read.
             const [summaryRes, expenseRes, paymentsRes, studentsRes, yearsRes] = await Promise.all([
-                api.get(`/payments/report-summary?period=all`),
-                api.get("/expenses"),
-                api.get("/payments"),
-                api.get("/students"),
+                api.get(`/payments/report-summary?period=all`).catch(() => ({ data: {} })),
+                api.get("/expenses").catch(() => ({ data: [] })),
+                api.get("/payments").catch(() => ({ data: [] })),
+                api.get("/students").catch(() => ({ data: [] })),
                 api.get("/fees/academic-years").catch(() => ({ data: [] }))
             ]);
 
@@ -382,6 +386,41 @@ function ReportsPage() {
         XLSX.writeFile(workbook, fileName);
     };
 
+    // =====================================================
+    // SERVER-SIDE ZIP EXPORT (Excel + receipt PDFs)
+    // =====================================================
+    const [exporting, setExporting] = useState(false);
+
+    const downloadBundle = async () => {
+        try {
+            setExporting(true);
+            const res = await api.get("/payments/export-bundle", {
+                params: { period, className: selectedClass },
+                responseType: "blob"
+            });
+
+            const blob = new Blob([res.data], { type: "application/zip" });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+
+            // Try to read the server-provided filename.
+            const disposition = res.headers?.["content-disposition"] || "";
+            const match = disposition.match(/filename="?([^"]+)"?/);
+            link.download = match ? match[1] : `School_Report_${new Date().toISOString().split("T")[0]}.zip`;
+
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error("Bundle export error:", error);
+            alert("Unable to export the report bundle. Please try again.");
+        } finally {
+            setExporting(false);
+        }
+    };
+
     const periodName =
         period === "today"
             ? "Today"
@@ -470,6 +509,24 @@ function ReportsPage() {
                                 }}
                             >
                                 💾 Master Backup (.xlsx)
+                            </button>
+
+                            {/* Full bundle: Excel + receipt PDFs (server-side) */}
+                            <button
+                                onClick={downloadBundle}
+                                disabled={exporting}
+                                title="Excel report plus a PDF receipt for every payment, zipped together"
+                                style={{
+                                    padding: "8px 14px",
+                                    backgroundColor: exporting ? "#94A3B8" : "#7C3AED",
+                                    color: "#fff",
+                                    border: "none",
+                                    borderRadius: "6px",
+                                    cursor: exporting ? "not-allowed" : "pointer",
+                                    fontWeight: "600"
+                                }}
+                            >
+                                {exporting ? "Preparing..." : "📦 Excel + Receipts (.zip)"}
                             </button>
                         </div>
                     </div>

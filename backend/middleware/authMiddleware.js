@@ -77,7 +77,8 @@ function authenticateToken(
 
         if (
             decoded.role !== "admin" &&
-            decoded.role !== "receptionist"
+            decoded.role !== "receptionist" &&
+            decoded.role !== "teacher"
         ) {
 
             return res.status(403).json({
@@ -168,6 +169,83 @@ function requireRole(
 
 
 // =====================================================
+// PAGE ACCESS GUARD
+//
+// Enforces the admin-configured page access on the
+// server side, so hiding a sidebar link in React is
+// not the only thing protecting the data.
+//
+// - Admin always passes (never locked out).
+// - Everyone else must have a matching row in
+//   user_page_access for this pageKey.
+// =====================================================
+
+const { allQuery } = require("../db");
+
+function requirePage(pageKey) {
+
+    return async (req, res, next) => {
+
+        if (!req.user) {
+
+            return res.status(401).json({
+                success: false,
+                message: "Authentication required."
+            });
+
+        }
+
+
+        // Admin bypasses page access entirely.
+        if (req.user.role === "admin") {
+
+            return next();
+
+        }
+
+
+        try {
+
+            const rows = await allQuery(
+                `
+                SELECT 1
+                FROM user_page_access
+                WHERE userId = ? AND pageKey = ?
+                LIMIT 1
+                `,
+                [req.user.id, pageKey]
+            );
+
+
+            if (!rows || rows.length === 0) {
+
+                return res.status(403).json({
+                    success: false,
+                    message: "You do not have access to this page."
+                });
+
+            }
+
+
+            next();
+
+        } catch (error) {
+
+            console.error("Page Access Check Error:", error);
+
+            return res.status(500).json({
+                success: false,
+                message: "Unable to verify page access."
+            });
+
+        }
+
+    };
+
+}
+
+
+// =====================================================
 // ADMIN ONLY
 // =====================================================
 
@@ -187,6 +265,18 @@ const requireStaff =
 
 
 // =====================================================
+// TEACHER (also allow admin, so admin can see/manage
+// teacher-facing endpoints when needed)
+// =====================================================
+
+const requireTeacher =
+    requireRole(
+        "admin",
+        "teacher"
+    );
+
+
+// =====================================================
 // EXPORT
 // =====================================================
 
@@ -198,6 +288,10 @@ module.exports = {
 
     requireAdmin,
 
-    requireStaff
+    requireStaff,
+
+    requireTeacher,
+
+    requirePage
 
 };

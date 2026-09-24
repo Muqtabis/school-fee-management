@@ -19,12 +19,12 @@ function StudentsPage() {
     const [showForm, setShowForm] = useState(false);
     
     const [classes, setClasses] = useState([]);
-    const [showClassManager, setShowClassManager] = useState(false);
     
     const [selectedClass, setSelectedClass] = useState("All");
     const [searchKeyword, setSearchKeyword] = useState("");
-    const [historyStudent, setHistoryStudent] = useState(null);
-    const [profileStudent, setProfileStudent] = useState(null);
+    const [sortBy, setSortBy] = useState("roll");
+    // Unified detail view: { student, tab } — tab is "overview" | "fees".
+    const [detailView, setDetailView] = useState(null);
     const [showArchived, setShowArchived] = useState(false);
 
     // EXCEL IMPORT STATES & REFS
@@ -43,7 +43,7 @@ function StudentsPage() {
             });
             const data = Array.isArray(res.data) ? res.data : [];
             setStudents(data);
-            setFilteredStudents(data);
+            setFilteredStudents(sortStudents(data, sortBy));
         } catch (error) {
             console.error("Unable to fetch students:", error);
             setStudents([]);
@@ -61,7 +61,26 @@ function StudentsPage() {
         }
     };
 
-    const filterStudents = (search, classFilter) => {
+    // Sort a list of students by roll (numeric) or name.
+    const sortStudents = (list, mode) => {
+        const copy = [...list];
+        if (mode === "name") {
+            copy.sort((a, b) => String(a.studentName || "").localeCompare(String(b.studentName || "")));
+        } else {
+            // Numeric roll sort, matching the backend ordering.
+            copy.sort((a, b) => {
+                const ra = parseInt(a.rollNumber, 10);
+                const rb = parseInt(b.rollNumber, 10);
+                const aNum = Number.isNaN(ra) ? Infinity : ra;
+                const bNum = Number.isNaN(rb) ? Infinity : rb;
+                if (aNum !== bNum) return aNum - bNum;
+                return String(a.rollNumber || "").localeCompare(String(b.rollNumber || ""));
+            });
+        }
+        return copy;
+    };
+
+    const filterStudents = (search, classFilter, mode = sortBy) => {
         const keyword = String(search || "").toLowerCase().trim();
         const result = students.filter((student) => {
             const matchesSearch =
@@ -71,12 +90,13 @@ function StudentsPage() {
                 student.admissionNumber?.toLowerCase().includes(keyword) ||
                 student.satsNumber?.toLowerCase().includes(keyword) ||
                 student.fatherName?.toLowerCase().includes(keyword) ||
-                student.contact1?.toLowerCase().includes(keyword);
+                student.contact1?.toLowerCase().includes(keyword) ||
+                student.contact2?.toLowerCase().includes(keyword);
 
             const matchesClass = classFilter === "All" || student.className === classFilter;
             return matchesSearch && matchesClass;
         });
-        setFilteredStudents(result);
+        setFilteredStudents(sortStudents(result, mode));
     };
 
     const handleSearch = (value) => {
@@ -88,6 +108,12 @@ function StudentsPage() {
         const value = e.target.value;
         setSelectedClass(value);
         filterStudents(searchKeyword, value);
+    };
+
+    const handleSortChange = (e) => {
+        const value = e.target.value;
+        setSortBy(value);
+        filterStudents(searchKeyword, selectedClass, value);
     };
 
     const handleStatusToggle = (archived) => {
@@ -239,16 +265,12 @@ function StudentsPage() {
                             })}
                         </select>
 
-                        <button 
-                            type="button"
-                            onClick={() => setShowClassManager(true)}
-                            style={{
-                                padding: "10px 16px", backgroundColor: "#F1F5F9", border: "1px solid #CBD5E1",
-                                borderRadius: "8px", color: "#334155", fontWeight: "600", cursor: "pointer"
-                            }}
-                        >
-                            Manage Classes
-                        </button>
+                        <select className="filter-select" value={sortBy} onChange={handleSortChange} style={{ minWidth: "150px" }}>
+                            <option value="roll">Sort: Roll No.</option>
+                            <option value="name">Sort: Name (A–Z)</option>
+                        </select>
+                        {/* Classes are now created and managed on the dedicated
+                            Class Management page. */}
                     </div>
 
                     <div className="table-container">
@@ -278,7 +300,14 @@ function StudentsPage() {
                                             <td><strong>{student.rollNumber || "-"}</strong></td>
                                             <td><strong>{student.studentName}</strong></td>
                                             <td>{student.className || "-"}</td>
-                                            <td>{student.contact1 || "-"}</td>
+                                            <td>
+                                                <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.4 }}>
+                                                    <span>{student.contact1 || "-"}</span>
+                                                    {student.contact2 ? (
+                                                        <span style={{ fontSize: "12px", color: "#64748B" }}>{student.contact2}</span>
+                                                    ) : null}
+                                                </div>
+                                            </td>
                                             <td>
                                                 <span className={student.status === "archived" ? "payment-badge mode-default" : "payment-badge mode-upi"}>
                                                     {student.status === "archived" ? "Archived" : "Active"}
@@ -286,14 +315,13 @@ function StudentsPage() {
                                             </td>
                                             <td style={{ textAlign: "right" }}>
                                                 <div className="action-buttons" style={{ justifyContent: "flex-end" }}>
-                                                    <button 
-                                                        onClick={() => setProfileStudent(student)}
-                                                        style={{ background: "#F1F5F9", border: "1px solid #CBD5E1", color: "#334155", padding: "6px 12px", borderRadius: "4px", cursor: "pointer", fontSize: "13px", fontWeight: "600" }}
+                                                    <button
+                                                        onClick={() => setDetailView({ student, tab: "overview" })}
+                                                        style={{ background: "#0F172A", border: "1px solid #0F172A", color: "#fff", padding: "6px 14px", borderRadius: "4px", cursor: "pointer", fontSize: "13px", fontWeight: "600" }}
                                                     >
-                                                        Profile
+                                                        View Details
                                                     </button>
-                                                    <button className="history-btn" onClick={() => setHistoryStudent(student)}>Fees</button>
-                                                    
+
                                                     {student.status === "archived" ? (
                                                         <button className="edit-btn" onClick={() => handleRestore(student)}>Restore</button>
                                                     ) : (
@@ -325,26 +353,131 @@ function StudentsPage() {
                 />
             )}
 
-            {showClassManager && <ClassManagerModal classes={classes} refreshClasses={fetchClasses} onClose={() => setShowClassManager(false)} />}
-            {historyStudent && <FeeHistory student={historyStudent} onClose={() => setHistoryStudent(null)} />}
-            {profileStudent && <StudentProfileModal student={profileStudent} onClose={() => setProfileStudent(null)} />}
+            {detailView && (
+                <StudentDetailModal
+                    student={detailView.student}
+                    initialTab={detailView.tab}
+                    onClose={() => setDetailView(null)}
+                />
+            )}
         </div>
     );
 }
 
 // =====================================================
-// NEW: STUDENT PROFILE MODAL
+// UNIFIED STUDENT DETAIL MODAL
+// One place for everything: profile + full fee account.
 // =====================================================
-function StudentProfileModal({ student, onClose }) {
+function StudentDetailModal({ student, initialTab = "overview", onClose }) {
+    const [tab, setTab] = useState(initialTab);
+    const [history, setHistory] = useState(null);
+    const [loadingFees, setLoadingFees] = useState(true);
+    const [results, setResults] = useState(null);
+    const [loadingResults, setLoadingResults] = useState(false);
+    const [dlExamId, setDlExamId] = useState(null);
+
+    useEffect(() => {
+        let active = true;
+        (async () => {
+            try {
+                setLoadingFees(true);
+                const res = await api.get(`/payments/history/student/${student.id}`);
+                if (active) setHistory(res.data);
+            } catch (error) {
+                console.error("Fee account error:", error);
+                if (active) setHistory(null);
+            } finally {
+                if (active) setLoadingFees(false);
+            }
+        })();
+        return () => { active = false; };
+    }, [student.id]);
+
+    // Lazy-load published exam results only when the Results tab is opened.
+    useEffect(() => {
+        if (tab !== "results" || results !== null) return;
+        let active = true;
+        (async () => {
+            try {
+                setLoadingResults(true);
+                const res = await api.get(`/students/${student.id}/results`);
+                if (active) setResults(res.data?.history || []);
+            } catch (error) {
+                console.error("Result history error:", error);
+                if (active) setResults([]);
+            } finally {
+                if (active) setLoadingResults(false);
+            }
+        })();
+        return () => { active = false; };
+    }, [tab, results, student.id]);
+
+    // Download a report card as an in-memory PDF (server streams it; nothing on disk).
+    const downloadReportCard = async (examId, examName) => {
+        try {
+            setDlExamId(examId);
+            const res = await api.get(`/students/${student.id}/report-card/${examId}`, { responseType: "blob" });
+            const blob = new Blob([res.data], { type: "application/pdf" });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `ReportCard_${(student.rollNumber || student.studentName || "student")}_${(examName || "exam")}.pdf`.replace(/[^a-z0-9._-]+/gi, "_");
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error("Download report card error:", error);
+            alert(error?.response?.data?.message || "Unable to download report card.");
+        } finally {
+            setDlExamId(null);
+        }
+    };
+
     if (!student) return null;
+
+    const money = (value) => `₹${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     const Label = ({ children }) => <div style={{ fontSize: "11px", fontWeight: "600", color: "#64748B", textTransform: "uppercase", marginBottom: "4px" }}>{children}</div>;
     const Value = ({ children }) => <div style={{ fontSize: "14px", fontWeight: "600", color: "#0F172A", marginBottom: "16px" }}>{children || "-"}</div>;
 
+    // Fee math (mirrors the standalone ledger).
+    const prevDues = Number(student?.previousDues || 0);
+    const concession = Number(student?.concessionAmount || 0);
+    let standardTotal = Number(history?.totalFee || 0);
+    if (Array.isArray(history?.items) && history.items.length > 0) {
+        standardTotal = history.items.reduce((sum, item) => {
+            if (item.itemType === "carry_forward" || item.componentName?.toLowerCase().includes("previous")) return sum;
+            return sum + Number(item.amount || 0);
+        }, 0);
+    }
+    const netAcademicFee = Math.max(0, standardTotal - concession);
+    const computedTotalFee = prevDues + netAcademicFee;
+    const computedPaid = Number(history?.totalPaid || 0);
+    const computedBalance = Math.max(0, computedTotalFee - computedPaid);
+
+    const TabButton = ({ id, children }) => (
+        <button
+            onClick={() => setTab(id)}
+            style={{
+                padding: "10px 18px",
+                border: "none",
+                background: "none",
+                cursor: "pointer",
+                fontSize: "14px",
+                fontWeight: "600",
+                color: tab === id ? "#0F172A" : "#94A3B8",
+                borderBottom: tab === id ? "3px solid #0F172A" : "3px solid transparent"
+            }}
+        >
+            {children}
+        </button>
+    );
+
     return (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "16px" }}>
-            <div style={{ backgroundColor: "#ffffff", borderRadius: "14px", width: "100%", maxWidth: "650px", display: "flex", flexDirection: "column", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)", overflow: "hidden" }}>
-                
+            <div style={{ backgroundColor: "#ffffff", borderRadius: "14px", width: "100%", maxWidth: "720px", maxHeight: "92vh", display: "flex", flexDirection: "column", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)", overflow: "hidden" }}>
+
                 {/* Header Strip */}
                 <div style={{ backgroundColor: "#0F172A", padding: "24px", color: "#fff", position: "relative" }}>
                     <button onClick={onClose} style={{ position: "absolute", top: "16px", right: "16px", background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", width: "30px", height: "30px", borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>✕</button>
@@ -354,205 +487,119 @@ function StudentProfileModal({ student, onClose }) {
                         </div>
                         <div>
                             <h2 style={{ margin: "0 0 4px 0", fontSize: "22px" }}>{student.studentName}</h2>
-                            <div style={{ display: "flex", gap: "12px", fontSize: "13px", color: "#CBD5E1" }}>
-                                <span>Class: <strong>{student.className}</strong></span>
+                            <div style={{ display: "flex", gap: "12px", fontSize: "13px", color: "#CBD5E1", flexWrap: "wrap" }}>
+                                <span>Class: <strong>{student.className || "-"}</strong></span>
                                 <span>|</span>
                                 <span>Roll No: <strong>{student.rollNumber || "-"}</strong></span>
                                 <span>|</span>
-                                <span style={{ color: student.status === 'active' ? '#86EFAC' : '#FCA5A5' }}>● {student.status.toUpperCase()}</span>
+                                <span style={{ color: student.status === 'active' ? '#86EFAC' : '#FCA5A5' }}>● {String(student.status || "").toUpperCase()}</span>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <div style={{ padding: "24px", maxHeight: "60vh", overflowY: "auto" }}>
-                    <h3 style={{ fontSize: "15px", color: "#334155", borderBottom: "1px solid #E2E8F0", paddingBottom: "8px", marginBottom: "16px" }}>Academic Profile</h3>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
-                        <div><Label>Admission No.</Label><Value>{student.admissionNumber}</Value></div>
-                        <div><Label>SATS No.</Label><Value>{student.satsNumber}</Value></div>
-                        <div><Label>Enrollment Date</Label><Value>{new Date(student.createdAt).toLocaleDateString()}</Value></div>
-                    </div>
-
-                    <h3 style={{ fontSize: "15px", color: "#334155", borderBottom: "1px solid #E2E8F0", paddingBottom: "8px", marginBottom: "16px", marginTop: "8px" }}>Personal Details</h3>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
-                        <div><Label>Gender</Label><Value>{student.gender}</Value></div>
-                        <div><Label>Date of Birth</Label><Value>{student.dob ? new Date(student.dob).toLocaleDateString() : "-"}</Value></div>
-                        <div><Label>Primary Contact</Label><Value>{student.contact1}</Value></div>
-                        <div><Label>Father's Name</Label><Value>{student.fatherName}</Value></div>
-                        <div><Label>Mother's Name</Label><Value>{student.motherName}</Value></div>
-                        <div style={{ gridColumn: "span 3" }}><Label>Home Address</Label><Value>{student.address}</Value></div>
-                        <div style={{ gridColumn: "span 3" }}><Label>General Remarks</Label><Value>{student.remark}</Value></div>
-                    </div>
-                </div>
-                
-                <div style={{ padding: "16px 24px", backgroundColor: "#F8FAFC", borderTop: "1px solid #E2E8F0", textAlign: "right" }}>
-                    <button onClick={onClose} style={{ padding: "8px 24px", backgroundColor: "#fff", border: "1px solid #CBD5E1", borderRadius: "6px", cursor: "pointer", fontWeight: "600", color: "#334155" }}>Close Profile</button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// =====================================================
-// DYNAMIC CLASS MANAGER MODAL
-// =====================================================
-function ClassManagerModal({ classes, refreshClasses, onClose }) {
-    const [className, setClassName] = useState("");
-    const [section, setSection] = useState("");
-    const [loading, setLoading] = useState(false);
-
-    const handleAddClass = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        try {
-            await api.post("/classes", { className, section });
-            setClassName("");
-            setSection("");
-            refreshClasses();
-        } catch (error) {
-            alert(error.response?.data?.message || "Failed to add class.");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleDeleteClass = async (id, name) => {
-        if (!window.confirm(`Are you sure you want to delete ${name}?`)) return;
-        try {
-            await api.delete(`/classes/${id}`);
-            refreshClasses();
-        } catch (error) {
-            alert(error.response?.data?.message || "Failed to delete class.");
-        }
-    };
-
-    return (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "16px" }}>
-            <div style={{ backgroundColor: "#ffffff", borderRadius: "14px", width: "100%", maxWidth: "500px", maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)" }}>
-                <div style={{ padding: "16px 20px", borderBottom: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <h2 style={{ fontSize: "17px", fontWeight: "700", color: "#0F172A", margin: 0 }}>Manage Classes</h2>
-                    <button onClick={onClose} style={{ background: "#F1F5F9", border: "none", fontSize: "14px", color: "#475569", cursor: "pointer", width: "28px", height: "28px", borderRadius: "50%", fontWeight: "bold" }}>✕</button>
-                </div>
-                <div style={{ padding: "20px", overflowY: "auto" }}>
-                    <form onSubmit={handleAddClass} style={{ display: "flex", gap: "10px", marginBottom: "20px", padding: "16px", backgroundColor: "#F8FAFC", borderRadius: "8px", border: "1px solid #E2E8F0", alignItems: "flex-end" }}>
-                        <div style={{ flex: 2 }}>
-                            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "#475569" }}>Class Name *</label>
-                            <input type="text" required value={className} onChange={(e) => setClassName(e.target.value)} placeholder="e.g. 10" style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #CBD5E1", boxSizing: "border-box" }} />
+                    {/* Quick balance chip so the key number is visible up top */}
+                    {!loadingFees && history && (
+                        <div style={{ marginTop: "16px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                            <span style={{ background: "rgba(255,255,255,0.12)", padding: "6px 12px", borderRadius: "8px", fontSize: "13px" }}>Total Demand: <strong>{money(computedTotalFee)}</strong></span>
+                            <span style={{ background: "rgba(134,239,172,0.18)", color: "#86EFAC", padding: "6px 12px", borderRadius: "8px", fontSize: "13px" }}>Paid: <strong>{money(computedPaid)}</strong></span>
+                            <span style={{ background: computedBalance > 0 ? "rgba(252,165,165,0.18)" : "rgba(134,239,172,0.18)", color: computedBalance > 0 ? "#FCA5A5" : "#86EFAC", padding: "6px 12px", borderRadius: "8px", fontSize: "13px" }}>Balance: <strong>{money(computedBalance)}</strong></span>
                         </div>
-                        <div style={{ flex: 1 }}>
-                            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "#475569" }}>Section</label>
-                            <input type="text" value={section} onChange={(e) => setSection(e.target.value)} placeholder="e.g. A" style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #CBD5E1", boxSizing: "border-box" }} />
-                        </div>
-                        <button type="submit" disabled={loading || !className.trim()} style={{ padding: "8px 16px", backgroundColor: className.trim() ? "#0F172A" : "#94A3B8", color: "#fff", border: "none", borderRadius: "6px", fontWeight: "600", cursor: className.trim() ? "pointer" : "not-allowed", height: "35px" }}>{loading ? "Adding..." : "Add"}</button>
-                    </form>
-                    <div style={{ fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "8px", textTransform: "uppercase" }}>Existing Classes ({classes.length})</div>
-                    <div style={{ border: "1px solid #E2E8F0", borderRadius: "8px", overflow: "hidden" }}>
-                        {classes.length === 0 ? <div style={{ padding: "16px", textAlign: "center", color: "#64748B", fontSize: "13px" }}>No classes added yet.</div> : classes.map((cls, idx) => {
-                            const displayClass = formatClass(cls);
-                            return (
-                                <div key={cls.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: idx !== classes.length - 1 ? "1px solid #F1F5F9" : "none", fontSize: "14px", color: "#334155" }}>
-                                    <span style={{ fontWeight: "600" }}>{displayClass}</span>
-                                    <button onClick={() => handleDeleteClass(cls.id, displayClass)} style={{ background: "none", border: "none", color: "#EF4444", fontSize: "12px", cursor: "pointer", fontWeight: "600" }}>Delete</button>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// =====================================================
-// CLEAN & COMPACT FLEXBOX FEE HISTORY MODAL
-// =====================================================
-function FeeHistory({ student, onClose }) {
-    const [history, setHistory] = useState(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => { loadHistory(); }, [student]);
-
-    const loadHistory = async () => {
-        try {
-            setLoading(true);
-            const res = await api.get(`/payments/history/student/${student.id}`);
-            setHistory(res.data);
-        } catch (error) {
-            console.error("Fee History Error:", error);
-            setHistory(null);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const money = (value) => `₹${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-    const prevDues = Number(student?.previousDues || 0);
-    const concession = Number(student?.concessionAmount || 0);
-
-    let standardTotal = Number(history?.totalFee || 0);
-    if (Array.isArray(history?.items) && history.items.length > 0) {
-        standardTotal = history.items.reduce((sum, item) => {
-            if (item.itemType === "carry_forward" || item.componentName?.toLowerCase().includes("previous")) return sum;
-            return sum + Number(item.amount || 0);
-        }, 0);
-    }
-
-    const netAcademicFee = Math.max(0, standardTotal - concession);
-    const computedTotalFee = prevDues + netAcademicFee;
-    const computedPaid = Number(history?.totalPaid || 0);
-    const computedBalance = Math.max(0, computedTotalFee - computedPaid);
-
-    return (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "16px" }}>
-            <div style={{ backgroundColor: "#ffffff", borderRadius: "14px", width: "100%", maxWidth: "600px", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)", display: "flex", flexDirection: "column", boxSizing: "border-box" }}>
-                <div style={{ padding: "16px 20px", borderBottom: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                        <h2 style={{ fontSize: "17px", fontWeight: "700", color: "#0F172A", margin: 0 }}>Fee Account Ledger</h2>
-                        <p style={{ fontSize: "13px", color: "#64748B", margin: "2px 0 0" }}><strong style={{ color: "#1E293B" }}>{student.studentName}</strong>{" • "}<span>{student.rollNumber ? `Roll No. ${student.rollNumber}` : "No Roll"}</span>{" • "}<span>{student.className || "-"}</span></p>
-                    </div>
-                    <button type="button" onClick={onClose} style={{ background: "#F1F5F9", border: "none", fontSize: "14px", color: "#475569", cursor: "pointer", width: "28px", height: "28px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>✕</button>
+                    )}
                 </div>
 
-                <div style={{ padding: "20px" }}>
-                    {loading ? (
-                        <div style={{ padding: "30px", textAlign: "center", color: "#64748B", fontSize: "14px" }}>Loading account ledger...</div>
-                    ) : history ? (
+                {/* Tabs */}
+                <div style={{ display: "flex", borderBottom: "1px solid #E2E8F0", padding: "0 12px", backgroundColor: "#fff" }}>
+                    <TabButton id="overview">Profile</TabButton>
+                    <TabButton id="fees">Fee Account</TabButton>
+                    <TabButton id="results">Exam Results</TabButton>
+                </div>
+
+                <div style={{ padding: "24px", overflowY: "auto" }}>
+                    {tab === "overview" ? (
                         <>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "#F8FAFC", padding: "10px 14px", borderRadius: "8px", border: "1px solid #E2E8F0", marginBottom: "16px" }}>
-                                <div><span style={{ fontSize: "11px", fontWeight: "600", color: "#64748B", textTransform: "uppercase" }}>Academic Session</span><div style={{ fontSize: "14px", fontWeight: "700", color: "#0F172A" }}>{history.academicYear?.name || "2026-2027"}</div></div>
-                                <span style={{ backgroundColor: "#DCFCE7", color: "#15803D", fontSize: "11px", fontWeight: "700", padding: "3px 10px", borderRadius: "20px" }}>● Active Account</span>
+                            <h3 style={{ fontSize: "15px", color: "#334155", borderBottom: "1px solid #E2E8F0", paddingBottom: "8px", marginBottom: "16px", marginTop: 0 }}>Academic Profile</h3>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
+                                <div><Label>Admission No.</Label><Value>{student.admissionNumber}</Value></div>
+                                <div><Label>SATS No.</Label><Value>{student.satsNumber}</Value></div>
+                                <div><Label>Enrollment Date</Label><Value>{student.createdAt ? new Date(student.createdAt).toLocaleDateString() : "-"}</Value></div>
                             </div>
 
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginBottom: "20px" }}>
-                                <div style={{ backgroundColor: "#F8FAFC", border: "1px solid #E2E8F0", padding: "12px", borderRadius: "8px" }}><span style={{ fontSize: "11px", color: "#64748B", fontWeight: "600" }}>Total Demand</span><div style={{ fontSize: "17px", fontWeight: "700", color: "#0F172A", marginTop: "2px" }}>{money(computedTotalFee)}</div></div>
-                                <div style={{ backgroundColor: "#F0FDF4", border: "1px solid #BBF7D0", padding: "12px", borderRadius: "8px" }}><span style={{ fontSize: "11px", color: "#15803D", fontWeight: "600" }}>Total Paid</span><div style={{ fontSize: "17px", fontWeight: "700", color: "#16A34A", marginTop: "2px" }}>{money(computedPaid)}</div></div>
-                                <div style={{ backgroundColor: computedBalance > 0 ? "#FEF2F2" : "#F8FAFC", border: "1px solid", borderColor: computedBalance > 0 ? "#FECACA" : "#E2E8F0", padding: "12px", borderRadius: "8px" }}><span style={{ fontSize: "11px", color: computedBalance > 0 ? "#DC2626" : "#64748B", fontWeight: "600" }}>Balance Due</span><div style={{ fontSize: "17px", fontWeight: "700", color: computedBalance > 0 ? "#DC2626" : "#16A34A", marginTop: "2px" }}>{money(computedBalance)}</div></div>
-                            </div>
-
-                            <div style={{ marginBottom: "20px" }}>
-                                <div style={{ fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Assessed Fee Structure</div>
-                                <div style={{ border: "1px solid #E2E8F0", borderRadius: "8px", overflow: "hidden", backgroundColor: "#FFFFFF" }}>
-                                    <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 14px", backgroundColor: "#F8FAFC", borderBottom: "1px solid #E2E8F0", fontSize: "12px", fontWeight: "600", color: "#475569" }}><span>Component</span><span>Amount (₹)</span></div>
-                                    {prevDues > 0 && <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", backgroundColor: "#EFF6FF", borderBottom: "1px solid #DBEAFE" }}><div style={{ display: "flex", alignItems: "center", gap: "8px" }}><span style={{ color: "#1E40AF", fontWeight: "600", fontSize: "13px" }}>Previous Dues</span><span style={{ backgroundColor: "#DBEAFE", color: "#1E40AF", fontSize: "10px", fontWeight: "700", padding: "1px 6px", borderRadius: "4px" }}>Carry Forward</span></div><strong style={{ color: "#1E40AF", fontSize: "13px" }}>{money(prevDues)}</strong></div>}
-                                    {history.items?.map((item) => <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 14px", borderBottom: "1px solid #F1F5F9", fontSize: "13px" }}><span style={{ color: "#334155" }}>{item.componentName}</span><strong style={{ color: "#0F172A" }}>{money(item.amount)}</strong></div>)}
-                                    {concession > 0 && <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", backgroundColor: "#F0FDF4", borderTop: "1px solid #DCFCE7" }}><div style={{ display: "flex", alignItems: "center", gap: "8px" }}><span style={{ color: "#15803D", fontWeight: "600", fontSize: "13px" }}>Fee Concession</span><span style={{ backgroundColor: "#DCFCE7", color: "#15803D", fontSize: "10px", fontWeight: "700", padding: "1px 6px", borderRadius: "4px" }}>{student.concessionReason || "Discount"}</span></div><strong style={{ color: "#16A34A", fontSize: "13px" }}>- {money(concession)}</strong></div>}
-                                </div>
-                            </div>
-
-                            <div>
-                                <div style={{ fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Transaction Receipts Log</div>
-                                <div style={{ border: "1px solid #E2E8F0", borderRadius: "8px", overflow: "hidden", backgroundColor: "#FFFFFF" }}>
-                                    <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1.2fr", padding: "8px 14px", backgroundColor: "#F8FAFC", borderBottom: "1px solid #E2E8F0", fontSize: "12px", fontWeight: "600", color: "#475569" }}><span>Date</span><span>Mode</span><span style={{ textAlign: "center" }}>Status</span><span style={{ textAlign: "right" }}>Amount Paid</span></div>
-                                    {history.payments?.length === 0 ? <div style={{ padding: "14px", textAlign: "center", color: "#64748B", fontSize: "13px" }}>No receipts recorded for this session.</div> : history.payments?.map((payment) => <div key={payment.id} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1.2fr", alignItems: "center", padding: "9px 14px", borderBottom: "1px solid #F1F5F9", fontSize: "13px", opacity: payment.status === "reversed" ? 0.6 : 1 }}><span style={{ color: "#334155" }}>{payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString("en-IN") : "-"}</span><span style={{ color: "#334155", fontWeight: "500" }}>{payment.paymentMode || "Cash"}</span><span style={{ textAlign: "center" }}><span style={{ fontSize: "10px", fontWeight: "700", padding: "2px 7px", borderRadius: "4px", backgroundColor: payment.status === "reversed" ? "#F1F5F9" : "#DCFCE7", color: payment.status === "reversed" ? "#64748B" : "#15803D" }}>{payment.status === "reversed" ? "Reversed" : "Completed"}</span></span><strong style={{ textAlign: "right", color: "#0F172A" }}>{money(payment.amount)}</strong></div>)}
-                                </div>
+                            <h3 style={{ fontSize: "15px", color: "#334155", borderBottom: "1px solid #E2E8F0", paddingBottom: "8px", marginBottom: "16px", marginTop: "8px" }}>Personal Details</h3>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
+                                <div><Label>Gender</Label><Value>{student.gender}</Value></div>
+                                <div><Label>Date of Birth</Label><Value>{student.dob ? new Date(student.dob).toLocaleDateString() : "-"}</Value></div>
+                                <div><Label>Primary Contact</Label><Value>{student.contact1}</Value></div>
+                                <div><Label>Secondary Contact</Label><Value>{student.contact2}</Value></div>
+                                <div><Label>Father's Name</Label><Value>{student.fatherName}</Value></div>
+                                <div><Label>Mother's Name</Label><Value>{student.motherName}</Value></div>
+                                <div style={{ gridColumn: "span 3" }}><Label>Home Address</Label><Value>{student.address}</Value></div>
+                                <div style={{ gridColumn: "span 3" }}><Label>General Remarks</Label><Value>{student.remark}</Value></div>
                             </div>
                         </>
-                    ) : <div style={{ padding: "20px", textAlign: "center", color: "#DC2626" }}>Unable to load fee account.</div>}
+                    ) : tab === "fees" ? (
+                        loadingFees ? (
+                            <div style={{ padding: "30px", textAlign: "center", color: "#64748B", fontSize: "14px" }}>Loading fee account...</div>
+                        ) : history ? (
+                            <>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "#F8FAFC", padding: "10px 14px", borderRadius: "8px", border: "1px solid #E2E8F0", marginBottom: "16px" }}>
+                                    <div><span style={{ fontSize: "11px", fontWeight: "600", color: "#64748B", textTransform: "uppercase" }}>Academic Session</span><div style={{ fontSize: "14px", fontWeight: "700", color: "#0F172A" }}>{history.academicYear?.name || "-"}</div></div>
+                                    <span style={{ backgroundColor: "#DCFCE7", color: "#15803D", fontSize: "11px", fontWeight: "700", padding: "3px 10px", borderRadius: "20px" }}>● Active Account</span>
+                                </div>
+
+                                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginBottom: "20px" }}>
+                                    <div style={{ backgroundColor: "#F8FAFC", border: "1px solid #E2E8F0", padding: "12px", borderRadius: "8px" }}><span style={{ fontSize: "11px", color: "#64748B", fontWeight: "600" }}>Total Demand</span><div style={{ fontSize: "17px", fontWeight: "700", color: "#0F172A", marginTop: "2px" }}>{money(computedTotalFee)}</div></div>
+                                    <div style={{ backgroundColor: "#F0FDF4", border: "1px solid #BBF7D0", padding: "12px", borderRadius: "8px" }}><span style={{ fontSize: "11px", color: "#15803D", fontWeight: "600" }}>Total Paid</span><div style={{ fontSize: "17px", fontWeight: "700", color: "#16A34A", marginTop: "2px" }}>{money(computedPaid)}</div></div>
+                                    <div style={{ backgroundColor: computedBalance > 0 ? "#FEF2F2" : "#F8FAFC", border: "1px solid", borderColor: computedBalance > 0 ? "#FECACA" : "#E2E8F0", padding: "12px", borderRadius: "8px" }}><span style={{ fontSize: "11px", color: computedBalance > 0 ? "#DC2626" : "#64748B", fontWeight: "600" }}>Balance Due</span><div style={{ fontSize: "17px", fontWeight: "700", color: computedBalance > 0 ? "#DC2626" : "#16A34A", marginTop: "2px" }}>{money(computedBalance)}</div></div>
+                                </div>
+
+                                <div style={{ marginBottom: "20px" }}>
+                                    <div style={{ fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Assessed Fee Structure</div>
+                                    <div style={{ border: "1px solid #E2E8F0", borderRadius: "8px", overflow: "hidden", backgroundColor: "#FFFFFF" }}>
+                                        <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 14px", backgroundColor: "#F8FAFC", borderBottom: "1px solid #E2E8F0", fontSize: "12px", fontWeight: "600", color: "#475569" }}><span>Component</span><span>Amount (₹)</span></div>
+                                        {prevDues > 0 && <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", backgroundColor: "#EFF6FF", borderBottom: "1px solid #DBEAFE" }}><div style={{ display: "flex", alignItems: "center", gap: "8px" }}><span style={{ color: "#1E40AF", fontWeight: "600", fontSize: "13px" }}>Previous Dues</span><span style={{ backgroundColor: "#DBEAFE", color: "#1E40AF", fontSize: "10px", fontWeight: "700", padding: "1px 6px", borderRadius: "4px" }}>Carry Forward</span></div><strong style={{ color: "#1E40AF", fontSize: "13px" }}>{money(prevDues)}</strong></div>}
+                                        {history.items?.map((item) => <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 14px", borderBottom: "1px solid #F1F5F9", fontSize: "13px" }}><span style={{ color: "#334155" }}>{item.componentName}</span><strong style={{ color: "#0F172A" }}>{money(item.amount)}</strong></div>)}
+                                        {concession > 0 && <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", backgroundColor: "#F0FDF4", borderTop: "1px solid #DCFCE7" }}><div style={{ display: "flex", alignItems: "center", gap: "8px" }}><span style={{ color: "#15803D", fontWeight: "600", fontSize: "13px" }}>Fee Concession</span><span style={{ backgroundColor: "#DCFCE7", color: "#15803D", fontSize: "10px", fontWeight: "700", padding: "1px 6px", borderRadius: "4px" }}>{student.concessionReason || "Discount"}</span></div><strong style={{ color: "#16A34A", fontSize: "13px" }}>- {money(concession)}</strong></div>}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <div style={{ fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Transaction Receipts Log</div>
+                                    <div style={{ border: "1px solid #E2E8F0", borderRadius: "8px", overflow: "hidden", backgroundColor: "#FFFFFF" }}>
+                                        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1.2fr", padding: "8px 14px", backgroundColor: "#F8FAFC", borderBottom: "1px solid #E2E8F0", fontSize: "12px", fontWeight: "600", color: "#475569" }}><span>Date</span><span>Mode</span><span style={{ textAlign: "center" }}>Status</span><span style={{ textAlign: "right" }}>Amount Paid</span></div>
+                                        {history.payments?.length === 0 ? <div style={{ padding: "14px", textAlign: "center", color: "#64748B", fontSize: "13px" }}>No receipts recorded for this session.</div> : history.payments?.map((payment) => <div key={payment.id} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1.2fr", alignItems: "center", padding: "9px 14px", borderBottom: "1px solid #F1F5F9", fontSize: "13px", opacity: payment.status === "reversed" ? 0.6 : 1 }}><span style={{ color: "#334155" }}>{payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString("en-IN") : "-"}</span><span style={{ color: "#334155", fontWeight: "500" }}>{payment.paymentMode || "Cash"}</span><span style={{ textAlign: "center" }}><span style={{ fontSize: "10px", fontWeight: "700", padding: "2px 7px", borderRadius: "4px", backgroundColor: payment.status === "reversed" ? "#F1F5F9" : "#DCFCE7", color: payment.status === "reversed" ? "#64748B" : "#15803D" }}>{payment.status === "reversed" ? "Reversed" : "Completed"}</span></span><strong style={{ textAlign: "right", color: "#0F172A" }}>{money(payment.amount)}</strong></div>)}
+                                    </div>
+                                </div>
+                            </>
+                        ) : <div style={{ padding: "20px", textAlign: "center", color: "#DC2626" }}>Unable to load fee account.</div>
+                    ) : (
+                        loadingResults ? (
+                            <div style={{ padding: "30px", textAlign: "center", color: "#64748B", fontSize: "14px" }}>Loading exam results...</div>
+                        ) : results && results.length > 0 ? (
+                            <div>
+                                <div style={{ fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Published Exam Results</div>
+                                <div style={{ border: "1px solid #E2E8F0", borderRadius: "8px", overflow: "hidden", backgroundColor: "#FFFFFF" }}>
+                                    <div style={{ display: "grid", gridTemplateColumns: "1.7fr 1fr 0.8fr 1.1fr", padding: "8px 14px", backgroundColor: "#F8FAFC", borderBottom: "1px solid #E2E8F0", fontSize: "12px", fontWeight: "600", color: "#475569" }}><span>Exam</span><span>Session</span><span style={{ textAlign: "center" }}>Result</span><span style={{ textAlign: "right" }}>Report Card</span></div>
+                                    {results.map((r) => (
+                                        <div key={r.id} style={{ display: "grid", gridTemplateColumns: "1.7fr 1fr 0.8fr 1.1fr", alignItems: "center", padding: "9px 14px", borderBottom: "1px solid #F1F5F9", fontSize: "13px" }}>
+                                            <span style={{ color: "#334155" }}><strong>{r.examName}</strong><div style={{ fontSize: "11px", color: "#64748B" }}>{Number(r.percentage || 0).toFixed(1)}% • {r.totalObtained}/{r.totalMax}</div></span>
+                                            <span style={{ color: "#334155" }}>{r.academicYear || "-"}</span>
+                                            <span style={{ textAlign: "center" }}><span style={{ fontSize: "10px", fontWeight: "700", padding: "2px 7px", borderRadius: "4px", backgroundColor: r.overallStatus === "pass" ? "#DCFCE7" : r.overallStatus === "fail" ? "#FEE2E2" : "#FEF9C3", color: r.overallStatus === "pass" ? "#15803D" : r.overallStatus === "fail" ? "#B91C1C" : "#A16207" }}>{String(r.overallStatus || "-").toUpperCase()}</span></span>
+                                            <span style={{ textAlign: "right" }}><button onClick={() => downloadReportCard(r.examId, r.examName)} disabled={dlExamId === r.examId} style={{ padding: "6px 12px", backgroundColor: "#0F172A", color: "#fff", border: "none", borderRadius: "6px", cursor: dlExamId === r.examId ? "wait" : "pointer", fontSize: "12px", fontWeight: "600", opacity: dlExamId === r.examId ? 0.7 : 1 }}>{dlExamId === r.examId ? "…" : "⬇ Download"}</button></span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : <div style={{ padding: "30px", textAlign: "center", color: "#64748B", fontSize: "14px" }}>No published exam results for this student yet.</div>
+                    )}
+                </div>
+
+                <div style={{ padding: "16px 24px", backgroundColor: "#F8FAFC", borderTop: "1px solid #E2E8F0", textAlign: "right" }}>
+                    <button onClick={onClose} style={{ padding: "8px 24px", backgroundColor: "#fff", border: "1px solid #CBD5E1", borderRadius: "6px", cursor: "pointer", fontWeight: "600", color: "#334155" }}>Close</button>
                 </div>
             </div>
         </div>
     );
 }
+
 
 export default StudentsPage;

@@ -18,11 +18,16 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Automatically kick back to /login if token expires or is rejected
+// Session handling on error responses:
+//  - 401 (not authenticated / token expired/invalid): the session is dead, so
+//    clear it and send the user to /login.
+//  - 403 (authenticated but not allowed on this page/action): the token is
+//    still valid — do NOT log the user out. Let the calling page surface an
+//    "access denied" message instead of bouncing to /login.
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+    if (error.response && error.response.status === 401) {
       sessionStorage.clear();
       window.location.href = "/login";
     }

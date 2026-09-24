@@ -8,13 +8,15 @@ const notificationController =
     require("../controllers/notificationController");
 
 const {
-    requireRole
+    requireRole,
+    requirePage
 } =
     require("../middleware/authMiddleware");
 
 
 // =====================================================
-// ADMIN + RECEPTIONIST
+// ADMIN + RECEPTIONIST, WITH "notifications" PAGE ACCESS
+// (admin bypasses the page check)
 // =====================================================
 
 router.use(
@@ -22,6 +24,10 @@ router.use(
         "admin",
         "receptionist"
     )
+);
+
+router.use(
+    requirePage("notifications")
 );
 
 

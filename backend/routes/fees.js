@@ -6,12 +6,14 @@ const feeController = require("../controllers/feeController");
 
 const {
     requireRole,
-    requireAdmin
+    requireAdmin,
+    requirePage
 } = require("../middleware/authMiddleware");
 
 // =====================================================
 // ALLOWED ROLES
-// ADMIN + RECEPTIONIST
+// ADMIN + RECEPTIONIST, WITH "fees" PAGE ACCESS
+// (admin bypasses the page check)
 // =====================================================
 
 router.use(
@@ -19,6 +21,10 @@ router.use(
         "admin",
         "receptionist"
     )
+);
+
+router.use(
+    requirePage("fees")
 );
 
 // =====================================================
@@ -129,6 +135,12 @@ router.post(
     "/components",
     requireAdmin,
     feeController.createFeeComponent
+);
+
+router.put(
+    "/components/:id",
+    requireAdmin,
+    feeController.updateFeeComponent
 );
 
 router.delete(

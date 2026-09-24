@@ -117,15 +117,12 @@ function PaymentForm({ onClose }) {
         });
 
         const netTuition = Math.max(0, totalTuitionAmount - concession);
-        const term1Total = Math.floor(netTuition / 3);
-        const term2Total = Math.floor(netTuition / 3);
-        const term3Total = netTuition - (term1Total + term2Total);
 
+        // Single tuition bucket (no term splitting). Legacy payments tagged with
+        // "Term 1/2/3" are folded into the one "tuition fee" total.
         let paidMap = {
             "previous dues": 0,
-            "tuition fee (term 1)": 0,
-            "tuition fee (term 2)": 0,
-            "tuition fee (term 3)": 0
+            "tuition fee": 0
         };
         rawAdditionalItems.forEach(i => { paidMap[i.name.toLowerCase().trim()] = 0; });
 
@@ -136,20 +133,15 @@ function PaymentForm({ onClose }) {
             if (Array.isArray(p.lineItems) && p.lineItems.length > 0) {
                 p.lineItems.forEach(li => {
                     const cName = String(li.componentName || "").toLowerCase().trim();
-                    if (paidMap[cName] !== undefined) {
-                        paidMap[cName] += Number(li.amount || 0);
-                    } else if (cName.includes("previous")) {
-                        paidMap["previous dues"] += Number(li.amount || 0);
-                    } else if (cName.includes("term 1")) {
-                        paidMap["tuition fee (term 1)"] += Number(li.amount || 0);
-                    } else if (cName.includes("term 2")) {
-                        paidMap["tuition fee (term 2)"] += Number(li.amount || 0);
-                    } else if (cName.includes("term 3")) {
-                        paidMap["tuition fee (term 3)"] += Number(li.amount || 0);
+                    const amt = Number(li.amount || 0);
+                    if (cName.includes("previous")) {
+                        paidMap["previous dues"] += amt;
+                    } else if (cName.includes("tuition") || cName.includes("tution") || cName.includes("term")) {
+                        paidMap["tuition fee"] += amt;
+                    } else if (paidMap[cName] !== undefined) {
+                        paidMap[cName] += amt;
                     } else {
-                        const matchedKey = Object.keys(paidMap).find(k => k.toLowerCase() === cName);
-                        if (matchedKey) paidMap[matchedKey] += Number(li.amount || 0);
-                        else paidMap[cName] = (paidMap[cName] || 0) + Number(li.amount || 0);
+                        paidMap[cName] = (paidMap[cName] || 0) + amt;
                     }
                 });
             } else {
@@ -158,25 +150,26 @@ function PaymentForm({ onClose }) {
         });
 
         if (unassignedLegacyPool > 0) {
-            ["tuition fee (term 1)", "tuition fee (term 2)", "tuition fee (term 3)"].forEach(termKey => {
-                const limit = term1Total;
-                const rem = limit - (paidMap[termKey] || 0);
-                const take = Math.min(rem, unassignedLegacyPool);
-                if (take > 0) { paidMap[termKey] += take; unassignedLegacyPool -= take; }
-            });
+            // Apply any legacy (un-itemized) payments to tuition, then additional
+            // components, then previous dues.
+            const tuitionRem = netTuition - (paidMap["tuition fee"] || 0);
+            const takeTuition = Math.min(Math.max(0, tuitionRem), unassignedLegacyPool);
+            if (takeTuition > 0) { paidMap["tuition fee"] += takeTuition; unassignedLegacyPool -= takeTuition; }
+
             rawAdditionalItems.forEach(item => {
                 const n = item.name.toLowerCase().trim();
                 const rem = item.amount - (paidMap[n] || 0);
-                const take = Math.min(rem, unassignedLegacyPool);
+                const take = Math.min(Math.max(0, rem), unassignedLegacyPool);
                 if (take > 0) { paidMap[n] += take; unassignedLegacyPool -= take; }
             });
+
             const remPrev = studentPrevDues - (paidMap["previous dues"] || 0);
-            const takePrev = Math.min(remPrev, unassignedLegacyPool);
+            const takePrev = Math.min(Math.max(0, remPrev), unassignedLegacyPool);
             if (takePrev > 0) { paidMap["previous dues"] += takePrev; unassignedLegacyPool -= takePrev; }
         }
 
         return {
-            studentPrevDues, concession, netTuition, term1Total, term2Total, term3Total,
+            studentPrevDues, concession, netTuition,
             rawAdditionalItems, paidMap
         };
     }, [feeSummary, selectedStudent]);
@@ -185,23 +178,23 @@ function PaymentForm({ onClose }) {
     // BUILD CLEAN COMPONENT LIST (VANISHES IF PAID 100%)
     // =====================================================
     const componentBreakdown = useMemo(() => {
-        if (!parsedLedger) return { tuitionTerms: [], additionalItems: [], previousDues: 0 };
-        const { studentPrevDues, term1Total, term2Total, term3Total, rawAdditionalItems, paidMap } = parsedLedger;
+        if (!parsedLedger) return { tuition: null, additionalItems: [], previousDues: 0 };
+        const { studentPrevDues, netTuition, rawAdditionalItems, paidMap } = parsedLedger;
 
         const prevDuesBal = Math.max(0, studentPrevDues - (paidMap["previous dues"] || 0));
-        
-        const tuitionTerms = [
-            { name: "Tuition Fee (Term 1)", total: term1Total, paid: paidMap["tuition fee (term 1)"] || 0 },
-            { name: "Tuition Fee (Term 2)", total: term2Total, paid: paidMap["tuition fee (term 2)"] || 0 },
-            { name: "Tuition Fee (Term 3)", total: term3Total, paid: paidMap["tuition fee (term 3)"] || 0 }
-        ].map(t => ({ ...t, amount: Math.max(0, t.total - t.paid) })).filter(t => t.amount > 0);
+
+        const tuitionPaid = paidMap["tuition fee"] || 0;
+        const tuitionDue = Math.max(0, netTuition - tuitionPaid);
+        const tuition = tuitionDue > 0
+            ? { name: "Tuition Fee", total: netTuition, paid: tuitionPaid, amount: tuitionDue }
+            : null;
 
         const additionalItems = rawAdditionalItems.map(item => {
             const paid = paidMap[item.name.toLowerCase().trim()] || 0;
             return { name: item.name, total: item.amount, amount: Math.max(0, item.amount - paid) };
         }).filter(i => i.amount > 0);
 
-        return { previousDues: prevDuesBal, tuitionTerms, additionalItems };
+        return { previousDues: prevDuesBal, tuition, additionalItems };
     }, [parsedLedger]);
 
     // =====================================================
@@ -209,7 +202,7 @@ function PaymentForm({ onClose }) {
     // =====================================================
     const financialOverview = useMemo(() => {
         if (!parsedLedger) return null;
-        const { studentPrevDues, term1Total, term2Total, term3Total, netTuition, rawAdditionalItems, paidMap } = parsedLedger;
+        const { studentPrevDues, netTuition, rawAdditionalItems, paidMap } = parsedLedger;
 
         const totalAssessedDemand = studentPrevDues + netTuition + rawAdditionalItems.reduce((s,i)=>s+i.amount, 0);
         const previouslyPaid = Number(feeSummary?.totalPaid || 0);
@@ -220,10 +213,8 @@ function PaymentForm({ onClose }) {
 
         const buckets = [
             { name: "Previous Dues", total: studentPrevDues, paid: (paidMap["previous dues"] || 0) + getNow("Previous Dues"), due: Math.max(0, studentPrevDues - ((paidMap["previous dues"] || 0) + getNow("Previous Dues"))), isPrevious: true },
-            { name: "Term 1 Fee", total: term1Total, paid: (paidMap["tuition fee (term 1)"] || 0) + getNow("Tuition Fee (Term 1)"), due: Math.max(0, term1Total - ((paidMap["tuition fee (term 1)"] || 0) + getNow("Tuition Fee (Term 1)"))) },
-            { name: "Term 2 Fee", total: term2Total, paid: (paidMap["tuition fee (term 2)"] || 0) + getNow("Tuition Fee (Term 2)"), due: Math.max(0, term2Total - ((paidMap["tuition fee (term 2)"] || 0) + getNow("Tuition Fee (Term 2)"))) },
-            { name: "Term 3 Fee", total: term3Total, paid: (paidMap["tuition fee (term 3)"] || 0) + getNow("Tuition Fee (Term 3)"), due: Math.max(0, term3Total - ((paidMap["tuition fee (term 3)"] || 0) + getNow("Tuition Fee (Term 3)"))) }
-        ];
+            { name: "Tuition Fee", total: netTuition, paid: (paidMap["tuition fee"] || 0) + getNow("Tuition Fee"), due: Math.max(0, netTuition - ((paidMap["tuition fee"] || 0) + getNow("Tuition Fee"))) }
+        ].filter(b => b.total > 0);
 
         return { totalAssessedDemand, previouslyPaid, currentBalanceDue, buckets };
     }, [parsedLedger, selectedComponents, feeSummary, formData.amount]);
@@ -349,8 +340,8 @@ function PaymentForm({ onClose }) {
                                     </div>
 
                                     <div style={{ marginTop: "14px" }}>
-                                        <span style={{ fontSize: "12px", fontWeight: "700", color: "#475569", textTransform: "uppercase" }}>Installment Settlement Tracker</span>
-                                        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px", marginTop: "6px" }}>
+                                        <span style={{ fontSize: "12px", fontWeight: "700", color: "#475569", textTransform: "uppercase" }}>Settlement Tracker</span>
+                                        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginTop: "6px" }}>
                                             {financialOverview.buckets.map((item, idx) => (
                                                 <div key={idx} style={{ padding: "8px", borderRadius: "6px", border: "1px solid", borderColor: item.due === 0 && item.total > 0 ? "#86EFAC" : item.isPrevious ? "#BFDBFE" : "#E2E8F0", backgroundColor: item.due === 0 && item.total > 0 ? "#F0FDF4" : item.isPrevious ? "#EFF6FF" : "#F8FAFC" }}>
                                                     <div style={{ fontSize: "10px", fontWeight: "700", color: item.isPrevious ? "#1E40AF" : "#64748B" }}>{item.name.toUpperCase()}</div>
@@ -379,25 +370,17 @@ function PaymentForm({ onClose }) {
                                             </div>
                                         )}
 
-                                        {componentBreakdown.tuitionTerms.length > 0 && (
-                                            <div style={{ marginTop: "10px" }}>
-                                                <div style={{ fontSize: "11px", fontWeight: "700", color: "#64748b", marginBottom: "6px" }}>TUITION FEE INSTALLMENTS</div>
-                                                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
-                                                    {componentBreakdown.tuitionTerms.map((term, idx) => (
-                                                        <div key={idx} style={{ padding: "8px", borderRadius: "6px", border: "1px solid #e2e8f0", background: selectedComponents[term.name] !== undefined ? "#f0fdf4" : "#f8fafc" }}>
-                                                            <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "11px", fontWeight: "700" }}>
-                                                                <input type="checkbox" checked={selectedComponents[term.name] !== undefined} onChange={(e) => handleToggleComponent(term.name, term.amount, e.target.checked)} />
-                                                                {term.name}
-                                                            </label>
-                                                            <div style={{ marginTop: "4px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                                                <span style={{ fontSize: "11px", color: "#15803d" }}>Due: {money(term.amount)}</span>
-                                                                {selectedComponents[term.name] !== undefined && (
-                                                                    <input type="number" value={selectedComponents[term.name]} onChange={(e) => handleComponentAmountChange(term.name, e.target.value, term.amount)} style={{ width: "65px", padding: "2px", fontSize: "11px", textAlign: "right" }} />
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
+                                        {componentBreakdown.tuition && (
+                                            <div style={{ marginTop: "10px", background: selectedComponents["Tuition Fee"] !== undefined ? "#f0fdf4" : "#f8fafc", padding: "8px 12px", borderRadius: "6px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                                                    <input type="checkbox" checked={selectedComponents["Tuition Fee"] !== undefined} onChange={(e) => handleToggleComponent("Tuition Fee", componentBreakdown.tuition.amount, e.target.checked)} />
+                                                    <strong style={{ fontSize: "12px", color: "#15803d" }}>Tuition Fee</strong>
+                                                </label>
+                                                {selectedComponents["Tuition Fee"] !== undefined ? (
+                                                    <input type="number" value={selectedComponents["Tuition Fee"]} onChange={(e) => handleComponentAmountChange("Tuition Fee", e.target.value, componentBreakdown.tuition.amount)} style={{ width: "85px", padding: "2px 4px", fontSize: "12px", textAlign: "right" }} />
+                                                ) : (
+                                                    <span style={{ fontSize: "12px", fontWeight: "700", color: "#15803d" }}>{money(componentBreakdown.tuition.amount)}</span>
+                                                )}
                                             </div>
                                         )}
 

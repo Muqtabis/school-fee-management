@@ -41,6 +41,33 @@ import UsersPage
 import FeesPage
     from "./pages/FeesPage";
 
+import ClassManagementPage
+    from "./pages/ClassManagementPage";
+
+import TeacherManagementPage
+    from "./pages/TeacherManagementPage";
+
+import StudentAttendancePage
+    from "./pages/StudentAttendancePage";
+
+import ExamResultsPage
+    from "./pages/ExamResultsPage";
+
+import ResultsOverviewPage
+    from "./pages/ResultsOverviewPage";
+
+import AttendanceOverviewPage
+    from "./pages/AttendanceOverviewPage";
+
+import MarksEntryPage
+    from "./pages/MarksEntryPage";
+
+import TeacherAttendancePage
+    from "./pages/TeacherAttendancePage";
+
+import MyAttendancePage
+    from "./pages/MyAttendancePage";
+
 import ProtectedRoute
     from "./components/ProtectedRoute";
 
@@ -127,11 +154,7 @@ function App() {
                 path="/dashboard"
                 element={
 
-                    <ProtectedRoute
-                        roles={[
-                            "admin"
-                        ]}
-                    >
+                    <ProtectedRoute pageKey="dashboard">
 
                         <DashboardPage />
 
@@ -150,12 +173,7 @@ function App() {
                 path="/students"
                 element={
 
-                    <ProtectedRoute
-                        roles={[
-                            "admin",
-                            "receptionist"
-                        ]}
-                    >
+                    <ProtectedRoute pageKey="students">
 
                         <StudentsPage />
 
@@ -174,12 +192,7 @@ function App() {
                 path="/fees"
                 element={
 
-                    <ProtectedRoute
-                        roles={[
-                            "admin",
-                            "receptionist"
-                        ]}
-                    >
+                    <ProtectedRoute pageKey="fees">
 
                         <FeesPage />
 
@@ -198,12 +211,7 @@ function App() {
                 path="/payments"
                 element={
 
-                    <ProtectedRoute
-                        roles={[
-                            "admin",
-                            "receptionist"
-                        ]}
-                    >
+                    <ProtectedRoute pageKey="payments">
 
                         <PaymentsPage />
 
@@ -222,12 +230,7 @@ function App() {
                 path="/expenses"
                 element={
 
-                    <ProtectedRoute
-                        roles={[
-                            "admin",
-                            "receptionist"
-                        ]}
-                    >
+                    <ProtectedRoute pageKey="expenses">
 
                         <ExpensesPage />
 
@@ -246,17 +249,147 @@ function App() {
                 path="/reports"
                 element={
 
-                    <ProtectedRoute
-                        roles={[
-                            "admin",
-                            
-                        ]}
-                    >
+                    <ProtectedRoute pageKey="reports">
 
                         <ReportsPage />
 
                     </ProtectedRoute>
 
+                }
+            />
+
+
+            {/* =================================================
+                CLASS MANAGEMENT
+                ADMIN
+            ================================================= */}
+
+            <Route
+                path="/class-management"
+                element={
+                    <ProtectedRoute pageKey="class_management">
+                        <ClassManagementPage />
+                    </ProtectedRoute>
+                }
+            />
+
+
+            {/* =================================================
+                TEACHER MANAGEMENT
+                ADMIN
+            ================================================= */}
+
+            <Route
+                path="/teacher-management"
+                element={
+                    <ProtectedRoute pageKey="teacher_management">
+                        <TeacherManagementPage />
+                    </ProtectedRoute>
+                }
+            />
+
+
+            {/* =================================================
+                EXAM & RESULTS
+                ADMIN
+            ================================================= */}
+
+            <Route
+                path="/exam-results"
+                element={
+                    <ProtectedRoute pageKey="exam_results">
+                        <ExamResultsPage />
+                    </ProtectedRoute>
+                }
+            />
+
+
+            {/* =================================================
+                RESULTS OVERVIEW (admin class-wise gradebook)
+                ADMIN
+            ================================================= */}
+
+            <Route
+                path="/results-overview"
+                element={
+                    <ProtectedRoute pageKey="results_overview">
+                        <ResultsOverviewPage />
+                    </ProtectedRoute>
+                }
+            />
+
+
+            {/* =================================================
+                ATTENDANCE OVERVIEW (admin class-wise summary)
+                ADMIN
+            ================================================= */}
+
+            <Route
+                path="/attendance-overview"
+                element={
+                    <ProtectedRoute pageKey="attendance_overview">
+                        <AttendanceOverviewPage />
+                    </ProtectedRoute>
+                }
+            />
+
+
+            {/* =================================================
+                MARKS ENTRY
+                TEACHER
+            ================================================= */}
+
+            <Route
+                path="/marks-entry"
+                element={
+                    <ProtectedRoute pageKey="marks_entry">
+                        <MarksEntryPage />
+                    </ProtectedRoute>
+                }
+            />
+
+
+            {/* =================================================
+                TEACHER ATTENDANCE
+                ADMIN + ASSIGNED MARKER
+            ================================================= */}
+
+            <Route
+                path="/teacher-attendance"
+                element={
+                    <ProtectedRoute pageKey="teacher_attendance">
+                        <TeacherAttendancePage />
+                    </ProtectedRoute>
+                }
+            />
+
+
+            {/* =================================================
+                STUDENT ATTENDANCE
+                ADMIN + CLASS TEACHER
+            ================================================= */}
+
+            <Route
+                path="/student-attendance"
+                element={
+                    <ProtectedRoute pageKey="student_attendance">
+                        <StudentAttendancePage />
+                    </ProtectedRoute>
+                }
+            />
+
+
+            {/* =================================================
+                MY ATTENDANCE
+                TEACHER (read-only self-view)
+            ================================================= */}
+
+            <Route
+                path="/my-attendance"
+                element={
+                    <ProtectedRoute pageKey="my_attendance">
+                        <MyAttendancePage />
+                    </ProtectedRoute>
                 }
             />
 
@@ -270,12 +403,7 @@ function App() {
                 path="/notifications"
                 element={
 
-                    <ProtectedRoute
-                        roles={[
-                            "admin",
-                            "receptionist"
-                        ]}
-                    >
+                    <ProtectedRoute pageKey="notifications">
 
                         <NotificationsPage />
 
@@ -294,12 +422,7 @@ function App() {
                 path="/settings"
                 element={
 
-                    <ProtectedRoute
-                        roles={[
-                            "admin",
-                            "receptionist"
-                        ]}
-                    >
+                    <ProtectedRoute pageKey="settings">
 
                         <SettingsPage />
 
@@ -318,11 +441,7 @@ function App() {
                 path="/users"
                 element={
 
-                    <ProtectedRoute
-                        roles={[
-                            "admin"
-                        ]}
-                    >
+                    <ProtectedRoute pageKey="users">
 
                         <UsersPage />
 

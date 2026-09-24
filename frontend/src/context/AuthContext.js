@@ -23,6 +23,12 @@ export default function AuthProvider({ children }) {
         return savedUser ? JSON.parse(savedUser) : null;
     });
 
+    // Pages this user is allowed to open (page keys).
+    const [allowedPages, setAllowedPages] = useState(() => {
+        const saved = sessionStorage.getItem("allowedPages");
+        return saved ? JSON.parse(saved) : [];
+    });
+
     const [loading, setLoading] = useState(true);
     const timeoutRef = useRef(null);
 
@@ -33,8 +39,28 @@ export default function AuthProvider({ children }) {
         sessionStorage.removeItem("token");
         sessionStorage.removeItem("user");
         sessionStorage.removeItem("lastActivity");
+        sessionStorage.removeItem("allowedPages");
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         setUser(null);
+        setAllowedPages([]);
+    }, []);
+
+    // =====================================================
+    // LOAD MY PAGE ACCESS
+    // =====================================================
+    const fetchMyPages = useCallback(async () => {
+        try {
+            const res = await api.get("/auth/me/pages");
+            const keys = res.data?.pageKeys || [];
+            setAllowedPages(keys);
+            sessionStorage.setItem("allowedPages", JSON.stringify(keys));
+            return keys;
+        } catch (err) {
+            console.error("Load Pages Error:", err.response?.data || err.message);
+            setAllowedPages([]);
+            sessionStorage.setItem("allowedPages", JSON.stringify([]));
+            return [];
+        }
     }, []);
 
     // =====================================================
@@ -60,12 +86,15 @@ export default function AuthProvider({ children }) {
     // =====================================================
     // LOGIN
     // =====================================================
-    const login = (token, userData) => {
+    const login = async (token, userData) => {
         sessionStorage.setItem("token", token);
         sessionStorage.setItem("user", JSON.stringify(userData));
         sessionStorage.setItem("lastActivity", Date.now().toString());
         setUser(userData);
         resetTimer();
+        // Load this user's allowed pages right after login so
+        // the sidebar and routes reflect their access immediately.
+        await fetchMyPages();
     };
 
     // =====================================================
@@ -90,10 +119,13 @@ export default function AuthProvider({ children }) {
 
         // 3. Verify token integrity with backend
         api.get("/auth/profile")
-            .then((res) => {
+            .then(async (res) => {
                 setUser(res.data.user);
                 sessionStorage.setItem("user", JSON.stringify(res.data.user));
                 resetTimer();
+                // Refresh allowed pages on every verified session so
+                // access changes made by admin take effect on reload.
+                await fetchMyPages();
             })
             .catch((err) => {
                 console.error("Profile Error:", err.response?.data || err.message);
@@ -117,12 +149,25 @@ export default function AuthProvider({ children }) {
             });
             if (timeoutRef.current) clearTimeout(timeoutRef.current);
         };
-    }, [logout, resetTimer]);
+    }, [logout, resetTimer, fetchMyPages]);
+
+    // Helper: can this user open a given page key?
+    // Admin always can.
+    const canAccess = useCallback(
+        (pageKey) => {
+            if (user?.role === "admin") return true;
+            return allowedPages.includes(pageKey);
+        },
+        [user, allowedPages]
+    );
 
     return (
         <AuthContext.Provider
             value={{
                 user,
+                allowedPages,
+                canAccess,
+                fetchMyPages,
                 login,
                 logout,
                 loading

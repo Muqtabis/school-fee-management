@@ -9,13 +9,15 @@ const paymentController =
 
 const {
     requireRole,
-    requireAdmin
+    requireAdmin,
+    requirePage
 } =
     require("../middleware/authMiddleware");
 
 
 // =====================================================
-// ADMIN + RECEPTIONIST
+// ADMIN + RECEPTIONIST, WITH "payments" PAGE ACCESS
+// (admin bypasses the page check)
 // =====================================================
 
 router.use(
@@ -23,6 +25,10 @@ router.use(
         "admin",
         "receptionist"
     )
+);
+
+router.use(
+    requirePage("payments")
 );
 
 
@@ -70,6 +76,18 @@ router.get(
     "/monthly-collection",
     requireAdmin,
     paymentController.monthlyCollection
+);
+
+
+// =====================================================
+// EXPORT BUNDLE (.zip: Excel + receipt PDFs)
+// ADMIN ONLY  (declared before "/:id")
+// =====================================================
+
+router.get(
+    "/export-bundle",
+    requireAdmin,
+    paymentController.exportBundle
 );
 
 

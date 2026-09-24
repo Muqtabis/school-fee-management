@@ -8,6 +8,7 @@ function DashboardPage() {
     const [summary, setSummary] = useState({
         academicYear: "",
         totalStudents: 0,
+        totalTeachers: 0,
         totalPayments: 0,
         totalFee: 0,
         totalCollection: 0,
@@ -31,8 +32,10 @@ function DashboardPage() {
             const [paymentSummary, expenseSummary, payments, expenses] = await Promise.all([
                 api.get("/payments/summary"),
                 api.get("/expenses/summary"),
-                api.get("/payments"),
-                api.get("/expenses")
+                // Only pull a small recent slice, not the whole tables. Ask for a
+                // few extra payments so reversed rows can be filtered out client-side.
+                api.get("/payments", { params: { limit: 20 } }),
+                api.get("/expenses", { params: { limit: 5 } })
             ]);
 
             const totalCollection = Number(paymentSummary.data.totalCollection) || 0;
@@ -41,6 +44,7 @@ function DashboardPage() {
             setSummary({
                 academicYear: paymentSummary.data.academicYear?.name || "",
                 totalStudents: Number(paymentSummary.data.totalStudents || 0),
+                totalTeachers: Number(paymentSummary.data.totalTeachers || 0),
                 totalPayments: Number(paymentSummary.data.totalPayments || 0),
                 totalFee: Number(paymentSummary.data.totalFee || 0),
                 totalCollection,
@@ -104,6 +108,7 @@ function DashboardPage() {
                     {/* First Row of Cards */}
                     <div className="cards">
                         <DashboardCard title="Students" value={summary.totalStudents} icon="👨‍🎓" color="#2563EB" />
+                        <DashboardCard title="Teachers" value={summary.totalTeachers} icon="🧑‍🏫" color="#0EA5E9" />
                         <DashboardCard title="Total Fees" value={money(summary.totalFee)} icon="📚" color="#7C3AED" />
                         <DashboardCard title="Fee Collection" value={money(summary.totalCollection)} icon="💰" color="#22C55E" />
                         <DashboardCard title="Pending Fees" value={money(summary.pendingFees)} icon="⚠️" color="#DC2626" />

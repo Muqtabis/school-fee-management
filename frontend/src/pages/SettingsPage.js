@@ -319,7 +319,7 @@ function SettingsPage() {
                             }}
                         >
 
-                            <div>
+                            <div className="form-group">
 
                                 <label>
                                     Current Password
@@ -341,7 +341,7 @@ function SettingsPage() {
                             </div>
 
 
-                            <div>
+                            <div className="form-group">
 
                                 <label>
                                     New Password
@@ -364,7 +364,7 @@ function SettingsPage() {
                             </div>
 
 
-                            <div>
+                            <div className="form-group">
 
                                 <label>
                                     Confirm New Password

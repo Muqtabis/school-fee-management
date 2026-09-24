@@ -171,6 +171,11 @@ img {
     z-index: 1000;
 }
 
+/* Drawer backdrop — inert on desktop, activates on mobile when open */
+.sidebar-backdrop {
+    display: none;
+}
+
 
 /* ---------- Sidebar Brand ---------- */
 
@@ -367,9 +372,38 @@ img {
 
 .navbar-left {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
 
     min-width: 0;
+}
+
+/* Hamburger toggle — hidden on desktop, shown on mobile */
+.nav-hamburger {
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+
+    width: 40px;
+    height: 40px;
+    padding: 9px;
+
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    cursor: pointer;
+
+    flex-shrink: 0;
+}
+
+.nav-hamburger span {
+    display: block;
+    height: 2px;
+    width: 100%;
+    background: var(--navy);
+    border-radius: 2px;
 }
 
 .navbar-left h2 {
@@ -671,6 +705,15 @@ img {
     font-size: 15px;
     font-weight: 650;
 }
+
+/* Dashboard recent-activity tables inherit the global min-width: 750px, so on
+   narrow screens they must scroll WITHIN the card (like .table-container does)
+   instead of overflowing the page. Desktop is unaffected (table fits, no scroll). */
+.dashboard-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 
 .report-card p,
 .settings-card p {
@@ -2188,44 +2231,77 @@ tbody tr:hover {
     }
 
 
-    /* ---------- Sidebar ---------- */
+    /* ---------- Sidebar: off-canvas drawer ---------- */
+
+    .nav-hamburger {
+        display: flex;
+    }
 
     .sidebar {
-        position: relative;
+        position: fixed;
+        top: 0;
+        left: 0;
 
-        width: 100%;
-        height: auto;
+        width: 260px;
+        max-width: 82vw;
+        height: 100vh;
 
-        border-right: none;
-        border-bottom: 1px solid var(--border);
+        flex-direction: column;
 
-        box-shadow: none;
+        border-right: 1px solid var(--border);
+        border-bottom: none;
+
+        box-shadow: 2px 0 16px rgba(0, 0, 0, 0.18);
+
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+
+        z-index: 1200;
+    }
+
+    .sidebar.open {
+        transform: translateX(0);
     }
 
     .sidebar-header {
-        padding: 15px 17px;
+        padding: 18px 17px;
     }
 
     .sidebar-menu {
-        display: flex;
-
-        padding: 8px;
-
-        overflow-x: auto;
-
+        display: block;
+        flex: 1;
+        padding: 10px;
+        overflow-y: auto;
         -webkit-overflow-scrolling: touch;
     }
 
     .menu-item {
-        min-width: max-content;
-
-        margin: 0 4px 0 0;
-
-        padding: 9px 11px;
+        min-width: 0;
+        margin: 0 0 4px 0;
+        padding: 11px 13px;
     }
 
     .sidebar-footer {
-        display: none;
+        display: block;
+    }
+
+    .sidebar-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+
+        background: rgba(0, 0, 0, 0.45);
+
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.25s ease, visibility 0.25s ease;
+
+        z-index: 1100;
+    }
+
+    .sidebar-backdrop.open {
+        opacity: 1;
+        visibility: visible;
     }
 
 
@@ -2917,5 +2993,722 @@ tbody tr:hover {
 }
 
 /* =========================================================
+   EXAM & RESULTS MODULE
+   Tabbed detail, class picker, status badges, marks grid.
+   ========================================================= */
+
+.exam-row-between {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+/* Form grid for Create Exam */
+.exam-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+}
+
+.exam-form-grid label,
+.exam-correction-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.exam-form-grid input,
+.exam-form-grid select,
+.exam-correction-grid input,
+.exam-correction-grid select {
+    font-weight: 400;
+}
+
+/* Class picker chips */
+.exam-class-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.exam-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--navy);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.exam-chip-active {
+    background: var(--navy);
+    color: #fff;
+    border-color: var(--navy);
+}
+
+/* Status badges */
+.exam-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    background: var(--surface-soft);
+    color: var(--text-secondary);
+}
+
+.exam-badge-open { background: #eaf1fb; color: #1d4ed8; }
+.exam-badge-locked { background: #fef3e2; color: #b45309; }
+.exam-badge-published { background: #e7f6ec; color: #15803d; }
+.exam-badge-default { background: var(--gold-light); color: var(--gold); }
+
+.exam-chip-active .exam-badge { background: rgba(255, 255, 255, 0.22); color: #fff; }
+
+/* Tab bar */
+.exam-tabbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 16px 0 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.exam-tab {
+    padding: 10px 16px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+}
+
+.exam-tab-active {
+    color: var(--navy);
+    border-bottom-color: var(--navy);
+}
+
+.exam-tabpanel { margin-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
+
+/* Overview cards */
+.exam-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+    margin-top: 12px;
+}
+
+.exam-overview-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    background: var(--surface);
+}
+
+/* Progress / completion meter */
+.exam-progress {
+    height: 8px;
+    background: var(--surface-soft);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+
+.exam-progress-fill {
+    height: 100%;
+    background: var(--navy);
+    transition: width 0.25s ease;
+}
+
+.exam-completion {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.exam-completion .exam-progress { flex: 1; margin-top: 0; max-width: 320px; }
+
+/* Analytics stats strip */
+.exam-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.exam-stats > div {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.exam-stats > div span {
+    display: block;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--navy);
+    margin-bottom: 2px;
+}
+
+/* Result status text */
+.exam-result-pass { color: #15803d; font-weight: 700; }
+.exam-result-fail { color: #b91c1c; font-weight: 700; }
+.exam-result-absent { color: #b45309; font-weight: 700; }
+
+/* Correction form */
+.exam-correction {
+    margin-top: 18px;
+    border: 1px solid var(--gold);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    background: var(--gold-light);
+}
+
+.exam-correction-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin: 12px 0;
+}
+
+/* Marks grid: invalid cell */
+.exam-cell-invalid {
+    border: 1px solid #b91c1c !important;
+    background: #fef2f2;
+}
+
+@media (max-width: 768px) {
+    .exam-tab { padding: 9px 12px; font-size: 12px; }
+    .exam-stats { grid-template-columns: repeat(3, 1fr); }
+    .exam-tabbar { flex-wrap: nowrap; overflow-x: auto; }
+
+    /* Keep Roll + Student pinned while the wide marks matrix scrolls */
+    .exam-marks-grid table th:nth-child(1),
+    .exam-marks-grid table td:nth-child(1) {
+        position: sticky;
+        left: 0;
+        z-index: 3;
+        background: var(--surface);
+    }
+
+    .exam-marks-grid table th:nth-child(2),
+    .exam-marks-grid table td:nth-child(2) {
+        position: sticky;
+        left: 46px;
+        z-index: 3;
+        background: var(--surface);
+        box-shadow: 1px 0 0 var(--border-light);
+    }
+}
+
+/* =========================================================
+   40. ADMIN OVERVIEW PAGES  (Results / Attendance Overview)
+   ---------------------------------------------------------
+   Filter row + analytics pills shared by the two admin
+   read-only overview pages. Wraps cleanly on narrow screens.
+   ========================================================= */
+
+.overview-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+}
+
+.overview-filters select,
+.overview-filters input {
+    min-width: 150px;
+}
+
+.overview-filters label {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.overview-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.stat-pill {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+
+    min-width: 110px;
+    padding: 12px 16px;
+
+    background: var(--surface);
+
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+
+    box-shadow: var(--shadow-sm);
+}
+
+.stat-pill span {
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.stat-pill strong {
+    color: var(--navy);
+    font-size: 18px;
+    font-weight: 700;
+}
+
+
+/* =========================================================
+   41. LEAF-PAGE GAP CLASSES
+   ---------------------------------------------------------
+   Classes referenced by existing pages that had no rule of
+   their own and were leaning on inline styles or browser
+   defaults. Defined here so every leaf page shares the same
+   filter/summary/modal idiom and reflows on small screens.
+   ========================================================= */
+
+/* Filter rows on Students / Expenses list pages */
+.student-filters,
+.expense-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+.student-filters select,
+.student-filters input,
+.expense-filters select,
+.expense-filters input {
+    min-width: 150px;
+}
+
+/* Notifications summary tiles */
+.notification-summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+}
+
+.notification-summary-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    padding: 16px;
+
+    background: var(--surface);
+
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+
+    box-shadow: var(--shadow-sm);
+}
+
+/* Stat cards: label above the count (was rendering "Total0" with no gap). */
+.notification-summary-card span {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.notification-summary-card strong {
+    color: var(--navy);
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.notification-message {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.loading-message {
+    padding: 24px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    text-align: center;
+}
+
+/* Fee-structure "Copy Template" pill button */
+.history-btn {
+    padding: 6px 12px;
+
+    background: var(--surface-soft);
+    color: var(--navy);
+
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+
+    font-size: 12px;
+    font-weight: 600;
+
+    cursor: pointer;
+}
+
+.history-btn:hover {
+    background: var(--gold-light);
+    border-color: var(--gold);
+}
+
+/* Fee-structure history / template modal (mirrors .student-modal) */
+.history-modal {
+    width: 100%;
+    max-width: 700px;
+
+    max-height: calc(100vh - 40px);
+
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    background: var(--surface);
+
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+
+    box-shadow: var(--shadow-modal);
+
+    animation: modalOpen 0.18s ease-out;
+}
+
+/* Monospaced receipt reference in Reports */
+.receipt-number {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* SignupPage is disabled/redirected but still references this;
+   alias it to the live auth layout so it never renders unstyled. */
+.auth-container {
+    min-height: 100vh;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 20px;
+
+    background: var(--background);
+}
+
+
+/* =========================================================
+   42. LEAF-PAGE RESPONSIVE REFINEMENTS
+   ========================================================= */
+
+@media (max-width: 768px) {
+    .notification-summary {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .overview-filters,
+    .student-filters,
+    .expense-filters {
+        gap: 8px;
+    }
+
+    /* Let controls stretch to full width so nothing is clipped */
+    .overview-filters select,
+    .overview-filters input,
+    .student-filters select,
+    .student-filters input,
+    .expense-filters select,
+    .expense-filters input {
+        flex: 1 1 140px;
+        min-width: 0;
+    }
+
+    .stat-pill {
+        flex: 1 1 calc(50% - 12px);
+    }
+
+    /* Fill the viewport for the fee-template modal on phones */
+    .history-modal {
+        max-width: 100% !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .notification-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .overview-filters,
+    .overview-stats,
+    .student-filters,
+    .expense-filters {
+        gap: 8px;
+    }
+
+    .stat-pill {
+        flex: 1 1 100%;
+    }
+}
+
+
+/* =========================================================
    END OF THE AGE SCHOOL CLASSIC INSTITUTIONAL UI
    ========================================================= */
+
+/* Compact tables (few short columns, e.g. the teacher marks-entry exam list)
+   opt out of the global min-width: 750px on phones so every column — including
+   the trailing action button ("Enter Marks") — is visible without needing to
+   scroll the card sideways. Wider data tables keep the default scroll behavior. */
+@media (max-width: 480px) {
+    table.compact-table {
+        min-width: 0;
+    }
+
+    table.compact-table th,
+    table.compact-table td {
+        padding: 10px 8px;
+        font-size: 12px;
+    }
+
+    table.compact-table button {
+        white-space: nowrap;
+    }
+}
+
+
+/* =====================================================
+   ATTENDANCE MODULE — status chips, filter bars,
+   summary tables and counts. Reuses the exam tab styles
+   (.exam-tabbar / .exam-tab) for the Mark | History tabs.
+   ===================================================== */
+
+/* Status chips (present / absent / half-day / leave). */
+.att-badge {
+    display: inline-block;
+    min-width: 28px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.5;
+}
+.att-present { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+.att-absent  { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+.att-half    { background: #fef9c3; color: #a16207; border: 1px solid #fde047; }
+.att-leave   { background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; }
+
+/* History filter bar: label-over-control cells that wrap on narrow screens. */
+.attendance-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: flex-end;
+    margin-top: 6px;
+}
+.attendance-filters label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    color: var(--text-secondary, #555);
+    font-weight: 600;
+}
+.attendance-filters select,
+.attendance-filters input[type="date"] {
+    min-width: 150px;
+}
+.attendance-filters .primary-btn {
+    min-height: 40px;
+}
+
+/* Counts strip under the history search. */
+.attendance-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-top: 18px;
+}
+.att-count-total {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--navy, #0f2f5a);
+    margin-left: auto;
+}
+
+/* Per-teacher / per-student summary table numbers stay readable. */
+.attendance-summary-table th,
+.attendance-summary-table td {
+    white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+    .attendance-filters {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .attendance-filters label,
+    .attendance-filters select,
+    .attendance-filters input[type="date"],
+    .attendance-filters .primary-btn {
+        width: 100%;
+    }
+    .att-count-total { margin-left: 0; }
+}
+
+
+/* =========================================================
+   38. MOBILE & RENDERING HARDENING  (UI-specialist pass)
+   Cross-device polish for Android / iPhone / Windows:
+   correct mobile viewport height, no tap-flash, no iOS
+   focus-zoom, momentum + contained scrolling and a GPU-
+   smooth drawer. Additive only — later rules with equal
+   specificity refine the base without touching it.
+   ========================================================= */
+
+/* Kill the grey/blue tap flash on Android taps. */
+* {
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Stop mobile browsers auto-inflating text on rotate. */
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+/* Dynamic viewport height so the layout is not pushed under
+   the mobile URL bar (Chrome Android / iOS Safari). Browsers
+   without dvh keep the 100vh declared earlier. */
+.dashboard {
+    min-height: 100dvh;
+}
+
+.main-content {
+    max-width: 100%;
+}
+
+/* Momentum + contained scrolling for the true overlay / drawer
+   regions, so a fling inside them never rubber-bands the page
+   behind it. */
+.modal-overlay,
+.student-modal,
+.payment-modal,
+.sidebar-menu {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+
+/* In-page tables get momentum scrolling only — NOT overscroll
+   containment. `contain` here trapped the mouse wheel inside a
+   scrollable table (e.g. the Fees table's max-height region): once
+   the table hit its end the scroll refused to chain to the page,
+   so the page "couldn't be scrolled down" while the pointer sat over
+   a table. Letting it chain restores normal page scrolling. */
+.table-container {
+    -webkit-overflow-scrolling: touch;
+}
+
+
+@media (max-width: 768px) {
+
+    /* Full-height drawer on the dynamic viewport, promoted to
+       its own GPU layer so the slide stays smooth at 60fps. */
+    .sidebar {
+        height: 100dvh;
+        will-change: transform;
+        backface-visibility: hidden;
+    }
+
+    /* iOS Safari zooms the page in whenever a focused field's
+       text is under 16px, which yanks the whole layout. Bump
+       every real input to 16px on phones. (Equal specificity
+       to .form-group input, declared later, so it wins.) */
+    input:not([type]),
+    input[type="text"],
+    input[type="number"],
+    input[type="date"],
+    input[type="email"],
+    input[type="password"],
+    input[type="search"],
+    input[type="tel"],
+    select,
+    textarea,
+    .search-input,
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        font-size: 16px;
+    }
+
+    /* Comfortable touch targets (~44px, Apple/Material). */
+    .primary-btn,
+    .save-btn,
+    .cancel-btn,
+    .clear-btn,
+    .exam-tab,
+    input:not([type]),
+    input[type="text"],
+    input[type="number"],
+    input[type="date"],
+    input[type="email"],
+    input[type="password"],
+    input[type="search"],
+    input[type="tel"],
+    select {
+        min-height: 44px;
+    }
+}
+
+
+/* Body scroll-lock while the mobile drawer is open, so the
+   page behind the backdrop stays put. Toggled from UIContext.
+   Scoped to mobile so a stale open-state after a resize to
+   desktop can never lock the full-width layout. */
+@media (max-width: 768px) {
+    body.drawer-open {
+        overflow: hidden;
+    }
+}
+
+
+/* Respect users who ask for less motion: drop the drawer
+   slide, hovers and smooth-scroll so nothing appears to lag. */
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+    }
+}

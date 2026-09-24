@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
 
+const formatMoney = (val) =>
+    Number(val || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 function SummaryTable({ payments = [], onReverse }) {
     const formatDate = (date) => {
         if (!date) return "-";
@@ -17,51 +20,193 @@ function SummaryTable({ payments = [], onReverse }) {
         }
     };
 
+    // =====================================================
+    // SHARED RECEIPT MODEL
+    //
+    // Fetches the payment, the student's dues/concession and
+    // full fee history, then computes the per-component ledger
+    // (Total Fee / Paid Now / Balance). Both the printed receipt
+    // and the Excel export are built from this single result so
+    // their numbers always agree.
+    // =====================================================
+    const buildReceiptModel = async (paymentId) => {
+        const response = await api.get(`/payments/receipt/${paymentId}`);
+        const payment = response.data;
+
+        let feeItems = [];
+        let prevDues = 0;
+        let concession = 0;
+        let balanceDue = 0;
+        let totalDemand = 0;
+        let history = null;
+
+        try {
+            const studentRes = await api.get(`/students/${payment.studentId}`);
+            const student = studentRes.data;
+            prevDues = Number(student?.previousDues || 0);
+            concession = Number(student?.concessionAmount || 0);
+
+            const historyRes = await api.get(`/payments/history/student/${payment.studentId}`);
+            history = historyRes.data;
+
+            feeItems = Array.isArray(history?.items) ? history.items : [];
+
+            let standardTotal = feeItems.reduce((sum, item) => {
+                if (item.itemType === "carry_forward" || item.componentName?.toLowerCase().includes("previous")) return sum;
+                return sum + Number(item.amount || 0);
+            }, 0);
+
+            totalDemand = prevDues + Math.max(0, standardTotal - concession);
+            let totalPaidSoFar = 0;
+
+            if (Array.isArray(history?.payments)) {
+                const chronologicalPayments = [...history.payments].reverse();
+                for (const p of chronologicalPayments) {
+                    if (p.id === payment.id) break;
+                    if (p.status !== "reversed") totalPaidSoFar += Number(p.amount || 0);
+                }
+            } else {
+                totalPaidSoFar = Math.max(0, Number(history?.totalPaid || 0) - Number(payment.amount || 0));
+            }
+
+            balanceDue = Math.max(0, totalDemand - (totalPaidSoFar + Number(payment.amount || 0)));
+        } catch (err) {
+            console.error("Could not fetch detailed fee breakdown for receipt:", err);
+        }
+
+        // =====================================================
+        // PRECISE ITEMIZED RECEIPT LEDGER LOOKUP
+        // =====================================================
+        const componentLedger = [];
+        const pastPaidMap = { "previous dues": 0, "tuition fee": 0 };
+        let unassignedPastPool = 0;
+
+        if (Array.isArray(history?.payments)) {
+            const chronologicalPayments = [...history.payments].reverse();
+            for (const p of chronologicalPayments) {
+                if (p.id === payment.id) break;
+                if (p.status !== "reversed") {
+                    if (p.lineItems && p.lineItems.length > 0) {
+                        p.lineItems.forEach(li => {
+                            const n = (li.componentName || "").toLowerCase().trim();
+                            if (n.includes("previous")) pastPaidMap["previous dues"] += li.amount;
+                            else if (n.includes("tuition") || n.includes("tution") || n.includes("term")) pastPaidMap["tuition fee"] += li.amount;
+                            else pastPaidMap[n] = (pastPaidMap[n] || 0) + li.amount;
+                        });
+                    } else {
+                        unassignedPastPool += Number(p.amount || 0);
+                    }
+                }
+            }
+        }
+
+        const getPaidTodayForComponent = (compName) => {
+            let sum = 0;
+            (payment.lineItems || []).forEach(li => {
+                const ln = (li.componentName || "").toLowerCase();
+                const cn = compName.toLowerCase();
+                if (ln.includes(cn) || cn.includes(ln)) sum += Number(li.amount || 0);
+            });
+            return sum;
+        };
+
+        // 1. Process Previous Dues explicitly
+        if (prevDues > 0) {
+            let pastPaid = pastPaidMap["previous dues"];
+            if (unassignedPastPool > 0) {
+                let applyPrev = Math.min(prevDues - pastPaid, unassignedPastPool);
+                if (applyPrev > 0) { pastPaid += applyPrev; unassignedPastPool -= applyPrev; }
+            }
+            const paidNow = getPaidTodayForComponent("previous");
+            if (prevDues > 0 || paidNow > 0) {
+                componentLedger.push({
+                    name: "Previous Dues (Carry Forward)",
+                    total: prevDues,
+                    paidNow: paidNow,
+                    balance: Math.max(0, prevDues - pastPaid - paidNow)
+                });
+            }
+        }
+
+        // 2. Tuition / Terms and Others
+        let tuitionTotal = 0;
+        const others = [];
+
+        feeItems.forEach(item => {
+            if (item.itemType === "carry_forward" || item.componentName?.toLowerCase().includes("previous")) return;
+            const amt = Number(item.amount || 0);
+            if (amt <= 0) return;
+
+            const cName = String(item.componentName).toLowerCase();
+            if (cName.includes("tution") || cName.includes("tuition")) {
+                tuitionTotal += amt;
+            } else {
+                others.push(item);
+            }
+        });
+
+        if (tuitionTotal > 0) {
+            const netTuition = Math.max(0, tuitionTotal - concession);
+            let pastPaid = pastPaidMap["tuition fee"];
+            if (unassignedPastPool > 0) {
+                let applyT = Math.min(netTuition - pastPaid, unassignedPastPool);
+                if (applyT > 0) { pastPaid += applyT; unassignedPastPool -= applyT; }
+            }
+
+            let paidNow = (payment.lineItems || [])
+                .filter(li => li.componentName.toLowerCase().includes("tuition") || li.componentName.toLowerCase().includes("tution") || li.componentName.toLowerCase().includes("term"))
+                .reduce((sum, li) => sum + li.amount, 0);
+
+            componentLedger.push({
+                name: "Tuition Fee",
+                total: netTuition,
+                paidNow: paidNow,
+                balance: Math.max(0, netTuition - pastPaid - paidNow)
+            });
+        }
+
+        others.forEach(item => {
+            const n = item.componentName.toLowerCase().trim();
+            let pastPaid = pastPaidMap[n] || 0;
+            if (unassignedPastPool > 0) {
+                let applyO = Math.min(item.amount - pastPaid, unassignedPastPool);
+                if (applyO > 0) { pastPaid += applyO; unassignedPastPool -= applyO; }
+            }
+
+            const paidNow = getPaidTodayForComponent(item.componentName);
+            componentLedger.push({
+                name: item.componentName,
+                total: item.amount,
+                paidNow: paidNow,
+                balance: Math.max(0, item.amount - pastPaid - paidNow)
+            });
+        });
+
+        return {
+            payment,
+            receiptNumber: `REC-${payment.id}`,
+            studentName: payment.studentName || "-",
+            rollNumber: payment.rollNumber || "-",
+            className: payment.className || "-",
+            fatherName: payment.fatherName || "-",
+            academicYear: payment.academicYearName || "-",
+            paymentDate: formatDate(payment.paymentDate),
+            paymentMode: payment.paymentMode || "-",
+            remarks: payment.remarks || "-",
+            paidAmountNum: Number(payment.amount || 0),
+            balanceDueNum: balanceDue,
+            concession,
+            componentLedger
+        };
+    };
+
     const printReceipt = async (paymentId) => {
         try {
-            const response = await api.get(`/payments/receipt/${paymentId}`);
-            const payment = response.data;
-
-            let feeItems = [];
-            let prevDues = 0;
-            let concession = 0;
-            let balanceDue = 0;
-            let totalDemand = 0;
-            let history = null;
-
-            try {
-                const studentRes = await api.get(`/students/${payment.studentId}`);
-                const student = studentRes.data;
-                prevDues = Number(student?.previousDues || 0);
-                concession = Number(student?.concessionAmount || 0);
-                
-                const historyRes = await api.get(`/payments/history/student/${payment.studentId}`);
-                history = historyRes.data;
-
-                feeItems = Array.isArray(history?.items) ? history.items : [];
-
-                let standardTotal = feeItems.reduce((sum, item) => {
-                    if (item.itemType === "carry_forward" || item.componentName?.toLowerCase().includes("previous")) return sum;
-                    return sum + Number(item.amount || 0);
-                }, 0);
-
-                totalDemand = prevDues + Math.max(0, standardTotal - concession);
-                let totalPaidSoFar = 0;
-
-                if (Array.isArray(history?.payments)) {
-                    const chronologicalPayments = [...history.payments].reverse();
-                    for (const p of chronologicalPayments) {
-                        if (p.id === payment.id) break; 
-                        if (p.status !== "reversed") totalPaidSoFar += Number(p.amount || 0);
-                    }
-                } else {
-                    totalPaidSoFar = Math.max(0, Number(history?.totalPaid || 0) - Number(payment.amount || 0));
-                }
-
-                balanceDue = Math.max(0, totalDemand - (totalPaidSoFar + Number(payment.amount || 0)));
-            } catch (err) {
-                console.error("Could not fetch detailed fee breakdown for receipt:", err);
-            }
+            const model = await buildReceiptModel(paymentId);
+            const {
+                payment, receiptNumber, studentName, rollNumber, className, fatherName,
+                academicYear, paymentDate, paymentMode, remarks, componentLedger, concession
+            } = model;
 
             const receiptWindow = window.open("", "_blank", "width=900,height=1100");
             if (!receiptWindow) {
@@ -69,128 +214,9 @@ function SummaryTable({ payments = [], onReverse }) {
                 return;
             }
 
-            const receiptNumber = `REC-${payment.id}`;
-            const studentName = payment.studentName || "-";
-            const rollNumber = payment.rollNumber || "-";
-            const className = payment.className || "-";
-            const fatherName = payment.fatherName || "-";
-            const academicYear = payment.academicYearName || "-";
-            const paymentDate = formatDate(payment.paymentDate);
-            const paymentMode = payment.paymentMode || "-";
-            const remarks = payment.remarks || "-";
-            
-            const formatMoney = (val) => Number(val || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            const paidAmount = formatMoney(payment.amount);
-            const formattedBalance = formatMoney(balanceDue);
+            const paidAmount = formatMoney(model.paidAmountNum);
+            const formattedBalance = formatMoney(model.balanceDueNum);
             const logoUrl = window.location.origin + "/logo.png";
-
-            // =====================================================
-            // PRECISE ITEMIZED RECEIPT LEDGER LOOKUP
-            // =====================================================
-            const componentLedger = [];
-            const pastPaidMap = { "previous dues": 0, "tuition fee": 0 };
-            let unassignedPastPool = 0;
-
-            if (Array.isArray(history?.payments)) {
-                const chronologicalPayments = [...history.payments].reverse();
-                for (const p of chronologicalPayments) {
-                    if (p.id === payment.id) break; 
-                    if (p.status !== "reversed") {
-                        if (p.lineItems && p.lineItems.length > 0) {
-                            p.lineItems.forEach(li => {
-                                const n = (li.componentName || "").toLowerCase().trim();
-                                if (n.includes("previous")) pastPaidMap["previous dues"] += li.amount;
-                                else if (n.includes("tuition") || n.includes("tution") || n.includes("term")) pastPaidMap["tuition fee"] += li.amount;
-                                else pastPaidMap[n] = (pastPaidMap[n] || 0) + li.amount;
-                            });
-                        } else {
-                            unassignedPastPool += Number(p.amount || 0);
-                        }
-                    }
-                }
-            }
-
-            const getPaidTodayForComponent = (compName) => {
-                let sum = 0;
-                (payment.lineItems || []).forEach(li => {
-                    const ln = (li.componentName || "").toLowerCase();
-                    const cn = compName.toLowerCase();
-                    if (ln.includes(cn) || cn.includes(ln)) sum += Number(li.amount || 0);
-                });
-                return sum;
-            };
-
-            // 1. Process Previous Dues explicitly
-            if (prevDues > 0) {
-                let pastPaid = pastPaidMap["previous dues"];
-                if (unassignedPastPool > 0) {
-                    let applyPrev = Math.min(prevDues - pastPaid, unassignedPastPool);
-                    if (applyPrev > 0) { pastPaid += applyPrev; unassignedPastPool -= applyPrev; }
-                }
-                const paidNow = getPaidTodayForComponent("previous");
-                if (prevDues > 0 || paidNow > 0) {
-                    componentLedger.push({
-                        name: "Previous Dues (Carry Forward)",
-                        total: prevDues,
-                        paidNow: paidNow,
-                        balance: Math.max(0, prevDues - pastPaid - paidNow)
-                    });
-                }
-            }
-
-            // 2. Tuition / Terms and Others
-            let tuitionTotal = 0;
-            const others = [];
-            
-            feeItems.forEach(item => {
-                if (item.itemType === "carry_forward" || item.componentName?.toLowerCase().includes("previous")) return;
-                const amt = Number(item.amount || 0);
-                if (amt <= 0) return; 
-                
-                const cName = String(item.componentName).toLowerCase();
-                if (cName.includes("tution") || cName.includes("tuition")) {
-                    tuitionTotal += amt;
-                } else {
-                    others.push(item);
-                }
-            });
-
-            if (tuitionTotal > 0) {
-                const netTuition = Math.max(0, tuitionTotal - concession);
-                let pastPaid = pastPaidMap["tuition fee"];
-                if (unassignedPastPool > 0) {
-                    let applyT = Math.min(netTuition - pastPaid, unassignedPastPool);
-                    if (applyT > 0) { pastPaid += applyT; unassignedPastPool -= applyT; }
-                }
-
-                let paidNow = (payment.lineItems || [])
-                    .filter(li => li.componentName.toLowerCase().includes("tuition") || li.componentName.toLowerCase().includes("tution") || li.componentName.toLowerCase().includes("term"))
-                    .reduce((sum, li) => sum + li.amount, 0);
-
-                componentLedger.push({
-                    name: "Tuition Fee",
-                    total: netTuition,
-                    paidNow: paidNow,
-                    balance: Math.max(0, netTuition - pastPaid - paidNow)
-                });
-            }
-
-            others.forEach(item => {
-                const n = item.componentName.toLowerCase().trim();
-                let pastPaid = pastPaidMap[n] || 0;
-                if (unassignedPastPool > 0) {
-                    let applyO = Math.min(item.amount - pastPaid, unassignedPastPool);
-                    if (applyO > 0) { pastPaid += applyO; unassignedPastPool -= applyO; }
-                }
-
-                const paidNow = getPaidTodayForComponent(item.componentName);
-                componentLedger.push({
-                    name: item.componentName,
-                    total: item.amount,
-                    paidNow: paidNow,
-                    balance: Math.max(0, item.amount - pastPaid - paidNow)
-                });
-            });
 
             let feeRowsHTML = "";
             componentLedger.forEach(item => {
@@ -353,6 +379,14 @@ function SummaryTable({ payments = [], onReverse }) {
             alert(error.response?.data?.message || error.message || "Unable to generate receipt.");
         }
     };
+
+    // =====================================================
+    // EXCEL RECEIPT
+    //
+    // Removed: the per-payment Excel receipt export. PDF receipts
+    // (printReceipt above) are the single receipt format now, so the
+    // "Excel" button and this exporter were dropped from the Payments page.
+    // =====================================================
 
     return (
         <div className="table-container">
