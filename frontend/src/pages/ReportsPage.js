@@ -633,7 +633,7 @@ function ReportsPage() {
                             <div className="report-empty">No class records available for the selected filters.</div>
                         ) : (
                             <div className="report-table-wrapper">
-                                <table className="report-table">
+                                <table className="report-table stack-sm">
                                     <thead>
                                         <tr>
                                             <th>Class</th>
@@ -648,19 +648,19 @@ function ReportsPage() {
                                     <tbody>
                                         {classSummaryMatrix.map((item) => (
                                             <tr key={item.className}>
-                                                <td><strong>{item.className}</strong></td>
-                                                <td>{item.enrolled}</td>
-                                                <td>{money(item.totalAssessed)}</td>
-                                                <td><strong>{money(item.collected)}</strong></td>
-                                                <td style={{ color: item.balance > 0 ? "#DC2626" : "#16A34A", fontWeight: "700" }}>
+                                                <td data-label="Class"><strong>{item.className}</strong></td>
+                                                <td data-label="Enrolled">{item.enrolled}</td>
+                                                <td data-label="Assessed Fee">{money(item.totalAssessed)}</td>
+                                                <td data-label="Collected"><strong>{money(item.collected)}</strong></td>
+                                                <td data-label="Balance" style={{ color: item.balance > 0 ? "#DC2626" : "#16A34A", fontWeight: "700" }}>
                                                     {money(item.balance)}
                                                 </td>
-                                                <td>
+                                                <td data-label="Recovery Rate">
                                                     <span className="payment-badge" style={{ backgroundColor: Number(item.recoveryRate) >= 80 ? "#DCFCE7" : "#FEF3C7" }}>
                                                         {item.recoveryRate}%
                                                     </span>
                                                 </td>
-                                                <td>{item.receipts}</td>
+                                                <td data-label="Receipts">{item.receipts}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -729,7 +729,7 @@ function ReportsPage() {
                             <div className="report-empty">No payment records found matching the current filters.</div>
                         ) : (
                             <div className="report-table-wrapper">
-                                <table className="report-table">
+                                <table className="report-table stack-sm">
                                     <thead>
                                         <tr>
                                             <th>Receipt No</th>
@@ -743,12 +743,12 @@ function ReportsPage() {
                                     <tbody>
                                         {filteredPayments.slice(0, 15).map((payment) => (
                                             <tr key={payment.id}>
-                                                <td><span className="receipt-number">REC-{payment.id}</span></td>
-                                                <td><strong>{payment.studentName || "-"}</strong></td>
-                                                <td>{payment.className || "-"}</td>
-                                                <td>{payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString("en-IN") : "-"}</td>
-                                                <td><span className="payment-badge">{payment.paymentMode || "Cash"}</span></td>
-                                                <td><strong>{money(payment.amount)}</strong></td>
+                                                <td data-label="Receipt No"><span className="receipt-number">REC-{payment.id}</span></td>
+                                                <td data-label="Student"><strong>{payment.studentName || "-"}</strong></td>
+                                                <td data-label="Class">{payment.className || "-"}</td>
+                                                <td data-label="Date">{payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString("en-IN") : "-"}</td>
+                                                <td data-label="Mode"><span className="payment-badge">{payment.paymentMode || "Cash"}</span></td>
+                                                <td data-label="Amount"><strong>{money(payment.amount)}</strong></td>
                                             </tr>
                                         ))}
                                     </tbody>

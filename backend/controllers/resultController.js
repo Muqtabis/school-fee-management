@@ -1,8 +1,9 @@
 const { runQuery, allQuery } = require("../db");
 const logAudit = require("../utils/auditLogger");
-const { generateMarksheet, generateMarksheetBuffer } = require("../utils/marksheetPdf");
+const { generateMarksheet, generateMarksheetBuffer, generateProgressCardBuffer, generateFaCardBuffer, generateCombinedCardsBuffer, generateCardFile } = require("../utils/marksheetPdf");
 const { sendMarksheet } = require("../utils/messagingService");
 const { loadBands, computeStudentResult, MARK_STATUSES } = require("../utils/grading");
+const { buildProgressCardModel } = require("../utils/progressCard");
 const { _helpers } = require("./examController");
 
 const { getExam, getEffectiveSubjects, seedExamSubjects } = _helpers;
@@ -308,14 +309,17 @@ async function deliverToStudents(exam, students, actorId) {
             error = "No published result for this student.";
         } else {
             try {
-                mediaPath = await generateMarksheet({
-                    exam: {
-                        id: exam.id, examName: exam.examName, className: exam.className,
-                        examType: exam.examType, academicYear: exam.academicYear
-                    },
-                    student,
-                    result: model.result,
-                    meta: { schoolName, publishedAt: model.publishedAt || exam.publishedAt }
+                // Deliver the SAME card the download produces: FA single page for a
+                // formative, the term/final booklet otherwise.
+                const cardModel = await buildProgressCardModel(exam, student.id);
+                const single = !(exam.examCategory === "term" || exam.examCategory === "final");
+                mediaPath = await generateCardFile({
+                    exam, student, model: cardModel, single,
+                    meta: {
+                        schoolName,
+                        trustName: process.env.SCHOOL_TRUST || undefined,
+                        schoolAddress: process.env.SCHOOL_ADDRESS || undefined
+                    }
                 });
             } catch (e) {
                 console.error(`PDF failed for student ${student.id}:`, e);
@@ -733,25 +737,59 @@ exports.getReportCard = async (req, res) => {
         const exam = await getExam(examId);
         if (!exam) return res.status(404).json({ success: false, message: "Exam not found." });
 
-        const model = await snapshotResultModel(examId, studentId);
-        if (!model) return res.status(404).json({ success: false, message: "No published result for this student." });
-
+        // Full student profile (needed by the comprehensive card). The students
+        // table has no `section` column (classes are free-text with empty
+        // sections in this deployment), so we select an empty literal to keep
+        // the profile shape the PDF builders expect without a "no such column" error.
         const students = await allQuery(
-            `SELECT id, studentName, rollNumber, className FROM students WHERE id = ?`,
+            `SELECT id, studentName, rollNumber, className, '' AS section, admissionNumber,
+                    satsNumber, gender, dob, fatherName, motherName, contact1, address
+             FROM students WHERE id = ?`,
             [studentId]
         );
         if (!students.length) return res.status(404).json({ success: false, message: "Student not found." });
 
         const schoolName = process.env.SCHOOL_NAME || "The Age School";
-        const buffer = await generateMarksheetBuffer({
-            exam: { id: exam.id, examName: exam.examName, className: exam.className, examType: exam.examType, academicYear: exam.academicYear },
-            student: students[0],
-            result: model.result,
-            meta: { schoolName, publishedAt: model.publishedAt || exam.publishedAt }
-        });
-
         const safe = (v) => String(v || "").replace(/[^a-z0-9._-]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 60);
         const fileName = `ReportCard_${safe(students[0].rollNumber || students[0].studentName)}_${safe(exam.examName)}.pdf`;
+
+        let buffer;
+        if (exam.examCategory === "term" || exam.examCategory === "final") {
+            // A progress card is a post-publish artifact — never emit one built
+            // from partial, still-editable marks for an exam that isn't published
+            // yet (the unit_test path below is already gated by requiring a snapshot).
+            if (exam.status !== "published") {
+                return res.status(404).json({ success: false, message: "No published report card for this exam yet." });
+            }
+            // Comprehensive progress card: aggregates this term's Unit Tests +
+            // the term exam (and Term I/II for a final). Computed live from
+            // marks so the aggregate reflects every contributing exam.
+            const model = await buildProgressCardModel(exam, studentId);
+            buffer = await generateProgressCardBuffer({
+                exam, student: students[0], model,
+                meta: {
+                    schoolName,
+                    trustName: process.env.SCHOOL_TRUST || undefined,
+                    schoolAddress: process.env.SCHOOL_ADDRESS || undefined,
+                    affiliation: process.env.SCHOOL_AFFILIATION || undefined
+                }
+            });
+        } else {
+            // Formative Assessment (unit_test): a single-page blue card showing
+            // that term's assessments, aggregated live. Post-publish only.
+            if (exam.status !== "published") {
+                return res.status(404).json({ success: false, message: "No published report card for this exam yet." });
+            }
+            const model = await buildProgressCardModel(exam, studentId);
+            buffer = await generateFaCardBuffer({
+                exam, student: students[0], model,
+                meta: {
+                    schoolName,
+                    trustName: process.env.SCHOOL_TRUST || undefined,
+                    schoolAddress: process.env.SCHOOL_ADDRESS || undefined
+                }
+            });
+        }
 
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
@@ -760,6 +798,55 @@ exports.getReportCard = async (req, res) => {
     } catch (error) {
         console.error("Get Report Card Error:", error);
         res.status(500).json({ success: false, message: "Unable to generate report card." });
+    }
+};
+
+// =====================================================
+// CLASS-WIDE REPORT CARDS (one combined PDF)
+// Every active student in the exam's class, back-to-back,
+// using the same card the single download uses (FA card for
+// unit_test, booklet for term/final). Admin-only; published only.
+// =====================================================
+exports.getClassReportCards = async (req, res) => {
+    const examId = Number(req.params.examId);
+    if (!Number.isInteger(examId)) {
+        return res.status(400).json({ success: false, message: "Invalid exam ID." });
+    }
+    try {
+        const exam = await getExam(examId);
+        if (!exam) return res.status(404).json({ success: false, message: "Exam not found." });
+        if (exam.status !== "published") {
+            return res.status(404).json({ success: false, message: "No published report cards for this exam yet." });
+        }
+        const students = await allQuery(
+            `SELECT id, studentName, rollNumber, className, '' AS section, admissionNumber,
+                    satsNumber, gender, dob, fatherName, motherName, contact1, address
+             FROM students WHERE className = ? AND status = 'active'
+             ORDER BY CAST(rollNumber AS INTEGER), studentName`,
+            [exam.className]
+        );
+        if (!students.length) return res.status(404).json({ success: false, message: "No active students in this class." });
+
+        const single = !(exam.examCategory === "term" || exam.examCategory === "final");
+        const entries = [];
+        for (const st of students) {
+            const model = await buildProgressCardModel(exam, st.id);
+            entries.push({ student: st, model });
+        }
+        const schoolName = process.env.SCHOOL_NAME || "The Age School";
+        const buffer = await generateCombinedCardsBuffer({
+            exam, entries, single,
+            meta: { schoolName, trustName: process.env.SCHOOL_TRUST || undefined, schoolAddress: process.env.SCHOOL_ADDRESS || undefined }
+        });
+        const safe = (v) => String(v || "").replace(/[^a-z0-9._-]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 60);
+        const fileName = `ReportCards_${safe(exam.className)}_${safe(exam.examName)}.pdf`;
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+        res.setHeader("Content-Length", buffer.length);
+        res.send(buffer);
+    } catch (error) {
+        console.error("Class Report Cards Error:", error);
+        res.status(500).json({ success: false, message: "Unable to generate class report cards." });
     }
 };
 

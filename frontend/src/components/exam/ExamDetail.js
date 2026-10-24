@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
 import api from "../../services/api";
 import { examTypeLabel, STATUS_LABEL, STATUS_HINT, MARK_STATUS_OPTIONS } from "./examConstants";
@@ -35,6 +35,24 @@ async function downloadReportCard(examId, student) {
         window.URL.revokeObjectURL(url);
     } catch (error) {
         alert("Unable to download the report card.");
+    }
+}
+
+
+// Download EVERY active student's card for a class in one combined PDF.
+async function downloadClassCards(examId, className) {
+    try {
+        const res = await api.get(`/exams/${examId}/report-cards`, { responseType: "blob" });
+        const url = window.URL.createObjectURL(new Blob([res.data]));
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `ReportCards_${(className || "class").replace(/[^a-z0-9._-]+/gi, "_")}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+    } catch (error) {
+        alert("Unable to download the class report cards.");
     }
 }
 
@@ -387,7 +405,7 @@ function ExamDetail({ definition, onBack, onChanged }) {
                             ) : (
                                 <>
                                     <div className="table-container">
-                                        <table>
+                                        <table className="stack-sm">
                                             <thead>
                                                 <tr>
                                                     <th>Subject</th>
@@ -460,7 +478,7 @@ function ExamDetail({ definition, onBack, onChanged }) {
                             ) : (
                                 <>
                                     <div className="table-container">
-                                        <table>
+                                        <table className="stack-sm">
                                             <thead>
                                                 <tr>
                                                     <th>Subject</th>
@@ -588,7 +606,12 @@ function ExamDetail({ definition, onBack, onChanged }) {
                                         <span style={{ color: "#888" }}>Preview — publish after the teacher submits.</span>
                                     )}
                                     {st === "published" && (
-                                        <span className="exam-badge exam-badge-published">Published</span>
+                                        <>
+                                            <button type="button" className="primary-btn" onClick={() => downloadClassCards(selected.id, selected.className)}>
+                                                Download all cards
+                                            </button>
+                                            <span className="exam-badge exam-badge-published">Published</span>
+                                        </>
                                     )}
                                 </div>
                             </div>
@@ -609,7 +632,7 @@ function ExamDetail({ definition, onBack, onChanged }) {
                                     </div>
 
                                     <div className="table-container" style={{ marginTop: "16px" }}>
-                                        <table>
+                                        <table className="stack-sm">
                                             <thead>
                                                 <tr>
                                                     <th>Roll</th>
@@ -625,82 +648,87 @@ function ExamDetail({ definition, onBack, onChanged }) {
                                                 {results.results.length === 0 ? (
                                                     <tr><td colSpan="7">No active students.</td></tr>
                                                 ) : results.results.map((r) => (
-                                                    <tr key={r.studentId}>
-                                                        <td>{r.rollNumber || "-"}</td>
-                                                        <td>{r.studentName}{r.missing > 0 && <span style={{ color: "#b45309" }}> ({r.missing} missing)</span>}</td>
-                                                        <td>{r.totalObtained}/{r.totalMax}</td>
-                                                        <td>{r.percentage}%</td>
-                                                        <td>{r.grade || "—"}</td>
-                                                        <td>
-                                                            <span className={"exam-result-" + r.overallStatus}>
-                                                                {r.overallStatus.toUpperCase()}
-                                                            </span>
-                                                        </td>
-                                                        <td>
-                                                            {results.published && (
-                                                                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                                                                    <button type="button" onClick={() => downloadReportCard(selected.id, r)}>PDF</button>
-                                                                    <button type="button" onClick={() => setCorrecting({
-                                                                        studentId: r.studentId, studentName: r.studentName,
-                                                                        subjectId: r.subjectResults[0]?.subjectId || "",
-                                                                        newStatus: "present", newMarks: "", reason: ""
-                                                                    })}>Correct</button>
-                                                                </div>
-                                                            )}
-                                                        </td>
-                                                    </tr>
+                                                    <React.Fragment key={r.studentId}>
+                                                        <tr className="stack-sm">
+                                                            <td data-label="Roll">{r.rollNumber || "-"}</td>
+                                                            <td data-label="Student">{r.studentName}{r.missing > 0 && <span style={{ color: "#b45309" }}> ({r.missing} missing)</span>}</td>
+                                                            <td data-label="Total">{r.totalObtained}/{r.totalMax}</td>
+                                                            <td data-label="%">{r.percentage}%</td>
+                                                            <td data-label="Grade">{r.grade || "—"}</td>
+                                                            <td data-label="Result">
+                                                                <span className={"exam-result-" + r.overallStatus}>
+                                                                    {r.overallStatus.toUpperCase()}
+                                                                </span>
+                                                            </td>
+                                                            <td data-label="">
+                                                                {results.published && (
+                                                                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                                                                        <button type="button" onClick={() => downloadReportCard(selected.id, r)}>PDF</button>
+                                                                        <button type="button" onClick={() => setCorrecting({
+                                                                            studentId: r.studentId, studentName: r.studentName,
+                                                                            subjectId: r.subjectResults[0]?.subjectId || "",
+                                                                            newStatus: "present", newMarks: "", reason: ""
+                                                                        })}>Correct</button>
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                        {correcting?.studentId === r.studentId && (
+                                                            <tr>
+                                                                <td colSpan="7" style={{ padding: 0 }}>
+                                                                    <div className="exam-correction">
+                                                                        <div className="exam-row-between">
+                                                                            <strong>Correct a mark — {correcting.studentName}</strong>
+                                                                            <button type="button" onClick={() => setCorrecting(null)}>Close</button>
+                                                                        </div>
+                                                                        <p style={{ color: "#666", fontSize: "13px" }}>
+                                                                            Published results are protected. A correction is logged with a reason,
+                                                                            the result is recalculated, and the report card must be re-sent.
+                                                                        </p>
+                                                                        <div className="exam-correction-grid">
+                                                                            <label>Subject
+                                                                                <select
+                                                                                    value={correcting.subjectId}
+                                                                                    onChange={(e) => setCorrecting({ ...correcting, subjectId: Number(e.target.value) })}
+                                                                                >
+                                                                                    {results.subjects.map((s) => (
+                                                                                        <option key={s.subjectId} value={s.subjectId}>{s.subjectName}</option>
+                                                                                    ))}
+                                                                                </select>
+                                                                            </label>
+                                                                            <label>Status
+                                                                                <select
+                                                                                    value={correcting.newStatus}
+                                                                                    onChange={(e) => setCorrecting({ ...correcting, newStatus: e.target.value })}
+                                                                                >
+                                                                                    {MARK_STATUS_OPTIONS.map((o) => (
+                                                                                        <option key={o.value} value={o.value}>{o.label}</option>
+                                                                                    ))}
+                                                                                </select>
+                                                                            </label>
+                                                                            {correcting.newStatus === "present" && (
+                                                                                <label>New marks
+                                                                                    <input type="number" min="0" value={correcting.newMarks}
+                                                                                        onChange={(e) => setCorrecting({ ...correcting, newMarks: e.target.value })} />
+                                                                                </label>
+                                                                            )}
+                                                                            <label style={{ gridColumn: "1 / -1" }}>Reason
+                                                                                <input value={correcting.reason} placeholder="e.g. re-evaluation of answer sheet"
+                                                                                    onChange={(e) => setCorrecting({ ...correcting, reason: e.target.value })} />
+                                                                            </label>
+                                                                        </div>
+                                                                        <button type="button" className="primary-btn" onClick={submitCorrection} disabled={busy}>
+                                                                            {busy ? "Saving..." : "Save Correction"}
+                                                                        </button>
+                                                                    </div>
+                                                                </td>
+                                                              </tr>
+                                                        )}
+                                                    </React.Fragment>
                                                 ))}
                                             </tbody>
                                         </table>
                                     </div>
-
-                                    {correcting && (
-                                        <div className="exam-correction">
-                                            <div className="exam-row-between">
-                                                <strong>Correct a mark — {correcting.studentName}</strong>
-                                                <button type="button" onClick={() => setCorrecting(null)}>Close</button>
-                                            </div>
-                                            <p style={{ color: "#666", fontSize: "13px" }}>
-                                                Published results are protected. A correction is logged with a reason,
-                                                the result is recalculated, and the report card must be re-sent.
-                                            </p>
-                                            <div className="exam-correction-grid">
-                                                <label>Subject
-                                                    <select
-                                                        value={correcting.subjectId}
-                                                        onChange={(e) => setCorrecting({ ...correcting, subjectId: Number(e.target.value) })}
-                                                    >
-                                                        {results.subjects.map((s) => (
-                                                            <option key={s.subjectId} value={s.subjectId}>{s.subjectName}</option>
-                                                        ))}
-                                                    </select>
-                                                </label>
-                                                <label>Status
-                                                    <select
-                                                        value={correcting.newStatus}
-                                                        onChange={(e) => setCorrecting({ ...correcting, newStatus: e.target.value })}
-                                                    >
-                                                        {MARK_STATUS_OPTIONS.map((o) => (
-                                                            <option key={o.value} value={o.value}>{o.label}</option>
-                                                        ))}
-                                                    </select>
-                                                </label>
-                                                {correcting.newStatus === "present" && (
-                                                    <label>New marks
-                                                        <input type="number" min="0" value={correcting.newMarks}
-                                                            onChange={(e) => setCorrecting({ ...correcting, newMarks: e.target.value })} />
-                                                    </label>
-                                                )}
-                                                <label style={{ gridColumn: "1 / -1" }}>Reason
-                                                    <input value={correcting.reason} placeholder="e.g. re-evaluation of answer sheet"
-                                                        onChange={(e) => setCorrecting({ ...correcting, reason: e.target.value })} />
-                                                </label>
-                                            </div>
-                                            <button type="button" className="primary-btn" onClick={submitCorrection} disabled={busy}>
-                                                {busy ? "Saving..." : "Save Correction"}
-                                            </button>
-                                        </div>
-                                    )}
                                 </>
                             )}
                         </>
@@ -732,7 +760,7 @@ function ExamDetail({ definition, onBack, onChanged }) {
                             ) : (
                                 <>
                                     <div className="table-container">
-                                        <table>
+                                        <table className="stack-sm">
                                             <thead>
                                                 <tr>
                                                     <th>Student</th>
@@ -749,17 +777,17 @@ function ExamDetail({ definition, onBack, onChanged }) {
                                                     <tr><td colSpan="7">Nothing delivered yet.</td></tr>
                                                 ) : notifications.map((n) => (
                                                     <tr key={n.id}>
-                                                        <td>{n.studentName || `#${n.studentId}`}</td>
-                                                        <td>{n.phoneNumber || "-"}</td>
-                                                        <td>
+                                                        <td data-label="Student">{n.studentName || `#${n.studentId}`}</td>
+                                                        <td data-label="Phone">{n.phoneNumber || "-"}</td>
+                                                        <td data-label="Status">
                                                             <span className={n.status === "sent" || n.status === "delivered" ? "exam-result-pass" : "exam-result-fail"}>
                                                                 {n.status}
                                                             </span>
                                                         </td>
-                                                        <td>{n.attemptCount || 0}</td>
-                                                        <td>{n.updatedAt ? new Date(n.updatedAt).toLocaleString() : "-"}</td>
-                                                        <td style={{ maxWidth: "220px" }}>{n.error || n.providerMessageId || "-"}</td>
-                                                        <td>
+                                                        <td data-label="Attempts">{n.attemptCount || 0}</td>
+                                                        <td data-label="Last update">{n.updatedAt ? new Date(n.updatedAt).toLocaleString() : "-"}</td>
+                                                        <td data-label="Detail" style={{ maxWidth: "220px" }}>{n.error || n.providerMessageId || "-"}</td>
+                                                        <td data-label="">
                                                             <button type="button" onClick={() => resend(n.studentId)} disabled={busy}>
                                                                 Resend
                                                             </button>
@@ -774,7 +802,7 @@ function ExamDetail({ definition, onBack, onChanged }) {
                                         <>
                                             <h4 style={{ marginTop: "22px" }}>Correction history</h4>
                                             <div className="table-container">
-                                                <table>
+                                                <table className="stack-sm">
                                                     <thead>
                                                         <tr>
                                                             <th>When</th>
@@ -789,13 +817,13 @@ function ExamDetail({ definition, onBack, onChanged }) {
                                                     <tbody>
                                                         {corrections.map((c) => (
                                                             <tr key={c.id}>
-                                                                <td>{c.createdAt ? new Date(c.createdAt).toLocaleString() : "-"}</td>
-                                                                <td>{c.studentName || `#${c.studentId}`}</td>
-                                                                <td>{c.subjectName || `#${c.subjectId}`}</td>
-                                                                <td>{c.oldStatus === "present" ? c.oldMarks : (c.oldStatus || "-")}</td>
-                                                                <td>{c.newStatus === "present" ? c.newMarks : c.newStatus}</td>
-                                                                <td style={{ maxWidth: "220px" }}>{c.reason}</td>
-                                                                <td>{c.changedByName || `#${c.changedBy}`}</td>
+                                                                <td data-label="When">{c.createdAt ? new Date(c.createdAt).toLocaleString() : "-"}</td>
+                                                                <td data-label="Student">{c.studentName || `#${c.studentId}`}</td>
+                                                                <td data-label="Subject">{c.subjectName || `#${c.subjectId}`}</td>
+                                                                <td data-label="From">{c.oldStatus === "present" ? c.oldMarks : (c.oldStatus || "-")}</td>
+                                                                <td data-label="To">{c.newStatus === "present" ? c.newMarks : c.newStatus}</td>
+                                                                <td data-label="Reason" style={{ maxWidth: "220px" }}>{c.reason}</td>
+                                                                <td data-label="By">{c.changedByName || `#${c.changedBy}`}</td>
                                                             </tr>
                                                         ))}
                                                     </tbody>

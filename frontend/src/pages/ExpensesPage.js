@@ -634,7 +634,7 @@ function ExpensesPage() {
                         className="table-container"
                     >
 
-                        <table>
+                        <table className="stack-sm">
 
                             <thead>
 
@@ -719,28 +719,28 @@ function ExpensesPage() {
                                                     }
                                                 >
 
-                                                    <td>
+                                                    <td data-label="Date">
                                                         {
                                                             expense.expenseDate
                                                         }
                                                     </td>
 
 
-                                                    <td>
+                                                    <td data-label="Expense">
                                                         {
                                                             expense.expenseName
                                                         }
                                                     </td>
 
 
-                                                    <td>
+                                                    <td data-label="Category">
                                                         {
                                                             expense.category
                                                         }
                                                     </td>
 
 
-                                                    <td>
+                                                    <td data-label="Paid To">
                                                         {
                                                             expense.paidTo ||
                                                             "-"
@@ -748,14 +748,14 @@ function ExpensesPage() {
                                                     </td>
 
 
-                                                    <td>
+                                                    <td data-label="Payment Mode">
                                                         {
                                                             expense.paymentMode
                                                         }
                                                     </td>
 
 
-                                                    <td>
+                                                    <td data-label="Amount">
 
                                                         <strong>
                                                             {
@@ -768,7 +768,7 @@ function ExpensesPage() {
                                                     </td>
 
 
-                                                    <td>
+                                                    <td data-label="Status">
 
                                                         {
                                                             expense.status ===
@@ -794,7 +794,7 @@ function ExpensesPage() {
                                                     </td>
 
 
-                                                    <td>
+                                                    <td data-label="">
 
                                                         <div
                                                             className="action-buttons"

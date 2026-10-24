@@ -295,7 +295,7 @@ function TeacherManagementPage() {
                                 TEACHERS + THEIR CLASSES + SUBJECTS
                             ============================================ */}
                             <div className="table-container" style={{ marginTop: "25px" }}>
-                                <table>
+                                <table className="stack-sm">
                                     <thead>
                                         <tr>
                                             <th>Teacher</th>
@@ -312,9 +312,9 @@ function TeacherManagementPage() {
                                                 const classTeacherOf = (t.classes || []).filter((c) => c.role === "class_teacher");
                                                 return (
                                                     <tr key={t.id}>
-                                                        <td>{t.name}</td>
-                                                        <td>{t.email}</td>
-                                                        <td>
+                                                        <td data-label="Teacher">{t.name}</td>
+                                                        <td data-label="Email">{t.email}</td>
+                                                        <td data-label="Class Teacher Of">
                                                             {classTeacherOf.length === 0 ? (
                                                                 <span style={{ color: "#888" }}>None</span>
                                                             ) : (
@@ -349,7 +349,7 @@ function TeacherManagementPage() {
                                                                 </div>
                                                             )}
                                                         </td>
-                                                        <td>
+                                                        <td data-label="Subject Teacher Of">
                                                             {(!t.subjects || t.subjects.length === 0) ? (
                                                                 <span style={{ color: "#888" }}>None</span>
                                                             ) : (
@@ -419,7 +419,7 @@ function TeacherManagementPage() {
                                 </div>
 
                                 <div className="table-container" style={{ marginTop: "18px" }}>
-                                    <table className="attendance-summary-table">
+                                    <table className="attendance-summary-table stack-sm">
                                         <thead>
                                             <tr>
                                                 <th>Teacher</th>
@@ -448,14 +448,14 @@ function TeacherManagementPage() {
                                                         : null;
                                                     return (
                                                         <tr key={s.teacherId}>
-                                                            <td>{s.name}</td>
-                                                            <td>{s.email}</td>
-                                                            <td><span className="att-badge att-present">{present}</span></td>
-                                                            <td><span className="att-badge att-absent">{Number(s.absent) || 0}</span></td>
-                                                            <td><span className="att-badge att-half">{half}</span></td>
-                                                            <td><span className="att-badge att-leave">{Number(s.leave) || 0}</span></td>
-                                                            <td>{marked}</td>
-                                                            <td>{pct === null ? <span style={{ color: "#888" }}>—</span> : `${pct}%`}</td>
+                                                            <td data-label="Teacher">{s.name}</td>
+                                                            <td data-label="Email">{s.email}</td>
+                                                            <td data-label="Present"><span className="att-badge att-present">{present}</span></td>
+                                                            <td data-label="Absent"><span className="att-badge att-absent">{Number(s.absent) || 0}</span></td>
+                                                            <td data-label="Half-day"><span className="att-badge att-half">{half}</span></td>
+                                                            <td data-label="Leave"><span className="att-badge att-leave">{Number(s.leave) || 0}</span></td>
+                                                            <td data-label="Days Marked">{marked}</td>
+                                                            <td data-label="Present %">{pct === null ? <span style={{ color: "#888" }}>—</span> : `${pct}%`}</td>
                                                         </tr>
                                                     );
                                                 })

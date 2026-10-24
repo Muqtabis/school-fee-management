@@ -5,7 +5,7 @@ import Navbar from "../components/Navbar";
 import api from "../services/api";
 import ExamDetail from "../components/exam/ExamDetail";
 import GradingScalesManager from "../components/exam/GradingScalesManager";
-import { EXAM_TYPES, examTypeLabel, STATUS_LABEL } from "../components/exam/examConstants";
+import { ASSESSMENT_SLOTS, assessmentSlot, examTypeLabel, examCategoryLabel, STATUS_LABEL } from "../components/exam/examConstants";
 
 
 // =====================================================
@@ -28,9 +28,11 @@ function ExamResultsPage() {
     const [openDef, setOpenDef] = useState(null); // opened definition -> detail view
     const [showGrading, setShowGrading] = useState(false);
 
-    // Create-exam form.
+    // Create-exam form. A single "slot" captures assessment type + term in the
+    // card's own FA/SA language; it maps to examCategory/term/examType on submit.
     const [form, setForm] = useState({
-        examName: "", examType: "term_1", academicYearId: "", startDate: "", endDate: "", gradingScaleId: ""
+        examName: "", slot: "t1_sa",
+        weightage: "", academicYearId: "", startDate: "", endDate: "", gradingScaleId: ""
     });
     const [selectedClasses, setSelectedClasses] = useState([]);
     const [creating, setCreating] = useState(false);
@@ -84,9 +86,13 @@ function ExamResultsPage() {
         }
         try {
             setCreating(true);
+            const slot = assessmentSlot(form.slot);
             const res = await api.post("/exams", {
                 examName: form.examName.trim(),
-                examType: form.examType,
+                examType: slot.examType,
+                examCategory: slot.examCategory,
+                term: slot.term,
+                weightage: form.weightage === "" ? null : Number(form.weightage),
                 academicYearId: form.academicYearId || null,
                 startDate: form.startDate || null,
                 endDate: form.endDate || null,
@@ -97,7 +103,10 @@ function ExamResultsPage() {
             let msg = res.data.message || "Exam created.";
             if (skipped.length) msg += "\n\nSkipped:\n" + skipped.map((s) => `• ${s.className}: ${s.reason}`).join("\n");
             alert(msg);
-            setForm({ examName: "", examType: "term_1", academicYearId: "", startDate: "", endDate: "", gradingScaleId: "" });
+            setForm({
+                examName: "", slot: "t1_sa",
+                weightage: "", academicYearId: "", startDate: "", endDate: "", gradingScaleId: ""
+            });
             setSelectedClasses([]);
             loadDefinitions();
         } catch (error) {
@@ -163,10 +172,19 @@ function ExamResultsPage() {
                                         required
                                     />
                                 </label>
-                                <label>Type
-                                    <select value={form.examType} onChange={(e) => setForm({ ...form, examType: e.target.value })}>
-                                        {EXAM_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                                <label>Assessment
+                                    <select value={form.slot} onChange={(e) => setForm({ ...form, slot: e.target.value })}>
+                                        {ASSESSMENT_SLOTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                                     </select>
+                                </label>
+                                <label>Weightage
+                                    <input
+                                        type="number" min="0" step="1"
+                                        value={form.weightage}
+                                        onChange={(e) => setForm({ ...form, weightage: e.target.value })}
+                                        placeholder={assessmentSlot(form.slot).examCategory === "unit_test" ? "default 15" : assessmentSlot(form.slot).examCategory === "term" ? "default 20" : "n/a"}
+                                        disabled={assessmentSlot(form.slot).examCategory === "final"}
+                                    />
                                 </label>
                                 <label>Academic year
                                     <select value={form.academicYearId} onChange={(e) => setForm({ ...form, academicYearId: e.target.value })}>
@@ -187,6 +205,13 @@ function ExamResultsPage() {
                                     <input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
                                 </label>
                             </div>
+
+                            <p style={{ fontSize: "12px", color: "#777", margin: "4px 0 0" }}>
+                                The <strong>Assessment</strong> you pick is exactly how it appears on the progress card.
+                                Formative (FA) exams feed a term; the term's <strong>Summative (SA)</strong> card aggregates its FAs + SA,
+                                and <strong>Final</strong> combines Term I + II. Create FA1 before FA2 (numbering follows creation order).
+                                Weightage is optional — defaults 15 (FA) / 20 (SA) apply.
+                            </p>
 
                             <div style={{ margin: "14px 0" }}>
                                 <div style={{ fontSize: "13px", color: "#555", marginBottom: "8px" }}>Classes</div>
@@ -214,11 +239,12 @@ function ExamResultsPage() {
                     </div>
 
                     <div className="table-container" style={{ marginTop: "25px" }}>
-                        <table>
+                        <table className="stack-sm">
                             <thead>
                                 <tr>
                                     <th>Exam</th>
                                     <th>Type</th>
+                                    <th>Category</th>
                                     <th>Academic Year</th>
                                     <th>Classes</th>
                                     <th>Status</th>
@@ -227,13 +253,14 @@ function ExamResultsPage() {
                             </thead>
                             <tbody>
                                 {loading ? (
-                                    <tr><td colSpan="6">Loading...</td></tr>
+                                    <tr><td colSpan="7">Loading...</td></tr>
                                 ) : definitions.length === 0 ? (
-                                    <tr><td colSpan="6">No exams yet.</td></tr>
+                                    <tr><td colSpan="7">No exams yet.</td></tr>
                                 ) : definitions.map((d) => (
                                     <tr key={d.id}>
                                         <td>{d.name}</td>
                                         <td>{examTypeLabel(d.examType)}</td>
+                                        <td>{examCategoryLabel(d.examCategory)}</td>
                                         <td>{d.academicYear || "—"}</td>
                                         <td>{d.classCount} ({(d.classes || []).map((c) => c.className).join(", ")})</td>
                                         <td>

@@ -390,7 +390,7 @@ function SummaryTable({ payments = [], onReverse }) {
 
     return (
         <div className="table-container">
-            <table>
+            <table className="stack-sm">
                 <thead>
                     <tr>
                         <th>#</th>
@@ -413,16 +413,16 @@ function SummaryTable({ payments = [], onReverse }) {
                     ) : (
                         payments.map((payment, index) => (
                             <tr key={payment.id} style={payment.status === "reversed" ? { opacity: 0.6 } : {}}>
-                                <td>{index + 1}</td>
-                                <td>{payment.studentName || "-"}</td>
-                                <td>{payment.rollNumber || "-"}</td>
-                                <td>{payment.className || "-"}</td>
-                                <td>{payment.academicYearName || "-"}</td>
-                                <td><strong>₹ {Number(payment.amount || 0).toLocaleString("en-IN")}</strong></td>
-                                <td>{formatDate(payment.paymentDate)}</td>
-                                <td><span className={`payment-badge ${getModeClass(payment.paymentMode)}`}>{payment.paymentMode}</span></td>
-                                <td>{payment.status === "reversed" ? <span className="payment-badge mode-default">Reversed</span> : <span className="payment-badge mode-upi">Completed</span>}</td>
-                                <td>
+                                <td data-label="#">{index + 1}</td>
+                                <td data-label="Student">{payment.studentName || "-"}</td>
+                                <td data-label="Roll No.">{payment.rollNumber || "-"}</td>
+                                <td data-label="Class">{payment.className || "-"}</td>
+                                <td data-label="Academic Year">{payment.academicYearName || "-"}</td>
+                                <td data-label="Amount"><strong>₹ {Number(payment.amount || 0).toLocaleString("en-IN")}</strong></td>
+                                <td data-label="Date">{formatDate(payment.paymentDate)}</td>
+                                <td data-label="Mode"><span className={`payment-badge ${getModeClass(payment.paymentMode)}`}>{payment.paymentMode}</span></td>
+                                <td data-label="Status">{payment.status === "reversed" ? <span className="payment-badge mode-default">Reversed</span> : <span className="payment-badge mode-upi">Completed</span>}</td>
+                                <td data-label="">
                                     <div className="action-buttons">
                                         {payment.status !== "reversed" && <button className="receipt-btn" onClick={() => printReceipt(payment.id)}>Receipt</button>}
                                         {payment.status !== "reversed" && <button className="delete-btn" onClick={() => onReverse(payment)}>Reverse</button>}

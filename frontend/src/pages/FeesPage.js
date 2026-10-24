@@ -378,7 +378,7 @@ function FeesPage() {
                                     No fee components configured yet. Add one above to get started.
                                 </div>
                             ) : (
-                                <table style={{ width: "100%" }}>
+                                <table className="stack-sm">
                                     <thead>
                                         <tr>
                                             <th>Fee Category Name</th>
@@ -508,7 +508,7 @@ function FeesPage() {
                             ) : structures.length === 0 ? (
                                 <div style={{ padding: "40px", textAlign: "center", color: "#64748B" }}>No fee structures found for {selectedYear.name}.</div>
                             ) : (
-                                <table>
+                                <table className="stack-sm">
                                     <thead>
                                         <tr>
                                             <th>Class / Section</th>
@@ -519,9 +519,9 @@ function FeesPage() {
                                     <tbody>
                                         {structures.map(structure => (
                                             <tr key={structure.id}>
-                                                <td><strong>{structure.className}</strong></td>
-                                                <td>{money(structure.totalAmount)}</td>
-                                                <td>
+                                                <td data-label="Class / Section"><strong>{structure.className}</strong></td>
+                                                <td data-label="Standard Total">{money(structure.totalAmount)}</td>
+                                                <td data-label="">
                                                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                                                         <button className="edit-btn" onClick={() => openStructure(structure)}>View / Edit Prices</button>
                                                         {isAdmin && <button className="history-btn" onClick={() => copyStructure(structure)}>Copy Template</button>}
@@ -550,7 +550,7 @@ function FeesPage() {
                                 </div>
 
                                 <div className="table-container" style={{ maxHeight: "60vh", overflowY: "auto" }}>
-                                    <table>
+                                    <table className="stack-sm">
                                         <thead>
                                             <tr>
                                                 <th>Fee Component</th>

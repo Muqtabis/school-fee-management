@@ -259,7 +259,7 @@ function StudentAttendancePage() {
                                     </div>
 
                                     <div className="table-container" style={{ marginTop: "18px" }}>
-                                        <table className="compact-table">
+                                        <table className="compact-table stack-sm">
                                             <thead>
                                                 <tr>
                                                     <th>Roll No.</th>
@@ -276,16 +276,16 @@ function StudentAttendancePage() {
                                                 ) : (
                                                     rows.map((r) => (
                                                         <tr key={r.studentId}>
-                                                            <td>{r.rollNumber || "-"}</td>
-                                                            <td>{r.studentName}</td>
-                                                            <td>
+                                                            <td data-label="Roll No.">{r.rollNumber || "-"}</td>
+                                                            <td data-label="Student">{r.studentName}</td>
+                                                            <td data-label="Status">
                                                                 <select value={r.status} onChange={(e) => setField(r.studentId, "status", e.target.value)}>
                                                                     {STATUS_OPTIONS.map((o) => (
                                                                         <option key={o.value} value={o.value}>{o.label}</option>
                                                                     ))}
                                                                 </select>
                                                             </td>
-                                                            <td>
+                                                            <td data-label="Remark">
                                                                 <input
                                                                     type="text"
                                                                     value={r.remark}
@@ -356,7 +356,7 @@ function StudentAttendancePage() {
                                     )}
 
                                     <div className="table-container" style={{ marginTop: "18px" }}>
-                                        <table className="compact-table">
+                                        <table className="compact-table stack-sm">
                                             <thead>
                                                 <tr>
                                                     <th>Date</th>
@@ -372,11 +372,11 @@ function StudentAttendancePage() {
                                                 ) : (
                                                     filteredHistory.map((h) => (
                                                         <tr key={h.id}>
-                                                            <td>{h.attendanceDate}</td>
-                                                            <td>{h.rollNumber || "-"}</td>
-                                                            <td>{h.studentName}</td>
-                                                            <td><span className={`att-badge ${STATUS_CLASS[h.status] || ""}`}>{STATUS_LABEL[h.status] || h.status}</span></td>
-                                                            <td>{h.remark || "-"}</td>
+                                                            <td data-label="Date">{h.attendanceDate}</td>
+                                                            <td data-label="Roll No.">{h.rollNumber || "-"}</td>
+                                                            <td data-label="Student">{h.studentName}</td>
+                                                            <td data-label="Status"><span className={`att-badge ${STATUS_CLASS[h.status] || ""}`}>{STATUS_LABEL[h.status] || h.status}</span></td>
+                                                            <td data-label="Remark">{h.remark || "-"}</td>
                                                         </tr>
                                                     ))
                                                 )}

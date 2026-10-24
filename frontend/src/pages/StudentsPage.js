@@ -274,7 +274,7 @@ function StudentsPage() {
                     </div>
 
                     <div className="table-container">
-                        <table>
+                        <table className="stack-sm">
                             <thead>
                                 <tr>
                                     <th>Adm No.</th>
@@ -296,11 +296,11 @@ function StudentsPage() {
                                 ) : (
                                     filteredStudents.map((student) => (
                                         <tr key={student.id} style={student.status === "archived" ? { opacity: 0.65 } : {}}>
-                                            <td style={{ color: "#64748B", fontSize: "13px" }}>{student.admissionNumber || "-"}</td>
-                                            <td><strong>{student.rollNumber || "-"}</strong></td>
-                                            <td><strong>{student.studentName}</strong></td>
-                                            <td>{student.className || "-"}</td>
-                                            <td>
+                                            <td data-label="Adm No." style={{ color: "#64748B", fontSize: "13px" }}>{student.admissionNumber || "-"}</td>
+                                            <td data-label="Roll No."><strong>{student.rollNumber || "-"}</strong></td>
+                                            <td data-label="Student"><strong>{student.studentName}</strong></td>
+                                            <td data-label="Class">{student.className || "-"}</td>
+                                            <td data-label="Contact">
                                                 <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.4 }}>
                                                     <span>{student.contact1 || "-"}</span>
                                                     {student.contact2 ? (
@@ -308,12 +308,12 @@ function StudentsPage() {
                                                     ) : null}
                                                 </div>
                                             </td>
-                                            <td>
+                                            <td data-label="Status">
                                                 <span className={student.status === "archived" ? "payment-badge mode-default" : "payment-badge mode-upi"}>
                                                     {student.status === "archived" ? "Archived" : "Active"}
                                                 </span>
                                             </td>
-                                            <td style={{ textAlign: "right" }}>
+                                            <td data-label="" style={{ textAlign: "right" }}>
                                                 <div className="action-buttons" style={{ justifyContent: "flex-end" }}>
                                                     <button
                                                         onClick={() => setDetailView({ student, tab: "overview" })}

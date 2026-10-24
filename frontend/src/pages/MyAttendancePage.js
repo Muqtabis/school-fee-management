@@ -78,7 +78,7 @@ function MyAttendancePage() {
                     )}
 
                     <div className="table-container">
-                        <table>
+                        <table className="stack-sm">
                             <thead>
                                 <tr>
                                     <th>Date</th>
@@ -94,9 +94,9 @@ function MyAttendancePage() {
                                 ) : (
                                     records.map((r) => (
                                         <tr key={r.attendanceDate}>
-                                            <td>{r.attendanceDate}</td>
-                                            <td>{STATUS_LABEL[r.status] || r.status}</td>
-                                            <td>{r.remark || "-"}</td>
+                                            <td data-label="Date">{r.attendanceDate}</td>
+                                            <td data-label="Status">{STATUS_LABEL[r.status] || r.status}</td>
+                                            <td data-label="Remark">{r.remark || "-"}</td>
                                         </tr>
                                     ))
                                 )}

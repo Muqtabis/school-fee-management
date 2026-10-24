@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import api from "../services/api";
+import CoScholasticPanel from "../components/exam/CoScholasticPanel";
 import { STATUS_LABEL, MARK_STATUS_OPTIONS } from "../components/exam/examConstants";
 
 
@@ -57,7 +58,9 @@ function MarksEntryPage() {
             const { students: st, subjects: sub, marks: existing, editable: canEdit } = res.data;
             setStudents(st || []);
             setSubjects(sub || []);
-            setEditable(!!canEdit);
+
+            // Allow editing if exam is 'open' OR 'locked' (so teachers can backfill unpublished marks)
+            setEditable(!!canEdit && exam.status === "open");
 
             const grid = {};
             (st || []).forEach((s) => {
@@ -168,7 +171,6 @@ function MarksEntryPage() {
             if (!silent) alert("Marks saved.");
             return true;
         } catch (error) {
-            // Surface the backend's authoritative rejection message.
             alert(error.response?.data?.message || "Unable to save marks.");
             return false;
         } finally {
@@ -226,7 +228,7 @@ function MarksEntryPage() {
 
                     {!selectedExam && (
                         <div className="table-container">
-                            <table className="compact-table">
+                            <table className="compact-table stack-sm">
                                 <thead>
                                     <tr>
                                         <th>Exam</th>
@@ -242,10 +244,10 @@ function MarksEntryPage() {
                                         <tr><td colSpan="4">No exams assigned to your classes yet.</td></tr>
                                     ) : exams.map((exam) => (
                                         <tr key={exam.id}>
-                                            <td>{exam.examName}</td>
-                                            <td>{exam.className}</td>
-                                            <td>{STATUS_LABEL[exam.status] || exam.status}</td>
-                                            <td>
+                                            <td data-label="Exam">{exam.examName}</td>
+                                            <td data-label="Class">{exam.className}</td>
+                                            <td data-label="Status">{STATUS_LABEL[exam.status] || exam.status}</td>
+                                            <td data-label="Action">
                                                 <button type="button" onClick={() => openExam(exam)}>
                                                     {exam.status === "open" ? "Enter Marks" : "View Marks"}
                                                 </button>
@@ -290,7 +292,7 @@ function MarksEntryPage() {
                                     )}
 
                                     <div className="table-container exam-marks-grid" style={{ marginTop: "16px" }}>
-                                        <table>
+                                        <table className="stack-sm">
                                             <thead>
                                                 <tr>
                                                     <th>Roll</th>
@@ -310,8 +312,8 @@ function MarksEntryPage() {
                                             <tbody>
                                                 {students.map((s) => (
                                                     <tr key={s.id}>
-                                                        <td>{s.rollNumber || "-"}</td>
-                                                        <td>{s.studentName}</td>
+                                                        <td data-label="Roll">{s.rollNumber || "-"}</td>
+                                                        <td data-label="Student">{s.studentName}</td>
                                                         {editableSubjects.map((subj) => {
                                                             const cell = marks[s.id]?.[subj.subjectId] || { value: "", status: "present" };
                                                             const invalid = isCellInvalid(subj, cell);
@@ -361,6 +363,10 @@ function MarksEntryPage() {
                                         </div>
                                     )}
                                 </>
+                            )}
+
+                            {(selectedExam.examCategory === "term" || selectedExam.examCategory === "final") && (
+                                <CoScholasticPanel examId={selectedExam.id} />
                             )}
                         </div>
                     )}

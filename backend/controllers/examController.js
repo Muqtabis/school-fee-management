@@ -7,13 +7,30 @@ const { MARK_STATUSES } = require("../utils/grading");
 // HELPERS
 // =====================================================
 
+// Is this teacher the CLASS TEACHER of the class? (teacher_assignments.role =
+// 'class_teacher'; a class has at most one.) A class teacher owns the whole
+// class: they may enter/edit marks for ALL its subjects and are the sole
+// non-admin author of co-scholastic grades, attendance, physical stature and
+// the overall performance comment (dynamic progress card, Part 2). This is a
+// deliberate widening of the earlier "subject teacher only" marks rule.
+async function isClassTeacher(user, className) {
+    if (!user || user.role === "admin") return false;
+    const rows = await allQuery(
+        `SELECT 1 FROM teacher_assignments
+         WHERE teacherId = ? AND className = ? AND role = 'class_teacher' LIMIT 1`,
+        [user.id, className]
+    );
+    return rows.length > 0;
+}
+
 // Is this teacher associated with this class for MARKS purposes? Admin
-// always yes. A teacher qualifies only if they are the standing subject
-// teacher for at least one subject in the class (Part 4/10/11: a pure
-// class teacher is NOT automatically a subject teacher). Per-exam
-// overrides are handled at the subject level in teacherEditableSubjectIds.
+// always yes. A class teacher of the class qualifies (owns every subject).
+// Otherwise a teacher qualifies only if they are the standing subject
+// teacher for at least one subject in the class. Per-exam overrides are
+// handled at the subject level in teacherEditableSubjectIds.
 async function canTeachClass(user, className) {
     if (user.role === "admin") return true;
+    if (await isClassTeacher(user, className)) return true;
     const rows = await allQuery(
         `SELECT 1
          FROM subject_teacher_assignments sta
@@ -29,7 +46,8 @@ async function getExam(examId) {
     const rows = await allQuery(
         `SELECT e.id, e.examName, e.className, e.status, e.examDefinitionId,
                 e.createdBy, e.lockedBy, e.lockedAt, e.publishedBy, e.publishedAt,
-                d.examType, d.academicYearId, d.startDate, d.endDate, d.gradingScaleId,
+                d.examType, d.examCategory, d.term, d.weightage,
+                d.academicYearId, d.startDate, d.endDate, d.gradingScaleId,
                 ay.name AS academicYear
          FROM exams e
          LEFT JOIN exam_definitions d ON d.id = e.examDefinitionId
@@ -91,14 +109,16 @@ async function marksEntered(examId) {
 }
 
 // Which subjectIds may THIS user edit for the exam (spec items 6, 10).
-// Admin: all. Teacher: ONLY the subjects for which they are the resolved
-// subject teacher (per-exam override, else standing assignment — already
-// resolved into `subjects[].teacherId` by getEffectiveSubjects). There is
-// deliberately NO class-level fallback: being assigned to (or being the
-// class teacher of) a class does NOT grant marks access to subjects the
-// teacher does not teach (Part 4/10). Returns a Set of subjectIds.
+// Admin: all. Class teacher of the exam's class: all subjects (owns the
+// class). Otherwise a teacher gets ONLY the subjects for which they are the
+// resolved subject teacher (per-exam override, else standing assignment —
+// already resolved into `subjects[].teacherId` by getEffectiveSubjects).
+// Returns a Set of subjectIds.
 async function teacherEditableSubjectIds(user, exam, subjects) {
     if (user.role === "admin") return new Set(subjects.map((s) => s.subjectId));
+    if (await isClassTeacher(user, exam.className)) {
+        return new Set(subjects.map((s) => s.subjectId));
+    }
     const mine = subjects.filter((s) => s.teacherId != null && Number(s.teacherId) === Number(user.id));
     return new Set(mine.map((s) => s.subjectId));
 }
@@ -122,6 +142,22 @@ exports.createExam = async (req, res) => {
     const endDate = req.body?.endDate ? String(req.body.endDate) : null;
     const gradingScaleId = Number(req.body?.gradingScaleId) || null;
 
+    // Dynamic progress card (Part 2): rendering/aggregation category, the term
+    // this exam rolls into, and its weightage. examCategory falls back to a
+    // mapping from the legacy examType when the client doesn't send one.
+    const CATEGORIES = ["unit_test", "term", "final"];
+    let examCategory = String(req.body?.examCategory || "").trim();
+    if (!CATEGORIES.includes(examCategory)) {
+        if (["mid_term", "term_1", "term_2"].includes(examType)) examCategory = "term";
+        else if (["pre_board", "final"].includes(examType)) examCategory = "final";
+        else examCategory = "unit_test";
+    }
+    let term = String(req.body?.term || "").trim();
+    if (!["term_1", "term_2"].includes(term)) term = null;
+    const weightage = req.body?.weightage === "" || req.body?.weightage === null || req.body?.weightage === undefined
+        ? null
+        : (Number.isFinite(Number(req.body.weightage)) ? Number(req.body.weightage) : null);
+
     let classNames = [];
     if (Array.isArray(req.body?.classNames)) {
         classNames = req.body.classNames.map((c) => String(c || "").trim()).filter(Boolean);
@@ -141,9 +177,9 @@ exports.createExam = async (req, res) => {
         // Parent definition: the exam as a whole, across classes.
         const defResult = await runQuery(
             `INSERT INTO exam_definitions
-               (name, examType, academicYearId, startDate, endDate, status, gradingScaleId, createdBy)
-             VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`,
-            [examName, examType, academicYearId, startDate, endDate, gradingScaleId, req.user.id]
+               (name, examType, examCategory, term, weightage, academicYearId, startDate, endDate, status, gradingScaleId, createdBy)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+            [examName, examType, examCategory, term, weightage, academicYearId, startDate, endDate, gradingScaleId, req.user.id]
         );
         const definitionId = defResult.lastID;
 
@@ -193,7 +229,7 @@ exports.createExam = async (req, res) => {
             action: "EXAM_CREATED",
             entityType: "exam_definition",
             entityId: definitionId,
-            details: { examName, examType, classes: created.map((c) => c.className), skipped }
+            details: { examName, examType, examCategory, term, classes: created.map((c) => c.className), skipped }
         }).catch((e) => console.error("Audit Error:", e));
 
         res.status(201).json({
@@ -223,7 +259,8 @@ exports.createExam = async (req, res) => {
 exports.getExamDefinitions = async (req, res) => {
     try {
         const defs = await allQuery(
-            `SELECT d.id, d.name, d.examType, d.status, d.startDate, d.endDate,
+            `SELECT d.id, d.name, d.examType, d.examCategory, d.term, d.weightage,
+                    d.status, d.startDate, d.endDate,
                     d.academicYearId, d.gradingScaleId, d.createdAt,
                     ay.name AS academicYear
              FROM exam_definitions d
@@ -240,8 +277,12 @@ exports.getExamDefinitions = async (req, res) => {
                 `SELECT DISTINCT s.className AS className
                  FROM subject_teacher_assignments sta
                  JOIN subjects s ON s.id = sta.subjectId
-                 WHERE sta.teacherId = ?`,
-                [req.user.id]
+                 WHERE sta.teacherId = ?
+                 UNION
+                 SELECT DISTINCT className
+                 FROM teacher_assignments
+                 WHERE teacherId = ? AND role = 'class_teacher'`,
+                [req.user.id, req.user.id]
             );
             allowedClasses = new Set(rows.map((r) => r.className));
         }
@@ -287,7 +328,8 @@ exports.getExamDefinition = async (req, res) => {
     }
     try {
         const defs = await allQuery(
-            `SELECT d.id, d.name, d.examType, d.status, d.startDate, d.endDate,
+            `SELECT d.id, d.name, d.examType, d.examCategory, d.term, d.weightage,
+                    d.status, d.startDate, d.endDate,
                     d.academicYearId, d.gradingScaleId, d.createdAt, ay.name AS academicYear
              FROM exam_definitions d
              LEFT JOIN academic_years ay ON ay.id = d.academicYearId
@@ -491,17 +533,19 @@ exports.getExams = async (req, res) => {
         if (req.user.role === "admin") {
             exams = await allQuery(
                 `SELECT e.id, e.examName, e.className, e.status, e.examDefinitionId,
-                        e.createdAt, e.lockedAt, e.publishedAt, d.examType
+                        e.createdAt, e.lockedAt, e.publishedAt, d.examType,
+                        d.examCategory, d.term
                  FROM exams e
                  LEFT JOIN exam_definitions d ON d.id = e.examDefinitionId
                  ORDER BY e.id DESC`
             );
         } else {
-            // A teacher sees only exams for classes where they are the
-            // standing subject teacher for at least one subject.
+            // A teacher sees exams for classes where they are the standing
+            // subject teacher for at least one subject, OR the class teacher.
             exams = await allQuery(
                 `SELECT e.id, e.examName, e.className, e.status, e.examDefinitionId,
-                        e.createdAt, e.lockedAt, e.publishedAt, d.examType
+                        e.createdAt, e.lockedAt, e.publishedAt, d.examType,
+                        d.examCategory, d.term
                  FROM exams e
                  LEFT JOIN exam_definitions d ON d.id = e.examDefinitionId
                  WHERE e.className IN (
@@ -509,9 +553,13 @@ exports.getExams = async (req, res) => {
                      FROM subject_teacher_assignments sta
                      JOIN subjects s ON s.id = sta.subjectId
                      WHERE sta.teacherId = ?
+                     UNION
+                     SELECT DISTINCT className
+                     FROM teacher_assignments
+                     WHERE teacherId = ? AND role = 'class_teacher'
                  )
                  ORDER BY e.id DESC`,
-                [req.user.id]
+                [req.user.id, req.user.id]
             );
         }
         res.json({ success: true, exams });
@@ -628,10 +676,12 @@ exports.saveExamMarks = async (req, res) => {
         if (!exam) {
             return res.status(404).json({ success: false, message: "Exam not found." });
         }
-        if (exam.status !== "open") {
+        if (exam.status !== "open" && exam.status !== "locked") {
             return res.status(409).json({
                 success: false,
-                message: "Marks are locked for this exam and can no longer be edited."
+                message: exam.status === "published"
+                    ? "This exam is published. Use the result correction workflow to change marks."
+                    : "Marks are locked for this exam and can no longer be edited."
             });
         }
 
@@ -846,12 +896,14 @@ exports.unlockExam = async (req, res) => {
 };
 
 
-// Shared helpers other controllers (results/delivery) reuse.
+// Shared helpers other controllers (results/delivery/progress card) reuse.
 exports._helpers = {
     getExam,
     getEffectiveSubjects,
     seedExamSubjects,
-    canTeachClass
+    canTeachClass,
+    isClassTeacher,
+    teacherEditableSubjectIds
 };
 
 

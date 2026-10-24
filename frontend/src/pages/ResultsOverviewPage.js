@@ -222,7 +222,7 @@ function ResultsGrid({ exam, subjects, results, analytics, published }) {
             )}
 
             <div className="table-container" style={{ marginTop: "16px" }}>
-                <table>
+                <table className="stack-sm">
                     <thead>
                         <tr>
                             <th>Roll</th>
@@ -242,15 +242,15 @@ function ResultsGrid({ exam, subjects, results, analytics, published }) {
                             const badge = STATUS_BADGE[r.overallStatus] || { label: r.overallStatus, color: "#374151", bg: "#e5e7eb" };
                             return (
                                 <tr key={r.studentId}>
-                                    <td>{r.rollNumber}</td>
-                                    <td>{r.studentName}</td>
+                                    <td data-label="Roll">{r.rollNumber}</td>
+                                    <td data-label="Student">{r.studentName}</td>
                                     {subjects.map((s) => (
-                                        <td key={s.subjectId}>{cellText(bySub.get(s.subjectId))}</td>
+                                        <td key={s.subjectId} data-label={s.subjectName}>{cellText(bySub.get(s.subjectId))}</td>
                                     ))}
-                                    <td>{r.totalObtained}/{r.totalMax}</td>
-                                    <td>{r.percentage}</td>
-                                    <td>{r.grade || "-"}</td>
-                                    <td>
+                                    <td data-label="Total">{r.totalObtained}/{r.totalMax}</td>
+                                    <td data-label="%">{r.percentage}</td>
+                                    <td data-label="Grade">{r.grade || "-"}</td>
+                                    <td data-label="Result">
                                         <span style={{ fontSize: "12px", padding: "2px 10px", borderRadius: "12px", background: badge.bg, color: badge.color }}>
                                             {badge.label}
                                         </span>

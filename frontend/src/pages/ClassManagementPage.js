@@ -237,7 +237,7 @@ function ClassManagementPage() {
                                 CLASSES TABLE
                             ============================================ */}
                             <div className="table-container" style={{ marginTop: "25px" }}>
-                                <table>
+                                <table className="stack-sm">
                                     <thead>
                                         <tr>
                                             <th>Class</th>
@@ -251,9 +251,9 @@ function ClassManagementPage() {
                                         ) : (
                                             classes.map((cls) => (
                                                 <tr key={cls.id}>
-                                                    <td>{cls.name}</td>
-                                                    <td>{cls.isLocked ? "🔒 Locked" : "Unlocked"}</td>
-                                                    <td>
+                                                    <td data-label="Class">{cls.name}</td>
+                                                    <td data-label="Status">{cls.isLocked ? "🔒 Locked" : "Unlocked"}</td>
+                                                    <td data-label="">
                                                         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                                                             <button
                                                                 type="button"
@@ -318,7 +318,7 @@ function ClassManagementPage() {
                                 </form>
 
                                 <div className="table-container" style={{ marginTop: "18px" }}>
-                                    <table>
+                                    <table className="stack-sm">
                                         <thead>
                                             <tr>
                                                 <th>Class</th>
@@ -332,9 +332,9 @@ function ClassManagementPage() {
                                             ) : (
                                                 subjects.map((s) => (
                                                     <tr key={s.id}>
-                                                        <td>{s.className}</td>
-                                                        <td>{s.subjectName}</td>
-                                                        <td>
+                                                        <td data-label="Class">{s.className}</td>
+                                                        <td data-label="Subject">{s.subjectName}</td>
+                                                        <td data-label="">
                                                             <button type="button" onClick={() => deleteSubject(s)}>
                                                                 Delete
                                                             </button>

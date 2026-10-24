@@ -17,7 +17,6 @@ const STATUS_LABEL = STATUS_OPTIONS.reduce((acc, o) => {
     return acc;
 }, {});
 
-// Chip class per status, for consistent colouring across the page.
 const STATUS_CLASS = {
     present: "att-present",
     absent: "att-absent",
@@ -37,16 +36,13 @@ function monthStart() {
 
 function TeacherAttendancePage() {
 
-    // Which tab is showing: daily marking, or the searchable history.
     const [activeTab, setActiveTab] = useState("mark");
 
-    // ---- Mark tab ----
     const [date, setDate] = useState(today());
     const [rows, setRows] = useState([]);   // [{ teacherId, name, email, status, remark }]
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
-    // ---- History tab ----
     const [from, setFrom] = useState(monthStart());
     const [to, setTo] = useState(today());
     const [histTeacherId, setHistTeacherId] = useState("");   // "" = all
@@ -55,16 +51,10 @@ function TeacherAttendancePage() {
     const [historyLoading, setHistoryLoading] = useState(false);
 
 
-    // =====================================================
-    // LOAD THE ROSTER FOR A DATE (mark tab)
-    // =====================================================
-
     const loadDate = useCallback(async (forDate) => {
         try {
             setLoading(true);
             const res = await api.get("/attendance", { params: { date: forDate } });
-            // Default an unmarked teacher to "present" in the UI so the
-            // marker can save the common case in one click.
             const seeded = (res.data.records || []).map((r) => ({
                 ...r,
                 status: r.status || "present",
@@ -82,17 +72,11 @@ function TeacherAttendancePage() {
         loadDate(date);
     }, [date, loadDate]);
 
-    // The full teacher list (for the history filter dropdown) comes from the
-    // roster, which lists every teacher regardless of marking.
     const teacherOptions = useMemo(
         () => rows.map((r) => ({ id: r.teacherId, name: r.name })),
         [rows]
     );
 
-
-    // =====================================================
-    // GRID EDITS + SAVE (mark tab)
-    // =====================================================
 
     const setField = (teacherId, field, value) => {
         setRows((prev) =>
@@ -118,10 +102,6 @@ function TeacherAttendancePage() {
     };
 
 
-    // =====================================================
-    // HISTORY (history tab)
-    // =====================================================
-
     const loadHistory = async () => {
         try {
             setHistoryLoading(true);
@@ -136,23 +116,17 @@ function TeacherAttendancePage() {
         }
     };
 
-    // Status filter is applied client-side over the loaded rows.
     const filteredHistory = useMemo(
         () => (histStatus ? history.filter((h) => h.status === histStatus) : history),
         [history, histStatus]
     );
 
-    // Counts strip for whatever is currently shown.
     const counts = useMemo(() => {
         const c = { present: 0, absent: 0, half_day: 0, leave: 0 };
         filteredHistory.forEach((h) => { if (c[h.status] !== undefined) c[h.status]++; });
         return c;
     }, [filteredHistory]);
 
-
-    // =====================================================
-    // UI
-    // =====================================================
 
     return (
         <div className="dashboard">
@@ -169,7 +143,6 @@ function TeacherAttendancePage() {
                         </div>
                     </div>
 
-                    {/* Tabs */}
                     <div className="exam-tabbar">
                         <button
                             type="button"
@@ -187,9 +160,6 @@ function TeacherAttendancePage() {
                         </button>
                     </div>
 
-                    {/* ============================================
-                        MARK ATTENDANCE
-                    ============================================ */}
                     {activeTab === "mark" && (
                         <div className="settings-card exam-tabpanel">
                             <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
@@ -203,7 +173,7 @@ function TeacherAttendancePage() {
                             </div>
 
                             <div className="table-container" style={{ marginTop: "18px" }}>
-                                <table className="compact-table">
+                                <table className="compact-table stack-sm">
                                     <thead>
                                         <tr>
                                             <th>Teacher</th>
@@ -224,19 +194,19 @@ function TeacherAttendancePage() {
                                         ) : (
                                             rows.map((r) => (
                                                 <tr key={r.teacherId}>
-                                                    <td>{r.name}</td>
-                                                    <td>{r.email}</td>
-                                                    <td>
+                                                    <td data-label="Teacher">{r.name}</td>
+                                                    <td data-label="Email">{r.email}</td>
+                                                    <td data-label="Status">
                                                         <select
                                                             value={r.status}
                                                             onChange={(e) => setField(r.teacherId, "status", e.target.value)}
                                                         >
                                                             {STATUS_OPTIONS.map((o) => (
                                                                 <option key={o.value} value={o.value}>{o.label}</option>
-                                                            ))}
+                                                                ))}
                                                         </select>
                                                     </td>
-                                                    <td>
+                                                    <td data-label="Remark">
                                                         <input
                                                             type="text"
                                                             value={r.remark}
@@ -266,9 +236,6 @@ function TeacherAttendancePage() {
                         </div>
                     )}
 
-                    {/* ============================================
-                        HISTORY
-                    ============================================ */}
                     {activeTab === "history" && (
                         <div className="settings-card exam-tabpanel">
                             <div className="attendance-filters">
@@ -310,7 +277,7 @@ function TeacherAttendancePage() {
                             )}
 
                             <div className="table-container" style={{ marginTop: "18px" }}>
-                                <table className="compact-table">
+                                <table className="compact-table stack-sm">
                                     <thead>
                                         <tr>
                                             <th>Date</th>
@@ -325,10 +292,10 @@ function TeacherAttendancePage() {
                                         ) : (
                                             filteredHistory.map((h) => (
                                                 <tr key={h.id}>
-                                                    <td>{h.attendanceDate}</td>
-                                                    <td>{h.teacherName}</td>
-                                                    <td><span className={`att-badge ${STATUS_CLASS[h.status] || ""}`}>{STATUS_LABEL[h.status] || h.status}</span></td>
-                                                    <td>{h.remark || "-"}</td>
+                                                    <td data-label="Date">{h.attendanceDate}</td>
+                                                    <td data-label="Teacher">{h.teacherName}</td>
+                                                    <td data-label="Status"><span className={`att-badge ${STATUS_CLASS[h.status] || ""}`}>{STATUS_LABEL[h.status] || h.status}</span></td>
+                                                    <td data-label="Remark">{h.remark || "-"}</td>
                                                 </tr>
                                             ))
                                         )}

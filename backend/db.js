@@ -658,6 +658,52 @@ async function initializeDatabase() {
             )
         `);
 
+        // CO-SCHOLASTIC MARKS — one row per (exam, student, co-scholastic area).
+        // Areas are a fixed list (see utils/progressCard.CO_SCHOLASTIC_AREAS):
+        // Art Education, Physical & Health Education, Work Experience,
+        // Attitude and Values. Graded (A+/A/B+/B/C), not scored. Entered
+        // exclusively by the class teacher of the exam's class (or admin).
+        await run(`
+            CREATE TABLE IF NOT EXISTS co_scholastic_marks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                examId INTEGER NOT NULL,
+                studentId INTEGER NOT NULL,
+                area TEXT NOT NULL,
+                grade TEXT,
+                updatedBy INTEGER,
+                updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(examId, studentId, area),
+                FOREIGN KEY(examId) REFERENCES exams(id) ON DELETE CASCADE,
+                FOREIGN KEY(studentId) REFERENCES students(id) ON DELETE CASCADE
+            )
+        `);
+
+        // STUDENT TERM META — per (exam, student) term-level fields for the
+        // comprehensive progress card: attendance (working days / days
+        // attended), physical stature (height cm / weight kg), the class
+        // teacher's overall performance comment, and promotion decision.
+        // Meaningful on Term / Final exams; entered exclusively by the class
+        // teacher of the exam's class (or admin).
+        await run(`
+            CREATE TABLE IF NOT EXISTS student_term_meta (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                examId INTEGER NOT NULL,
+                studentId INTEGER NOT NULL,
+                workingDays INTEGER,
+                daysAttended INTEGER,
+                heightCm REAL,
+                weightKg REAL,
+                remark TEXT,
+                promotionStatus TEXT,
+                promotedToClass TEXT,
+                updatedBy INTEGER,
+                updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(examId, studentId),
+                FOREIGN KEY(examId) REFERENCES exams(id) ON DELETE CASCADE,
+                FOREIGN KEY(studentId) REFERENCES students(id) ON DELETE CASCADE
+            )
+        `);
+
         // Run migrations & seeders
         await migrateDatabase();
         await seedFeeComponents();
@@ -753,6 +799,27 @@ async function migrateDatabase() {
     await addColumnIfMissing("result_notifications", "deliveredAt", "DATETIME");
     await addColumnIfMissing("result_notifications", "lastAttemptStatus", "TEXT");
     await addColumnIfMissing("result_notifications", "updatedAt", "DATETIME");
+
+    // =====================================================
+    // DYNAMIC PROGRESS CARD (Part 2)
+    // =====================================================
+    // examCategory drives rendering & aggregation:
+    //   'unit_test' -> simple single-exam marksheet (FA1, FA2, ...)
+    //   'term'      -> comprehensive card, aggregates its term's unit tests
+    //   'final'     -> comprehensive card, averages Term I + Term II
+    // term groups a unit test / term exam into 'term_1' or 'term_2' so a term
+    // card knows which unit tests to roll up. weightage is this exam's percent
+    // contribution to its term aggregate (null -> default resolved at compute).
+    await addColumnIfMissing("exam_definitions", "examCategory", "TEXT");
+    await addColumnIfMissing("exam_definitions", "term", "TEXT");
+    await addColumnIfMissing("exam_definitions", "weightage", "REAL");
+
+    // Backfill examCategory for exams created before this feature, from the
+    // legacy examType. Idempotent: only fills rows still NULL.
+    await run(`UPDATE exam_definitions SET examCategory = 'unit_test' WHERE examCategory IS NULL AND examType IN ('unit_test','other')`);
+    await run(`UPDATE exam_definitions SET examCategory = 'term'      WHERE examCategory IS NULL AND examType IN ('mid_term','term_1','term_2')`);
+    await run(`UPDATE exam_definitions SET examCategory = 'final'     WHERE examCategory IS NULL AND examType IN ('pre_board','final')`);
+    await run(`UPDATE exam_definitions SET examCategory = 'unit_test' WHERE examCategory IS NULL`);
 
     await run(`UPDATE students SET status = 'active' WHERE status IS NULL OR status = ''`);
     await run(`UPDATE payments SET status = 'completed' WHERE status IS NULL OR status = ''`);
@@ -979,6 +1046,8 @@ async function createIndexes() {
     // Standing subject-teacher assignments (source of truth for marks access).
     await run(`CREATE INDEX IF NOT EXISTS idx_subject_teacher_assignments_teacher ON subject_teacher_assignments(teacherId)`);
     await run(`CREATE INDEX IF NOT EXISTS idx_subject_teacher_assignments_subject ON subject_teacher_assignments(subjectId)`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_co_scholastic_marks_exam ON co_scholastic_marks(examId)`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_student_term_meta_exam ON student_term_meta(examId)`);
 }
 
 // =====================================================

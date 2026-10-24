@@ -269,7 +269,7 @@ function NotificationsPage() {
 
                         ) : (
 
-                            <table>
+                            <table className="stack-sm">
 
                                 <thead>
 
@@ -344,12 +344,12 @@ function NotificationsPage() {
                                                         }
                                                     >
 
-                                                        <td>
+                                                        <td data-label="#">
                                                             {index + 1}
                                                         </td>
 
 
-                                                        <td>
+                                                        <td data-label="Student">
 
                                                             <strong>
 
@@ -377,7 +377,7 @@ function NotificationsPage() {
                                                         </td>
 
 
-                                                        <td>
+                                                        <td data-label="Class">
 
                                                             {
                                                                 notification.className ||
@@ -387,7 +387,7 @@ function NotificationsPage() {
                                                         </td>
 
 
-                                                        <td>
+                                                        <td data-label="Mobile">
 
                                                             {
                                                                 notification.PhoneNumber ||
@@ -397,7 +397,7 @@ function NotificationsPage() {
                                                         </td>
 
 
-                                                        <td>
+                                                        <td data-label="Message">
 
                                                             <div className="notification-message">
 
@@ -410,7 +410,7 @@ function NotificationsPage() {
                                                         </td>
 
 
-                                                        <td>
+                                                        <td data-label="Status">
 
                                                             <span
                                                                 className={
@@ -429,7 +429,7 @@ function NotificationsPage() {
                                                         </td>
 
 
-                                                        <td>
+                                                        <td data-label="Date">
 
                                                             {
                                                                 formatDate(
@@ -440,7 +440,7 @@ function NotificationsPage() {
                                                         </td>
 
 
-                                                        <td>
+                                                        <td data-label="">
 
                                                             {
                                                                 notification.status ===

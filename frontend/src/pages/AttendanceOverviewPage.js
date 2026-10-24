@@ -176,7 +176,7 @@ function AttendanceOverviewPage() {
                             </div>
 
                             <div className="table-container" style={{ marginTop: "16px" }}>
-                                <table>
+                                <table className="stack-sm">
                                     <thead>
                                         <tr>
                                             <th>Roll</th>
@@ -192,14 +192,14 @@ function AttendanceOverviewPage() {
                                     <tbody>
                                         {summary.map((s) => (
                                             <tr key={s.studentId}>
-                                                <td>{s.rollNumber || "-"}</td>
-                                                <td>{s.studentName}</td>
-                                                <td>{s.present}</td>
-                                                <td>{s.absent}</td>
-                                                <td>{s.half_day}</td>
-                                                <td>{s.leave}</td>
-                                                <td>{s.total}</td>
-                                                <td>{pct(s)}</td>
+                                                <td data-label="Roll">{s.rollNumber || "-"}</td>
+                                                <td data-label="Student">{s.studentName}</td>
+                                                <td data-label="Present">{s.present}</td>
+                                                <td data-label="Absent">{s.absent}</td>
+                                                <td data-label="Half-day">{s.half_day}</td>
+                                                <td data-label="Leave">{s.leave}</td>
+                                                <td data-label="Days">{s.total}</td>
+                                                <td data-label="%">{pct(s)}</td>
                                             </tr>
                                         ))}
                                     </tbody>

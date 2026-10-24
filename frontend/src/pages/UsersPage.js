@@ -301,7 +301,7 @@ function UsersPage() {
                         USERS TABLE
                     ================================================= */}
                     <div className="table-container" style={{ marginTop: "25px" }}>
-                        <table>
+                        <table className="stack-sm">
                             <thead>
                                 <tr>
                                     <th>Name</th>
@@ -325,18 +325,18 @@ function UsersPage() {
                                 ) : (
                                     users.map((user) => (
                                         <tr key={user.id}>
-                                            <td>{user.name}</td>
-                                            <td>{user.email}</td>
-                                            <td>{labelForRole(user.role)}</td>
-                                            <td>
+                                            <td data-label="Name">{user.name}</td>
+                                            <td data-label="Email">{user.email}</td>
+                                            <td data-label="Role">{labelForRole(user.role)}</td>
+                                            <td data-label="Access">
                                                 {user.role === "admin"
                                                     ? "Full (admin)"
                                                     : user.accessLocked
                                                         ? "🔒 Locked"
                                                         : "Editable"}
                                             </td>
-                                            <td>{user.createdAt}</td>
-                                            <td>
+                                            <td data-label="Created">{user.createdAt}</td>
+                                            <td data-label="">
                                                 {isManageable(user.role) ? (
                                                     <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                                                         <button type="button" onClick={() => openAccess(user)}>

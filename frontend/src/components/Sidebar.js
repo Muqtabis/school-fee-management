@@ -1,10 +1,12 @@
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
+import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useUI } from "../context/UIContext";
-import { APP_PAGES } from "../config/pages";
+import { APP_PAGES, PAGE_GROUPS } from "../config/pages";
 
 function Sidebar() {
     const navigate = useNavigate();
+    const location = useLocation();
     const { user, logout, allowedPages } = useAuth();
     const { sidebarOpen, closeSidebar } = useUI();
 
@@ -19,6 +21,30 @@ function Sidebar() {
 
     const menuItems = APP_PAGES.filter(
         (page) => isAdmin || allowedPages.includes(page.key)
+    );
+    // Ungrouped items (Dashboard) pin to the top; the rest fall into
+    // collapsible sections. The section holding the current route starts open.
+    const topItems = menuItems.filter((i) => !i.group);
+    const groups = PAGE_GROUPS
+        .map((name) => ({ name, items: menuItems.filter((i) => i.group === name) }))
+        .filter((g) => g.items.length);
+    const activeItem = menuItems.find((i) => location.pathname.startsWith(i.path));
+    const activeGroup = activeItem ? activeItem.group : null;
+
+    const [openGroups, setOpenGroups] = useState({});
+    const isOpen = (name) => (name in openGroups ? openGroups[name] : name === activeGroup);
+    const toggleGroup = (name) => setOpenGroups((p) => ({ ...p, [name]: !isOpen(name) }));
+
+    const renderLink = (item) => (
+        <NavLink
+            key={item.path}
+            to={item.path}
+            onClick={closeSidebar}
+            className={({ isActive }) => (isActive ? "menu-item active" : "menu-item")}
+        >
+            <span className="menu-icon">{item.icon}</span>
+            <span>{item.name || item.label}</span>
+        </NavLink>
     );
 
     // =====================================================
@@ -61,18 +87,20 @@ function Sidebar() {
                 </div>
 
                 <nav className="sidebar-menu">
-                    {menuItems.map((item) => (
-                        <NavLink
-                            key={item.path}
-                            to={item.path}
-                            onClick={closeSidebar}
-                            className={({ isActive }) =>
-                                isActive ? "menu-item active" : "menu-item"
-                            }
-                        >
-                            <span className="menu-icon">{item.icon}</span>
-                            <span>{item.name || item.label}</span>
-                        </NavLink>
+                    {topItems.map(renderLink)}
+                    {groups.map((g) => (
+                        <div key={g.name} className={"sidebar-group" + (isOpen(g.name) ? " open" : "")}>
+                            <button
+                                type="button"
+                                className="sidebar-group-header"
+                                onClick={() => toggleGroup(g.name)}
+                                aria-expanded={isOpen(g.name)}
+                            >
+                                <span>{g.name}</span>
+                                <span className="group-chevron">{isOpen(g.name) ? "▾" : "▸"}</span>
+                            </button>
+                            {isOpen(g.name) && g.items.map(renderLink)}
+                        </div>
                     ))}
                 </nav>
 

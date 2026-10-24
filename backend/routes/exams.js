@@ -4,6 +4,7 @@ const router = express.Router();
 const examController = require("../controllers/examController");
 const resultController = require("../controllers/resultController");
 const gradingController = require("../controllers/gradingController");
+const coScholasticController = require("../controllers/coScholasticController");
 
 const {
     requireAdmin,
@@ -30,6 +31,13 @@ router.get("/", teacher, examController.getExams);
 router.get("/:examId/marks", teacher, examController.getExamMarks);
 router.put("/:examId/marks", teacher, examController.saveExamMarks);
 router.post("/:examId/lock", teacher, examController.lockExam);
+
+// Class-teacher-only authoring of the comprehensive card's Part 2:
+// co-scholastic grades, attendance, physical stature, remark. The
+// class-teacher (or admin) check is enforced inside the controller.
+router.get("/:examId/co-scholastic", teacher, coScholasticController.getCoScholastic);
+router.put("/:examId/co-scholastic", teacher, coScholasticController.saveCoScholastic);
+router.put("/:examId/term-meta", teacher, coScholasticController.saveTermMeta);
 
 
 // =====================================================
@@ -72,6 +80,9 @@ router.get("/:examId/corrections", admin, resultController.getCorrections);
 router.post("/:examId/corrections", admin, resultController.correctMark);
 
 router.get("/:examId/report-card/:studentId", admin, resultController.getReportCard);
+
+// All students' cards for the exam's class, one combined PDF.
+router.get("/:examId/report-cards", admin, resultController.getClassReportCards);
 
 
 module.exports = router;

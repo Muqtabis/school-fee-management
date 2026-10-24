@@ -128,7 +128,7 @@ function DashboardPage() {
                         {/* Recent Payments Table */}
                         <div className="dashboard-table">
                             <h3>Recent Payments</h3>
-                            <table>
+                            <table className="stack-sm">
                                 <thead>
                                     <tr>
                                         <th>Student</th>
@@ -145,10 +145,10 @@ function DashboardPage() {
                                     ) : (
                                         recentPayments.map(payment => (
                                             <tr key={payment.id}>
-                                                <td>{payment.studentName}</td>
-                                                <td>{money(payment.amount)}</td>
-                                                <td>{payment.paymentDate}</td>
-                                                <td>{payment.paymentMode}</td>
+                                                <td data-label="Student">{payment.studentName}</td>
+                                                <td data-label="Amount">{money(payment.amount)}</td>
+                                                <td data-label="Date">{payment.paymentDate}</td>
+                                                <td data-label="Mode">{payment.paymentMode}</td>
                                             </tr>
                                         ))
                                     )}
@@ -159,7 +159,7 @@ function DashboardPage() {
                         {/* Recent Expenses Table */}
                         <div className="dashboard-table" style={{ marginTop: "20px" }}>
                             <h3>Recent School Expenses</h3>
-                            <table>
+                            <table className="stack-sm">
                                 <thead>
                                     <tr>
                                         <th>Expense</th>
@@ -176,10 +176,10 @@ function DashboardPage() {
                                     ) : (
                                         recentExpenses.map(expense => (
                                             <tr key={expense.id}>
-                                                <td>{expense.expenseName}</td>
-                                                <td>{expense.category}</td>
-                                                <td>{money(expense.amount)}</td>
-                                                <td>{expense.expenseDate}</td>
+                                                <td data-label="Expense">{expense.expenseName}</td>
+                                                <td data-label="Category">{expense.category}</td>
+                                                <td data-label="Amount">{money(expense.amount)}</td>
+                                                <td data-label="Date">{expense.expenseDate}</td>
                                             </tr>
                                         ))
                                     )}
