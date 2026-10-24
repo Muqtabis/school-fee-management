@@ -1,3 +1,4 @@
+import { toast } from "../services/notify";
 import { useEffect, useState } from "react";
 import api from "../services/api";
 
@@ -210,7 +211,7 @@ function SummaryTable({ payments = [], onReverse }) {
 
             const receiptWindow = window.open("", "_blank", "width=900,height=1100");
             if (!receiptWindow) {
-                alert("Please allow popups to print the receipt.");
+                toast("Please allow popups to print the receipt.");
                 return;
             }
 
@@ -376,7 +377,7 @@ function SummaryTable({ payments = [], onReverse }) {
             setTimeout(() => { receiptWindow.focus(); receiptWindow.print(); }, 600);
         } catch (error) {
             console.error("Receipt Error:", error);
-            alert(error.response?.data?.message || error.message || "Unable to generate receipt.");
+            toast(error.response?.data?.message || error.message || "Unable to generate receipt.");
         }
     };
 

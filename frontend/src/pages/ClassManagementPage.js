@@ -1,7 +1,9 @@
+import { toast, confirmDialog } from "../services/notify";
 import { useEffect, useState } from "react";
 
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
+import PromptDialog from "../components/PromptDialog";
 import api from "../services/api";
 
 
@@ -40,7 +42,7 @@ function ClassManagementPage() {
             const res = await api.get("/classes");
             setClasses(Array.isArray(res.data) ? res.data : []);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load classes.");
+            toast(error.response?.data?.message || "Unable to load classes.");
         }
     };
 
@@ -78,7 +80,7 @@ function ClassManagementPage() {
     const createClass = async (e) => {
         e.preventDefault();
         if (!newClassName.trim()) {
-            alert("Class name is required.");
+            toast("Class name is required.");
             return;
         }
         try {
@@ -87,28 +89,45 @@ function ClassManagementPage() {
             setNewSection("");
             loadClasses();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to create class.");
+            toast(error.response?.data?.message || "Unable to create class.");
         }
     };
 
-    const renameClass = async (cls) => {
-        const name = window.prompt("New class name:", cls.className);
-        if (name === null) return;
-        if (!name.trim()) {
-            alert("Class name is required.");
+    // Rename flow: centered two-step PromptDialog replaces the
+    // old window.prompt pair (name, then optional section).
+    const [renameTarget, setRenameTarget] = useState(null);
+    const [renameStep, setRenameStep] = useState(1);
+    const [renameName, setRenameName] = useState("");
+
+    const renameClass = (cls) => {
+        setRenameTarget(cls);
+        setRenameStep(1);
+    };
+
+    const closeRenameDialogs = () => {
+        setRenameTarget(null);
+        setRenameStep(1);
+    };
+
+    const handleRenameStep1 = (value) => {
+        if (!value) {
+            toast("Class name is required.");
             return;
         }
-        const section = window.prompt("Section (leave blank if none):", cls.section || "");
-        if (section === null) return;
+        setRenameName(value);
+        setRenameStep(2);
+    };
 
-        setBusyId(cls.id);
+    const handleRenameStep2 = async (value) => {
+        setBusyId(renameTarget.id);
         try {
-            await api.put(`/classes/${cls.id}`, { className: name.trim(), section: section.trim() });
+            await api.put(`/classes/${renameTarget.id}`, { className: renameName, section: value });
             loadClasses();
             // Renaming changes the free-text className stored on subjects too.
             loadSubjects();
+            closeRenameDialogs();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to rename class.");
+            toast(error.response?.data?.message || "Unable to rename class.");
         } finally {
             setBusyId(null);
         }
@@ -120,29 +139,33 @@ function ClassManagementPage() {
             await api.post(`/classes/${cls.id}/${cls.isLocked ? "unlock" : "lock"}`);
             loadClasses();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to change lock state.");
+            toast(error.response?.data?.message || "Unable to change lock state.");
         } finally {
             setBusyId(null);
         }
     };
 
     const deleteClass = async (cls) => {
-        const confirmed = window.confirm(
+        const confirmed = await confirmDialog({
+            title: "Permanently delete?",
+            message:
             `PERMANENTLY DELETE "${cls.name}"?\n\n` +
             `This also deletes every student in this class and ALL of their records ` +
             `(enrollments, fees, payments, exam marks), plus this class's fee structures, ` +
-            `subjects and exams. This cannot be undone.`
-        );
+            `subjects and exams. This cannot be undone.`,
+            confirmLabel: "Delete forever",
+            danger: true
+        });
         if (!confirmed) return;
 
         setBusyId(cls.id);
         try {
             const res = await api.delete(`/classes/${cls.id}`);
-            alert(res.data?.message || "Class deleted.");
+            toast(res.data?.message || "Class deleted.");
             loadClasses();
             loadSubjects();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to delete class.");
+            toast(error.response?.data?.message || "Unable to delete class.");
         } finally {
             setBusyId(null);
         }
@@ -160,7 +183,7 @@ function ClassManagementPage() {
     const createSubject = async (e) => {
         e.preventDefault();
         if (!subjectForm.className || !subjectForm.subjectName.trim()) {
-            alert("Choose a class and enter a subject name.");
+            toast("Choose a class and enter a subject name.");
             return;
         }
         try {
@@ -171,17 +194,17 @@ function ClassManagementPage() {
             setSubjectForm({ className: subjectForm.className, subjectName: "" });
             loadSubjects();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to create subject.");
+            toast(error.response?.data?.message || "Unable to create subject.");
         }
     };
 
     const deleteSubject = async (subject) => {
-        if (!window.confirm(`Delete ${subject.subjectName} (${subject.className})?`)) return;
+        if (!(await confirmDialog({ message: `Delete ${subject.subjectName} (${subject.className})?`, confirmLabel: "Delete", danger: true }))) return;
         try {
             await api.delete(`/teachers/subjects/${subject.id}`);
             loadSubjects();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to delete subject.");
+            toast(error.response?.data?.message || "Unable to delete subject.");
         }
     };
 
@@ -351,6 +374,30 @@ function ClassManagementPage() {
 
                 </div>
             </div>
+            <PromptDialog
+                open={!!renameTarget && renameStep === 1}
+                onClose={closeRenameDialogs}
+                onConfirm={handleRenameStep1}
+                title={renameTarget ? `Rename ${renameTarget.className}${renameTarget.section ? " " + renameTarget.section : ""}` : ""}
+                message="New class name:"
+                requireValue
+                initialValue={renameTarget ? renameTarget.className : ""}
+                placeholder="Class name (e.g. 6, LKG)"
+                confirmLabel="Continue"
+            />
+
+            <PromptDialog
+                open={!!renameTarget && renameStep === 2}
+                onClose={closeRenameDialogs}
+                onConfirm={handleRenameStep2}
+                title={renameTarget ? `Section for ${renameName}` : ""}
+                message="Optional (e.g. A, B). Leave blank for none."
+                requireValue={false}
+                initialValue={renameTarget ? (renameTarget.section || "") : ""}
+                placeholder="Section"
+                confirmLabel="Save"
+            />
+
         </div>
     );
 }

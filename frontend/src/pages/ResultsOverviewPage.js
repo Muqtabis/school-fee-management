@@ -1,3 +1,4 @@
+import { toast } from "../services/notify";
 import { useEffect, useMemo, useState } from "react";
 
 import Sidebar from "../components/Sidebar";
@@ -56,7 +57,7 @@ function ResultsOverviewPage() {
                 const res = await api.get("/exams/definitions");
                 setDefinitions(res.data.definitions || []);
             } catch (error) {
-                alert(error.response?.data?.message || "Unable to load exams.");
+                toast(error.response?.data?.message || "Unable to load exams.");
             } finally {
                 setLoading(false);
             }
@@ -93,7 +94,7 @@ function ResultsOverviewPage() {
             const res = await api.get(`/exams/${childExamId}/results`);
             setGrid(res.data);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load results.");
+            toast(error.response?.data?.message || "Unable to load results.");
         } finally {
             setGridLoading(false);
         }

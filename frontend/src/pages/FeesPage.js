@@ -1,6 +1,9 @@
+import { toast, confirmDialog } from "../services/notify";
 import { useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
+import OverlayDialog from "../components/OverlayDialog";
+import PromptDialog from "../components/PromptDialog";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 
@@ -89,7 +92,7 @@ function FeesPage() {
     // --- FEE COMPONENT CRUD ---
     const createComponent = async (e) => {
         e.preventDefault();
-        if (!newComponent.name.trim()) return alert("Component name is required.");
+        if (!newComponent.name.trim()) return toast("Component name is required.");
         
         try {
             await api.post("/fees/components", {
@@ -99,17 +102,17 @@ function FeesPage() {
             setNewComponent({ name: "", isOptional: false });
             await loadComponents();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to create fee component.");
+            toast(error.response?.data?.message || "Unable to create fee component.");
         }
     };
 
     const deleteComponent = async (id) => {
-        if (!window.confirm("Delete this fee component? It will be removed from future structures.")) return;
+        if (!(await confirmDialog({ message: "Delete this fee component? It will be removed from future structures.", confirmLabel: "Delete", danger: true }))) return;
         try {
             await api.delete(`/fees/components/${id}`);
             await loadComponents();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to delete component.");
+            toast(error.response?.data?.message || "Unable to delete component.");
         }
     };
 
@@ -120,7 +123,7 @@ function FeesPage() {
     const cancelEditComponent = () => setEditingComponent(null);
 
     const saveEditComponent = async () => {
-        if (!editingComponent?.name.trim()) return alert("Component name is required.");
+        if (!editingComponent?.name.trim()) return toast("Component name is required.");
         try {
             await api.put(`/fees/components/${editingComponent.id}`, {
                 componentName: editingComponent.name.trim(),
@@ -129,14 +132,14 @@ function FeesPage() {
             setEditingComponent(null);
             await loadComponents();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to update component.");
+            toast(error.response?.data?.message || "Unable to update component.");
         }
     };
 
     // --- ACADEMIC YEAR CRUD ---
     const createYear = async (e) => {
         e.preventDefault();
-        if (!newYear.name.trim()) return alert("Academic year name is required.");
+        if (!newYear.name.trim()) return toast("Academic year name is required.");
         try {
             await api.post("/fees/academic-years", {
                 name: newYear.name.trim(),
@@ -144,45 +147,45 @@ function FeesPage() {
                 endDate: newYear.endDate || null
             });
             setNewYear({ name: "", startDate: "", endDate: "" });
-            alert("Academic year created successfully.");
+            toast("Academic year created successfully.");
             await loadYears();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to create academic year.");
+            toast(error.response?.data?.message || "Unable to create academic year.");
         }
     };
 
     const activateYear = async (year) => {
-        if (!window.confirm(`Make ${year.name} the active academic year?`)) return;
+        if (!(await confirmDialog({ message: `Make ${year.name} the active academic year? All fee operations will use it.`, confirmLabel: "Activate" }))) return;
         try {
             await api.post(`/fees/academic-years/${year.id}/activate`);
-            alert(`${year.name} is now active.`);
+            toast(`${year.name} is now active.`);
             await loadYears();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to activate academic year.");
+            toast(error.response?.data?.message || "Unable to activate academic year.");
         }
     };
 
     const prepareYear = async (year) => {
-        if (year.status === "closed") return alert("Closed academic years cannot be prepared.");
-        if (!window.confirm(`Prepare student fee accounts for ${year.name}?`)) return;
+        if (year.status === "closed") return toast("Closed academic years cannot be prepared.");
+        if (!(await confirmDialog({ message: `Prepare student fee accounts for ${year.name}?`, confirmLabel: "Prepare" }))) return;
         try {
             const res = await api.post(`/fees/academic-years/${year.id}/prepare`);
-            alert(res.data.message);
+            toast(res.data.message);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to prepare academic year.");
+            toast(error.response?.data?.message || "Unable to prepare academic year.");
         }
     };
 
     // --- STRUCTURE CRUD ---
     const createStructure = async (e) => {
         e.preventDefault();
-        if (!selectedYear || !selectedClass) return alert("Please select a class.");
+        if (!selectedYear || !selectedClass) return toast("Please select a class.");
         try {
             await api.post("/fees/structures", { academicYearId: selectedYear.id, className: selectedClass });
             setSelectedClass("");
             await loadStructures(selectedYear.id);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to create fee structure.");
+            toast(error.response?.data?.message || "Unable to create fee structure.");
         }
     };
 
@@ -192,7 +195,7 @@ function FeesPage() {
             setSelectedStructure(res.data.structure);
             setStructureItems(Array.isArray(res.data.items) ? res.data.items : []);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load fee structure.");
+            toast(error.response?.data?.message || "Unable to load fee structure.");
         }
     };
 
@@ -206,34 +209,44 @@ function FeesPage() {
                     amount: Number(item.amount || 0)
                 }))
             });
-            alert("Fee structure saved successfully.");
+            toast("Fee structure saved successfully.");
             await loadStructures(selectedYear.id);
             const updated = await api.get(`/fees/structures/${selectedStructure.id}`);
             setSelectedStructure(updated.data.structure);
             setStructureItems(updated.data.items);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to save fee structure.");
+            toast(error.response?.data?.message || "Unable to save fee structure.");
         } finally {
             setSaving(false);
         }
     };
 
-    const copyStructure = async (structure) => {
+    // Copy flow: centered PromptDialog (year dropdown) replaces
+    // the old window.prompt that asked for a typed year name.
+    const [copyTarget, setCopyTarget] = useState(null); // { structure, targets }
+    const [copying, setCopying] = useState(false);
+
+    const copyStructure = (structure) => {
         if (!selectedYear) return;
         const targets = years.filter(year => Number(year.id) !== Number(selectedYear.id) && year.status !== "closed");
-        if (targets.length === 0) return alert("There is no available target academic year.");
-        
-        const targetName = window.prompt(`Enter target academic year name:\n\n${targets.map(y => y.name).join("\n")}`);
-        if (!targetName) return;
-        
-        const target = targets.find(year => year.name.trim() === targetName.trim());
-        if (!target) return alert("Target academic year not found.");
+        if (targets.length === 0) return toast("There is no available target academic year.");
+        setCopyTarget({ structure, targets });
+    };
 
+    const confirmCopy = async (targetName) => {
+        if (!copyTarget) return;
+        const target = copyTarget.targets.find(year => year.name.trim() === targetName.trim());
+        if (!target) return toast("Target academic year not found.");
+
+        setCopying(true);
         try {
-            await api.post(`/fees/structures/${structure.id}/copy/${target.id}`);
-            alert("Fee structure copied successfully.");
+            await api.post(`/fees/structures/${copyTarget.structure.id}/copy/${target.id}`);
+            toast("Fee structure copied successfully.");
+            setCopyTarget(null);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to copy fee structure.");
+            toast(error.response?.data?.message || "Unable to copy fee structure.");
+        } finally {
+            setCopying(false);
         }
     };
 
@@ -258,7 +271,12 @@ function FeesPage() {
                 <Sidebar />
                 <div className="main-content">
                     <Navbar />
-                    <div className="page-content">Loading fee management...</div>
+                    <div className="page-content">
+                        <div className="p-skeleton p-skeleton-line short" />
+                        <div className="p-skeleton p-skeleton-table" />
+                        <div className="p-skeleton p-skeleton-line" />
+                        <div className="p-skeleton p-skeleton-line short" />
+                    </div>
                 </div>
             </div>
         );
@@ -539,7 +557,10 @@ function FeesPage() {
                     {/* STRUCTURE EDITOR MODAL (FLOATS ON TOP)    */}
                     {/* ========================================= */}
                     {selectedStructure && (
-                        <div className="modal-overlay">
+                        <OverlayDialog
+                            onClose={() => { setSelectedStructure(null); setStructureItems([]); }}
+                            ariaLabel="Fee structure price editor"
+                        >
                             <div className="history-modal" style={{ maxWidth: "700px" }}>
                                 <div className="modal-header">
                                     <div>
@@ -609,10 +630,21 @@ function FeesPage() {
                                     )}
                                 </div>
                             </div>
-                        </div>
+                        </OverlayDialog>
                     )}
                 </div>
             </div>
+            <PromptDialog
+                open={!!copyTarget}
+                onClose={() => setCopyTarget(null)}
+                onConfirm={confirmCopy}
+                title={copyTarget ? "Copy fee structure to:" : ""}
+                message="Choose the target academic year."
+                options={copyTarget ? copyTarget.targets.map(y => ({ label: y.name, value: y.name })) : []}
+                requireValue
+                confirmLabel="Copy Structure"
+                busy={copying}
+            />
         </div>
     );
 }

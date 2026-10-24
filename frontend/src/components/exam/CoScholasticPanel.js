@@ -1,3 +1,4 @@
+import { toast } from "../../services/notify";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import api from "../../services/api";
@@ -81,7 +82,7 @@ function CoScholasticPanel({ examId }) {
             setAuthorized(true);
         } catch (error) {
             if (error.response?.status === 403) setAuthorized(false);
-            else alert(error.response?.data?.message || "Unable to load co-scholastic details.");
+            else toast(error.response?.data?.message || "Unable to load co-scholastic details.");
         } finally {
             setLoading(false);
         }
@@ -110,9 +111,9 @@ function CoScholasticPanel({ examId }) {
         try {
             setSavingGrades(true);
             const res = await api.put(`/exams/${examId}/co-scholastic`, { grades: payload });
-            alert(res.data.message || "Co-scholastic grades saved.");
+            toast(res.data.message || "Co-scholastic grades saved.");
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to save co-scholastic grades.");
+            toast(error.response?.data?.message || "Unable to save co-scholastic grades.");
         } finally {
             setSavingGrades(false);
         }
@@ -140,7 +141,7 @@ function CoScholasticPanel({ examId }) {
             .map((s) => ({ studentId: s.id, ...(meta[s.id] || {}) }));
 
         if (payload.length === 0) {
-            alert(skipped.length
+            toast(skipped.length
                 ? "Every filled row has days attended greater than working days. Fix the highlighted cells."
                 : "Nothing to save.");
             return;
@@ -153,9 +154,9 @@ function CoScholasticPanel({ examId }) {
                 msg += `\n\nSkipped ${skipped.length} row(s) with days attended greater than working days:\n`
                     + skipped.map((s) => `• ${s.studentName}`).join("\n");
             }
-            alert(msg);
+            toast(msg);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to save term details.");
+            toast(error.response?.data?.message || "Unable to save term details.");
         } finally {
             setSavingMeta(false);
         }

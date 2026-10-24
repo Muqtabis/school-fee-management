@@ -1,3 +1,4 @@
+import { toast } from "../services/notify";
 import {
     useState
 } from "react";
@@ -78,7 +79,7 @@ function SettingsPage() {
                 passwordForm.newPassword.length < 8
             ) {
 
-                alert(
+                toast(
                     "New password must contain at least 8 characters."
                 );
 
@@ -92,7 +93,7 @@ function SettingsPage() {
                 passwordForm.confirmPassword
             ) {
 
-                alert(
+                toast(
                     "New passwords do not match."
                 );
 
@@ -106,7 +107,7 @@ function SettingsPage() {
                 passwordForm.newPassword
             ) {
 
-                alert(
+                toast(
                     "New password must be different from your current password."
                 );
 
@@ -132,7 +133,7 @@ function SettingsPage() {
                 );
 
 
-                alert(
+                toast(
                     "Password changed successfully."
                 );
 
@@ -158,7 +159,7 @@ function SettingsPage() {
                 );
 
 
-                alert(
+                toast(
 
                     error.response?.data?.message ||
 

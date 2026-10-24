@@ -1,7 +1,9 @@
+import { toast } from "../services/notify";
 import { useEffect, useState } from "react";
 
 import api from "../services/api";
 
+import useModalBehavior from "./useModalBehavior";
 
 function ExpenseForm({
     expense,
@@ -138,7 +140,7 @@ function ExpenseForm({
 
         } catch (error) {
 
-            alert(
+            toast(
                 error.response?.data?.message ||
                 "Unable to save expense"
             );
@@ -152,11 +154,16 @@ function ExpenseForm({
     };
 
 
+    // Requirement 3: native-dialog behavior (Escape / backdrop /
+    // focus trap / scroll lock) for this legacy overlay.
+    const { overlayRef, contentRef, handleOverlayClick } = useModalBehavior(onClose);
+
+
     return (
 
-        <div className="modal-overlay">
+        <div className="modal-overlay" ref={overlayRef} onClick={handleOverlayClick}>
 
-            <div className="student-modal">
+            <div ref={contentRef} className="student-modal" role="dialog" aria-modal="true">
 
                 <div className="modal-header">
 

@@ -1,3 +1,4 @@
+import { toast } from "../services/notify";
 import { useCallback, useEffect, useState } from "react";
 
 import Sidebar from "../components/Sidebar";
@@ -43,7 +44,7 @@ function ExamResultsPage() {
             const res = await api.get("/exams/definitions");
             setDefinitions(res.data.definitions || []);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load exams.");
+            toast(error.response?.data?.message || "Unable to load exams.");
         }
     }, []);
 
@@ -81,7 +82,7 @@ function ExamResultsPage() {
     const createExam = async (e) => {
         e.preventDefault();
         if (!form.examName.trim() || selectedClasses.length === 0) {
-            alert("Enter an exam name and select at least one class.");
+            toast("Enter an exam name and select at least one class.");
             return;
         }
         try {
@@ -102,7 +103,7 @@ function ExamResultsPage() {
             const skipped = res.data.skipped || [];
             let msg = res.data.message || "Exam created.";
             if (skipped.length) msg += "\n\nSkipped:\n" + skipped.map((s) => `• ${s.className}: ${s.reason}`).join("\n");
-            alert(msg);
+            toast(msg);
             setForm({
                 examName: "", slot: "t1_sa",
                 weightage: "", academicYearId: "", startDate: "", endDate: "", gradingScaleId: ""
@@ -110,7 +111,7 @@ function ExamResultsPage() {
             setSelectedClasses([]);
             loadDefinitions();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to create exam.");
+            toast(error.response?.data?.message || "Unable to create exam.");
         } finally {
             setCreating(false);
         }

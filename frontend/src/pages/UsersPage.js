@@ -1,7 +1,9 @@
+import { toast, confirmDialog } from "../services/notify";
 import { useEffect, useState } from "react";
 
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
+import PromptDialog from "../components/PromptDialog";
 import api from "../services/api";
 
 
@@ -40,7 +42,7 @@ function UsersPage() {
             const res = await api.get("/users");
             setUsers(res.data);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load users.");
+            toast(error.response?.data?.message || "Unable to load users.");
         } finally {
             setLoading(false);
         }
@@ -81,39 +83,60 @@ function UsersPage() {
         e.preventDefault();
         try {
             await api.post("/users", form);
-            alert(`${labelForRole(form.role)} created successfully.`);
+            toast(`${labelForRole(form.role)} created successfully.`);
             setForm({ name: "", email: "", password: "", role: "receptionist" });
             loadUsers();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to create user.");
+            toast(error.response?.data?.message || "Unable to create user.");
         }
     };
 
 
     // =====================================================
     // RESET PASSWORD
+    // Centered two-step PromptDialog replaces the old
+    // window.prompt pair.
     // =====================================================
 
-    const resetPassword = async (user) => {
-        const newPassword = window.prompt(`Enter a new password for ${user.name}:`);
-        if (newPassword === null) return;
+    const [pwTarget, setPwTarget] = useState(null);
+    const [pwStage, setPwStage] = useState("new"); // "new" | "confirm"
+    const [pwBusy, setPwBusy] = useState(false);
+    const [firstPw, setFirstPw] = useState("");
 
-        if (newPassword.length < 8) {
-            alert("Password must contain at least 8 characters.");
+    const resetPassword = (user) => {
+        setPwTarget(user);
+        setPwStage("new");
+    };
+
+    const closePwDialogs = () => {
+        setPwTarget(null);
+        setPwStage("new");
+        setFirstPw("");
+    };
+
+    const handlePwNew = (value) => {
+        if (value.length < 8) {
+            toast("Password must contain at least 8 characters.");
             return;
         }
+        setFirstPw(value);
+        setPwStage("confirm");
+    };
 
-        const confirmPassword = window.prompt("Confirm the new password:");
-        if (confirmPassword !== newPassword) {
-            alert("Passwords do not match.");
+    const handlePwConfirm = async (value) => {
+        if (value !== firstPw) {
+            toast("Passwords do not match.");
             return;
         }
-
+        setPwBusy(true);
         try {
-            await api.put(`/users/${user.id}/password`, { password: newPassword });
-            alert("Password reset successfully.");
+            await api.put(`/users/${pwTarget.id}/password`, { password: value });
+            toast("Password reset successfully.");
+            closePwDialogs();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to reset password.");
+            toast(error.response?.data?.message || "Unable to reset password.");
+        } finally {
+            setPwBusy(false);
         }
     };
 
@@ -123,18 +146,21 @@ function UsersPage() {
     // =====================================================
 
     const deleteUser = async (user) => {
-        const confirmed = window.confirm(
-            `Are you sure you want to delete ${user.name}?\n\nThis will remove their ERP login.`
-        );
+        const confirmed = await confirmDialog({
+            title: "Delete user?",
+            message: `Are you sure you want to delete ${user.name}?\nThis will remove their ERP login.`,
+            confirmLabel: "Delete",
+            danger: true
+        });
         if (!confirmed) return;
 
         try {
             await api.delete(`/users/${user.id}`);
-            alert("User deleted successfully.");
+            toast("User deleted successfully.");
             if (accessUser && accessUser.id === user.id) closeAccess();
             loadUsers();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to delete user.");
+            toast(error.response?.data?.message || "Unable to delete user.");
         }
     };
 
@@ -157,7 +183,7 @@ function UsersPage() {
             setAccessKeys((res.data.pageKeys || []).filter((k) => grantable.includes(k)));
             setAccessLocked(res.data.accessLocked || false);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load page access.");
+            toast(error.response?.data?.message || "Unable to load page access.");
             setAccessUser(null);
         } finally {
             setAccessLoading(false);
@@ -184,10 +210,10 @@ function UsersPage() {
         try {
             setSavingAccess(true);
             await api.put(`/users/${accessUser.id}/pages`, { pageKeys: accessKeys });
-            alert("Page access updated successfully.");
+            toast("Page access updated successfully.");
             loadUsers();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to update page access.");
+            toast(error.response?.data?.message || "Unable to update page access.");
         } finally {
             setSavingAccess(false);
         }
@@ -199,10 +225,10 @@ function UsersPage() {
         try {
             await api.post(`/users/${accessUser.id}/${nextLocked ? "lock" : "unlock"}`);
             setAccessLocked(nextLocked);
-            alert(nextLocked ? "Page access locked." : "Page access unlocked.");
+            toast(nextLocked ? "Page access locked." : "Page access unlocked.");
             loadUsers();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to change lock state.");
+            toast(error.response?.data?.message || "Unable to change lock state.");
         }
     };
 
@@ -444,6 +470,32 @@ function UsersPage() {
 
                 </div>
             </div>
+            <PromptDialog
+                open={!!pwTarget && pwStage === "new"}
+                onClose={closePwDialogs}
+                onConfirm={handlePwNew}
+                title={pwTarget ? `Set a new password for ${pwTarget.name}` : ""}
+                message="At least 8 characters."
+                type="password"
+                requireValue
+                placeholder="New password"
+                confirmLabel="Continue"
+                busy={pwBusy}
+            />
+
+            <PromptDialog
+                open={!!pwTarget && pwStage === "confirm"}
+                onClose={closePwDialogs}
+                onConfirm={handlePwConfirm}
+                title={pwTarget ? `Confirm the new password for ${pwTarget.name}` : ""}
+                message="Passwords are case-sensitive."
+                type="password"
+                requireValue
+                placeholder="Re-enter the new password"
+                confirmLabel="Reset Password"
+                busy={pwBusy}
+            />
+
         </div>
     );
 }

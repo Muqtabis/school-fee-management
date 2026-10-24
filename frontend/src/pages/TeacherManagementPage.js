@@ -1,3 +1,4 @@
+import { toast, confirmDialog } from "../services/notify";
 import { useEffect, useState, useCallback } from "react";
 
 import Sidebar from "../components/Sidebar";
@@ -46,7 +47,7 @@ function TeacherManagementPage() {
             const res = await api.get("/teachers");
             setTeachers(res.data.teachers || []);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load teachers.");
+            toast(error.response?.data?.message || "Unable to load teachers.");
         }
     };
 
@@ -99,7 +100,7 @@ function TeacherManagementPage() {
     const submitAssignment = async (e) => {
         e.preventDefault();
         if (!assignTeacherId || !assignClassName) {
-            alert("Choose a teacher and a class.");
+            toast("Choose a teacher and a class.");
             return;
         }
 
@@ -114,14 +115,14 @@ function TeacherManagementPage() {
                 setAssignSubjectId("");
                 loadTeachers();
             } catch (error) {
-                alert(error.response?.data?.message || "Unable to assign class teacher.");
+                toast(error.response?.data?.message || "Unable to assign class teacher.");
             }
             return;
         }
 
         // Subject Teacher: a specific subject in the selected class.
         if (!assignSubjectId) {
-            alert("Choose a subject for the subject teacher.");
+            toast("Choose a subject for the subject teacher.");
             return;
         }
         try {
@@ -131,38 +132,38 @@ function TeacherManagementPage() {
         } catch (error) {
             const data = error.response?.data;
             if (error.response?.status === 409 && data?.requiresConfirmation) {
-                if (window.confirm(data.message || "Reassign this subject to the selected teacher?")) {
+                if (await confirmDialog({ message: data.message || "Reassign this subject to the selected teacher?", confirmLabel: "Reassign" })) {
                     try {
                         await postSubjectAssignment(true);
                         setAssignSubjectId("");
                         loadTeachers();
                     } catch (err2) {
-                        alert(err2.response?.data?.message || "Unable to assign subject.");
+                        toast(err2.response?.data?.message || "Unable to assign subject.");
                     }
                 }
                 return;
             }
-            alert(data?.message || "Unable to assign subject.");
+            toast(data?.message || "Unable to assign subject.");
         }
     };
 
     const unassignClass = async (teacherId, className) => {
-        if (!window.confirm(`Remove class-teacher role for ${className}?`)) return;
+        if (!(await confirmDialog({ message: `Remove class-teacher role for ${className}?`, confirmLabel: "Remove" }))) return;
         try {
             await api.delete(`/teachers/${teacherId}/classes`, { data: { className } });
             loadTeachers();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to remove assignment.");
+            toast(error.response?.data?.message || "Unable to remove assignment.");
         }
     };
 
     const unassignSubject = async (teacherId, subjectId, label) => {
-        if (!window.confirm(`Remove ${label} from this teacher?`)) return;
+        if (!(await confirmDialog({ message: `Remove ${label} from this teacher?`, confirmLabel: "Remove" }))) return;
         try {
             await api.delete(`/teachers/${teacherId}/subjects`, { data: { subjectId } });
             loadTeachers();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to remove subject assignment.");
+            toast(error.response?.data?.message || "Unable to remove subject assignment.");
         }
     };
 
@@ -186,7 +187,7 @@ function TeacherManagementPage() {
             const res = await api.get("/attendance/summary", { params });
             setSummary(res.data.summary || []);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load attendance summary.");
+            toast(error.response?.data?.message || "Unable to load attendance summary.");
         } finally {
             setSumLoading(false);
         }

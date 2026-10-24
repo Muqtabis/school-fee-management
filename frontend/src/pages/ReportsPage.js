@@ -1,3 +1,4 @@
+import { toast } from "../services/notify";
 import { useEffect, useState, useMemo } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
@@ -415,7 +416,7 @@ function ReportsPage() {
             window.URL.revokeObjectURL(url);
         } catch (error) {
             console.error("Bundle export error:", error);
-            alert("Unable to export the report bundle. Please try again.");
+            toast("Unable to export the report bundle. Please try again.");
         } finally {
             setExporting(false);
         }

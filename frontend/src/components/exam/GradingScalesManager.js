@@ -1,3 +1,4 @@
+import { toast, confirmDialog } from "../../services/notify";
 import { useEffect, useState } from "react";
 
 import api from "../../services/api";
@@ -30,7 +31,7 @@ function GradingScalesManager() {
             const res = await api.get("/exams/grading-scales");
             setScales(res.data.scales || []);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load grading scales.");
+            toast(error.response?.data?.message || "Unable to load grading scales.");
         } finally {
             setLoading(false);
         }
@@ -83,7 +84,7 @@ function GradingScalesManager() {
 
     const save = async () => {
         if (!editing) return;
-        if (!editing.name.trim()) { alert("A scale name is required."); return; }
+        if (!editing.name.trim()) { toast("A scale name is required."); return; }
         const bands = editing.bands.map((b) => ({
             grade: String(b.grade || "").trim(),
             minPercent: Number(b.minPercent),
@@ -99,20 +100,20 @@ function GradingScalesManager() {
             setEditing(null);
             await load();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to save grading scale.");
+            toast(error.response?.data?.message || "Unable to save grading scale.");
         } finally {
             setBusy(false);
         }
     };
 
     const remove = async (scale) => {
-        if (!window.confirm(`Delete grading scale "${scale.name}"?`)) return;
+        if (!(await confirmDialog({ message: `Delete grading scale "${scale.name}"?`, confirmLabel: "Delete", danger: true }))) return;
         try {
             setBusy(true);
             await api.delete(`/exams/grading-scales/${scale.id}`);
             await load();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to delete grading scale.");
+            toast(error.response?.data?.message || "Unable to delete grading scale.");
         } finally {
             setBusy(false);
         }

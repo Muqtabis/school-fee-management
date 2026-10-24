@@ -1,3 +1,4 @@
+import { toast } from "../services/notify";
 import {
     createContext,
     useContext,
@@ -78,7 +79,7 @@ export default function AuthProvider({ children }) {
 
         // Auto logout after 2 hours of inactivity
         timeoutRef.current = setTimeout(() => {
-            alert("Session expired due to inactivity. Please log in again.");
+            toast("Session expired due to inactivity. Please log in again.");
             logout();
         }, SESSION_TIMEOUT_MS);
     }, [logout]);

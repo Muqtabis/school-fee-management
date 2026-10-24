@@ -1,3 +1,4 @@
+import { toast, confirmDialog } from "../services/notify";
 import { useEffect, useMemo, useState } from "react";
 
 import Sidebar from "../components/Sidebar";
@@ -40,7 +41,7 @@ function MarksEntryPage() {
             const res = await api.get("/exams");
             setExams(res.data.exams || []);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load exams.");
+            toast(error.response?.data?.message || "Unable to load exams.");
         } finally {
             setLoading(false);
         }
@@ -80,7 +81,7 @@ function MarksEntryPage() {
             });
             setMarks(grid);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load marks.");
+            toast(error.response?.data?.message || "Unable to load marks.");
             setSelectedExam(null);
         } finally {
             setGridLoading(false);
@@ -162,16 +163,16 @@ function MarksEntryPage() {
     const saveMarks = async ({ silent = false } = {}) => {
         if (!selectedExam) return false;
         if (invalidCount > 0) {
-            alert(`${invalidCount} mark(s) are out of range. Fix the highlighted cells before saving.`);
+            toast(`${invalidCount} mark(s) are out of range. Fix the highlighted cells before saving.`);
             return false;
         }
         try {
             setSaving(true);
             await api.put(`/exams/${selectedExam.id}/marks`, { marks: buildPayload() });
-            if (!silent) alert("Marks saved.");
+            if (!silent) toast("Marks saved.");
             return true;
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to save marks.");
+            toast(error.response?.data?.message || "Unable to save marks.");
             return false;
         } finally {
             setSaving(false);
@@ -180,33 +181,35 @@ function MarksEntryPage() {
 
     const lockMarks = async () => {
         if (!selectedExam) return;
-        if (!window.confirm(
-            "Submit and lock these marks?\n\nYou will no longer be able to edit them. " +
-            "Ask the admin to unlock the exam if you need changes after this."
-        )) return;
+        const confirmed = await confirmDialog({
+            title: "Submit and lock these marks?",
+            message: "You will no longer be able to edit them. Ask the admin to unlock the exam if you need changes after this.",
+            confirmLabel: "Submit & Lock"
+        });
+        if (!confirmed) return;
 
         if (!(await saveMarks({ silent: true }))) return;
         try {
             setSaving(true);
             await api.post(`/exams/${selectedExam.id}/lock`);
-            alert("Marks submitted and locked. The admin can now review and publish.");
+            toast("Marks submitted and locked. The admin can now review and publish.");
             closeExam();
             loadExams();
         } catch (error) {
             const data = error.response?.data;
             if (data?.requiresConfirmation) {
-                if (window.confirm(data.message)) {
+                if (await confirmDialog({ message: data.message, confirmLabel: "Lock anyway" })) {
                     try {
                         await api.post(`/exams/${selectedExam.id}/lock`, { override: true });
-                        alert("Marks submitted and locked.");
+                        toast("Marks submitted and locked.");
                         closeExam();
                         loadExams();
                     } catch (e2) {
-                        alert(e2.response?.data?.message || "Unable to lock.");
+                        toast(e2.response?.data?.message || "Unable to lock.");
                     }
                 }
             } else {
-                alert(data?.message || "Unable to lock marks.");
+                toast(data?.message || "Unable to lock marks.");
             }
         } finally {
             setSaving(false);

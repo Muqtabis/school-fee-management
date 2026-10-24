@@ -1,3 +1,4 @@
+import { toast, confirmDialog } from "../services/notify";
 import {
     useEffect,
     useState
@@ -11,6 +12,12 @@ import Navbar
 
 import ExpenseForm
     from "../components/ExpenseForm";
+
+import OverlayDialog
+    from "../components/OverlayDialog";
+
+import PromptDialog
+    from "../components/PromptDialog";
 
 import { useAuth }
     from "../context/AuthContext";
@@ -342,93 +349,29 @@ function ExpensesPage() {
     // REVERSE
     // =====================================================
 
-    const handleReverse =
-        async expense => {
+    const [reverseTarget, setReverseTarget] = useState(null);
+    const [reversing, setReversing] = useState(false);
 
-            if (
-                expense.status ===
-                "reversed"
-            ) {
+    const handleReverse = (expense) => {
+        if (expense.status === "reversed") return;
+        setReverseTarget(expense);
+    };
 
-                return;
-
-            }
-
-
-            const reason =
-                window.prompt(
-                    `Why are you reversing "${expense.expenseName}"?`
-                );
-
-
-            if (
-                !reason ||
-                !reason.trim()
-            ) {
-
-                return;
-
-            }
-
-
-            const confirmed =
-                window.confirm(
-
-                    `Reverse this expense?\n\n` +
-
-                    `Amount: ${money(
-                        expense.amount
-                    )}\n` +
-
-                    `Category: ${
-                        expense.category ||
-                        "-"
-                    }\n\n` +
-
-                    `Reason: ${
-                        reason.trim()
-                    }\n\n` +
-
-                    `The expense will NOT be deleted.`
-
-                );
-
-
-            if (!confirmed) {
-
-                return;
-
-            }
-
-
-            try {
-
-                await api.post(
-
-                    `/expenses/${expense.id}/reverse`,
-
-                    {
-                        reason:
-                            reason.trim()
-                    }
-
-                );
-
-
-                fetchExpenses();
-
-            } catch (
-                error
-            ) {
-
-                alert(
-                    error.response?.data?.message ||
-                    "Unable to reverse expense."
-                );
-
-            }
-
-        };
+    // Reverse flow: centered PromptDialog replaces the old
+    // window.prompt + window.confirm pair.
+    const confirmReverse = async (reason) => {
+        if (!reverseTarget) return;
+        setReversing(true);
+        try {
+            await api.post(`/expenses/${reverseTarget.id}/reverse`, { reason });
+            setReverseTarget(null);
+            fetchExpenses();
+        } catch (error) {
+            toast(error.response?.data?.message || "Unable to reverse expense.");
+        } finally {
+            setReversing(false);
+        }
+    };
 
 
     return (
@@ -908,6 +851,25 @@ function ExpensesPage() {
                 )
             }
 
+            <PromptDialog
+                open={!!reverseTarget}
+                onClose={() => setReverseTarget(null)}
+                onConfirm={confirmReverse}
+                title={reverseTarget ? `Reverse "${reverseTarget.expenseName}"?` : ""}
+                message={
+                    reverseTarget
+                        ? `Amount: ${money(reverseTarget.amount)}\n` +
+                          `Category: ${reverseTarget.category || "-"}\n\n` +
+                          `The expense will NOT be deleted.`
+                        : ""
+                }
+                multiline
+                requireValue
+                placeholder="Reason for reversing (required)"
+                confirmLabel="Reverse"
+                busy={reversing}
+            />
+
         </div>
 
     );
@@ -938,7 +900,7 @@ function CategoryManagerModal({ categories, refreshCategories, onClose }) {
             setNewName("");
             refreshCategories();
         } catch (error) {
-            alert(error.response?.data?.message || "Failed to add category.");
+            toast(error.response?.data?.message || "Failed to add category.");
         } finally {
             setLoading(false);
         }
@@ -955,27 +917,27 @@ function CategoryManagerModal({ categories, refreshCategories, onClose }) {
     };
 
     const saveEdit = async (id) => {
-        if (!editName.trim()) return alert("Category name is required.");
+        if (!editName.trim()) return toast("Category name is required.");
         setBusyId(id);
         try {
             await api.put(`/expenses/categories/${id}`, { categoryName: editName.trim() });
             cancelEdit();
             refreshCategories();
         } catch (error) {
-            alert(error.response?.data?.message || "Failed to rename category.");
+            toast(error.response?.data?.message || "Failed to rename category.");
         } finally {
             setBusyId(null);
         }
     };
 
     const handleDelete = async (cat) => {
-        if (!window.confirm(`Delete the category "${cat.categoryName}"?`)) return;
+        if (!(await confirmDialog({ message: `Delete the category "${cat.categoryName}"?`, confirmLabel: "Delete", danger: true }))) return;
         setBusyId(cat.id);
         try {
             await api.delete(`/expenses/categories/${cat.id}`);
             refreshCategories();
         } catch (error) {
-            alert(error.response?.data?.message || "Failed to delete category.");
+            toast(error.response?.data?.message || "Failed to delete category.");
         } finally {
             setBusyId(null);
         }
@@ -987,7 +949,7 @@ function CategoryManagerModal({ categories, refreshCategories, onClose }) {
     );
 
     return (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "16px" }}>
+        <OverlayDialog onClose={onClose} ariaLabel="Manage expense categories">
             <div style={{ backgroundColor: "#ffffff", borderRadius: "14px", width: "100%", maxWidth: "520px", maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)" }}>
                 <div style={{ padding: "16px 20px", borderBottom: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <h2 style={{ fontSize: "17px", fontWeight: "700", color: "#0F172A", margin: 0 }}>Manage Expense Categories</h2>
@@ -1045,7 +1007,7 @@ function CategoryManagerModal({ categories, refreshCategories, onClose }) {
                     </p>
                 </div>
             </div>
-        </div>
+        </OverlayDialog>
     );
 }
 

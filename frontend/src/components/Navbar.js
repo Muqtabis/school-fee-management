@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useUI } from "../context/UIContext";
@@ -40,6 +41,22 @@ function Navbar() {
   const { toggleSidebar } = useUI();
   const { pathname } = useLocation();
 
+  // Manual dark/light toggle (independent of system preference).
+  const [theme, setTheme] = useState(
+    () => document.documentElement.getAttribute("data-theme") || "light"
+  );
+
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    try {
+      localStorage.setItem("theme-preference", next);
+    } catch (e) {
+      /* storage unavailable — toggle still works for the session */
+    }
+    document.documentElement.setAttribute("data-theme", next);
+    setTheme(next);
+  };
+
   const pageTitle = titleFromPath(pathname);
 
   const today = new Date().toLocaleDateString("en-IN", {
@@ -69,6 +86,16 @@ function Navbar() {
       </div>
 
       <div className="navbar-right">
+        <button
+          type="button"
+          className="theme-toggle"
+          onClick={toggleTheme}
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {theme === "dark" ? "☀" : "☾"}
+        </button>
+
         <div className="user-profile">
           <div className="avatar">
             {user?.name ? user.name.charAt(0).toUpperCase() : "A"}

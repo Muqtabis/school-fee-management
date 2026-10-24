@@ -1,7 +1,9 @@
+import { toast } from "../services/notify";
 import { useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import PaymentForm from "../components/PaymentForm";
+import PromptDialog from "../components/PromptDialog";
 import SummaryTable from "../components/SummaryTable";
 import api from "../services/api";
 
@@ -87,32 +89,32 @@ function PaymentsPage() {
         setShowForm(true);
     };
 
-    const reversePayment = async (payment) => {
+    // Reverse flow: centered PromptDialog replaces the old
+    // window.prompt + window.confirm pair.
+    const [reverseTarget, setReverseTarget] = useState(null);
+    const [reversing, setReversing] = useState(false);
+
+    const reversePayment = (payment) => {
         if (payment.status === "reversed") return;
+        setReverseTarget(payment);
+    };
 
-        const reason = window.prompt(`Why are you reversing payment #${payment.id}?`);
-        if (!reason || !reason.trim()) return;
-
-        const confirmed = window.confirm(
-            `Reverse payment #${payment.id}?\n\n` +
-            `Student: ${payment.studentName || "-"}\n` +
-            `Amount: ₹${Number(payment.amount || 0).toLocaleString("en-IN")}\n\n` +
-            `Academic Year: ${payment.academicYearName || activeYear || "-"}\n\n` +
-            `Reason: ${reason.trim()}`
-        );
-
-        if (!confirmed) return;
-
+    const confirmReverse = async (reason) => {
+        if (!reverseTarget) return;
+        setReversing(true);
         try {
-            await api.post(`/payments/${payment.id}/reverse`, { reason: reason.trim() });
+            await api.post(`/payments/${reverseTarget.id}/reverse`, { reason });
+            setReverseTarget(null);
             fetchPayments();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to reverse payment.");
+            toast(error.response?.data?.message || "Unable to reverse payment.");
+        } finally {
+            setReversing(false);
         }
     };
 
     return (
-        <div className="dashboard">
+        <div className="dashboard p-cta-page">
             <Sidebar />
             <div className="main-content">
                 <Navbar />
@@ -174,12 +176,40 @@ function PaymentsPage() {
                 </div>
             </div>
 
+            <button
+                type="button"
+                className="p-mobile-cta"
+                onClick={addPayment}
+                aria-label="Collect Fee"
+            >
+                ＋ Collect Fee
+            </button>
+
             {showForm && (
                 <PaymentForm onClose={() => {
                     setShowForm(false);
                     fetchPayments();
                 }} />
             )}
+
+            <PromptDialog
+                open={!!reverseTarget}
+                onClose={() => setReverseTarget(null)}
+                onConfirm={confirmReverse}
+                title={reverseTarget ? `Reverse payment #${reverseTarget.id}?` : ""}
+                message={
+                    reverseTarget
+                        ? `Student: ${reverseTarget.studentName || "-"}\n` +
+                          `Amount: ₹${Number(reverseTarget.amount || 0).toLocaleString("en-IN")}\n` +
+                          `Academic year: ${reverseTarget.academicYearName || activeYear || "-"}`
+                        : ""
+                }
+                multiline
+                requireValue
+                placeholder="Reason for reversing (required)"
+                confirmLabel="Reverse"
+                busy={reversing}
+            />
         </div>
     );
 }

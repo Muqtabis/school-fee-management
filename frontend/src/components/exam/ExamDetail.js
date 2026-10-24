@@ -1,3 +1,4 @@
+import { toast, confirmDialog } from "../../services/notify";
 import React, { useCallback, useEffect, useState } from "react";
 
 import api from "../../services/api";
@@ -34,7 +35,7 @@ async function downloadReportCard(examId, student) {
         a.remove();
         window.URL.revokeObjectURL(url);
     } catch (error) {
-        alert("Unable to download the report card.");
+        toast("Unable to download the report card.");
     }
 }
 
@@ -52,7 +53,7 @@ async function downloadClassCards(examId, className) {
         a.remove();
         window.URL.revokeObjectURL(url);
     } catch (error) {
-        alert("Unable to download the class report cards.");
+        toast("Unable to download the class report cards.");
     }
 }
 
@@ -97,7 +98,7 @@ function ExamDetail({ definition, onBack, onChanged }) {
                 return kids.find((k) => k.id === prev.id) || kids[0] || null;
             });
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load exam detail.");
+            toast(error.response?.data?.message || "Unable to load exam detail.");
         } finally {
             setLoading(false);
         }
@@ -126,7 +127,7 @@ function ExamDetail({ definition, onBack, onChanged }) {
             setTeachers(res.data.teachers || []);
             setConfigMeta({ editable: !!res.data.editable, marksEntered: !!res.data.marksEntered });
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load subjects.");
+            toast(error.response?.data?.message || "Unable to load subjects.");
         } finally {
             setConfigLoading(false);
         }
@@ -138,7 +139,7 @@ function ExamDetail({ definition, onBack, onChanged }) {
             const res = await api.get(`/exams/${examId}/results`);
             setResults(res.data);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load results.");
+            toast(error.response?.data?.message || "Unable to load results.");
             setResults(null);
         } finally {
             setResultsLoading(false);
@@ -155,7 +156,7 @@ function ExamDetail({ definition, onBack, onChanged }) {
             setNotifications(n.data.notifications || []);
             setCorrections(c.data.corrections || []);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load delivery log.");
+            toast(error.response?.data?.message || "Unable to load delivery log.");
         } finally {
             setDeliverLoading(false);
         }
@@ -191,14 +192,14 @@ function ExamDetail({ definition, onBack, onChanged }) {
         try {
             setSavingConfig(true);
             const res = await api.put(`/exams/${selected.id}/subjects`, { subjects, confirm });
-            alert(res.data.message || "Saved.");
+            toast(res.data.message || "Saved.");
             await loadConfig(selected.id);
         } catch (error) {
             const data = error.response?.data;
             if (data?.requiresConfirmation) {
-                if (window.confirm(`${data.message}`)) return saveConfig(true);
+                if (await confirmDialog({ message: data.message, confirmLabel: "Save anyway" })) return saveConfig(true);
             } else {
-                alert(data?.message || "Unable to save subject settings.");
+                toast(data?.message || "Unable to save subject settings.");
             }
         } finally {
             setSavingConfig(false);
@@ -210,15 +211,15 @@ function ExamDetail({ definition, onBack, onChanged }) {
         try {
             setBusy(true);
             const res = await api.post(`/exams/${selected.id}/publish`, { confirm });
-            alert(res.data.message || "Published.");
+            toast(res.data.message || "Published.");
             await Promise.all([loadClasses(), loadResults(selected.id)]);
             onChanged && onChanged();
         } catch (error) {
             const data = error.response?.data;
             if (data?.requiresConfirmation) {
-                if (window.confirm(data.message)) return publish(true);
+                if (await confirmDialog({ message: data.message, confirmLabel: "Publish anyway" })) return publish(true);
             } else {
-                alert(data?.message || "Unable to publish.");
+                toast(data?.message || "Unable to publish.");
             }
         } finally {
             setBusy(false);
@@ -227,14 +228,14 @@ function ExamDetail({ definition, onBack, onChanged }) {
 
     const unlock = async () => {
         if (!selected) return;
-        if (!window.confirm("Return this class's marks to the teacher for editing?")) return;
+        if (!(await confirmDialog({ message: "Return this class's marks to the teacher for editing?", confirmLabel: "Unlock" }))) return;
         try {
             setBusy(true);
             await api.post(`/exams/${selected.id}/unlock`);
             await Promise.all([loadClasses(), loadResults(selected.id)]);
             onChanged && onChanged();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to unlock.");
+            toast(error.response?.data?.message || "Unable to unlock.");
         } finally {
             setBusy(false);
         }
@@ -243,14 +244,14 @@ function ExamDetail({ definition, onBack, onChanged }) {
     const deliver = async (mode) => {
         if (!selected) return;
         const label = mode === "failed" ? "retry failed deliveries" : "deliver to pending students";
-        if (!window.confirm(`Send report cards over WhatsApp (${label})? Delivered students are never re-sent.`)) return;
+        if (!(await confirmDialog({ message: `Send report cards over WhatsApp (${label})? Delivered students are never re-sent.`, confirmLabel: "Send" }))) return;
         try {
             setBusy(true);
             const res = await api.post(`/exams/${selected.id}/deliver`, { mode });
-            alert(res.data.message || "Delivery done.");
+            toast(res.data.message || "Delivery done.");
             await loadDelivery(selected.id);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to deliver.");
+            toast(error.response?.data?.message || "Unable to deliver.");
         } finally {
             setBusy(false);
         }
@@ -258,14 +259,14 @@ function ExamDetail({ definition, onBack, onChanged }) {
 
     const resend = async (studentId) => {
         if (!selected) return;
-        if (!window.confirm("Re-send this student's report card?")) return;
+        if (!(await confirmDialog({ message: "Re-send this student's report card?", confirmLabel: "Re-send" }))) return;
         try {
             setBusy(true);
             const res = await api.post(`/exams/${selected.id}/deliver/${studentId}`);
-            alert(res.data.message || "Re-sent.");
+            toast(res.data.message || "Re-sent.");
             await loadDelivery(selected.id);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to resend.");
+            toast(error.response?.data?.message || "Unable to resend.");
         } finally {
             setBusy(false);
         }
@@ -274,7 +275,7 @@ function ExamDetail({ definition, onBack, onChanged }) {
     const submitCorrection = async () => {
         if (!selected || !correcting) return;
         const { studentId, subjectId, newStatus, newMarks, reason } = correcting;
-        if (!reason.trim()) { alert("A reason for the correction is required."); return; }
+        if (!reason.trim()) { toast("A reason for the correction is required."); return; }
         try {
             setBusy(true);
             const res = await api.post(`/exams/${selected.id}/corrections`, {
@@ -282,11 +283,11 @@ function ExamDetail({ definition, onBack, onChanged }) {
                 newMarks: newStatus === "present" ? Number(newMarks) : null,
                 reason: reason.trim()
             });
-            alert((res.data.message || "Correction saved.") + (res.data.needsRedelivery ? " Re-send the report card to update the recipient." : ""));
+            toast((res.data.message || "Correction saved.") + (res.data.needsRedelivery ? " Re-send the report card to update the recipient." : ""));
             setCorrecting(null);
             await Promise.all([loadResults(selected.id), loadDelivery(selected.id)]);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to save correction.");
+            toast(error.response?.data?.message || "Unable to save correction.");
         } finally {
             setBusy(false);
         }

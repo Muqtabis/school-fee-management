@@ -1,3 +1,4 @@
+import { toast } from "../services/notify";
 import { useEffect, useState, useCallback, useMemo } from "react";
 
 import Sidebar from "../components/Sidebar";
@@ -77,7 +78,7 @@ function StudentAttendancePage() {
                 setClasses(list);
                 if (list.length > 0) setSelectedClass(list[0]);
             } catch (error) {
-                alert(error.response?.data?.message || "Unable to load your classes.");
+                toast(error.response?.data?.message || "Unable to load your classes.");
             } finally {
                 setClassesLoaded(true);
             }
@@ -101,7 +102,7 @@ function StudentAttendancePage() {
             }));
             setRows(seeded);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load attendance.");
+            toast(error.response?.data?.message || "Unable to load attendance.");
             setRows([]);
         } finally {
             setLoading(false);
@@ -143,9 +144,9 @@ function StudentAttendancePage() {
             setSaving(true);
             const records = rows.map((r) => ({ studentId: r.studentId, status: r.status, remark: r.remark }));
             const res = await api.put("/student-attendance", { className: selectedClass, date, records });
-            alert(res.data.message || "Attendance saved.");
+            toast(res.data.message || "Attendance saved.");
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to save attendance.");
+            toast(error.response?.data?.message || "Unable to save attendance.");
         } finally {
             setSaving(false);
         }
@@ -157,7 +158,7 @@ function StudentAttendancePage() {
     // =====================================================
 
     const loadHistory = async () => {
-        if (!selectedClass) { alert("Choose a class first."); return; }
+        if (!selectedClass) { toast("Choose a class first."); return; }
         try {
             setHistoryLoading(true);
             const params = { className: selectedClass, from, to };
@@ -165,7 +166,7 @@ function StudentAttendancePage() {
             const res = await api.get("/student-attendance/report", { params });
             setHistory(res.data.records || []);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load history.");
+            toast(error.response?.data?.message || "Unable to load history.");
         } finally {
             setHistoryLoading(false);
         }

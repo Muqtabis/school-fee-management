@@ -1,3 +1,4 @@
+import { toast } from "../services/notify";
 import { useEffect, useState } from "react";
 
 import Sidebar from "../components/Sidebar";
@@ -69,7 +70,7 @@ function NotificationsPage() {
 
         } catch (error) {
 
-            alert(
+            toast(
                 error.response?.data?.message ||
                 "Unable to retry notification."
             );

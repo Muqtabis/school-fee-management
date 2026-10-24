@@ -1,3 +1,4 @@
+import { toast } from "../services/notify";
 import { useEffect, useState, useCallback, useMemo } from "react";
 
 import Sidebar from "../components/Sidebar";
@@ -62,7 +63,7 @@ function TeacherAttendancePage() {
             }));
             setRows(seeded);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load attendance.");
+            toast(error.response?.data?.message || "Unable to load attendance.");
         } finally {
             setLoading(false);
         }
@@ -93,9 +94,9 @@ function TeacherAttendancePage() {
                 remark: r.remark
             }));
             const res = await api.put("/attendance", { date, records });
-            alert(res.data.message || "Attendance saved.");
+            toast(res.data.message || "Attendance saved.");
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to save attendance.");
+            toast(error.response?.data?.message || "Unable to save attendance.");
         } finally {
             setSaving(false);
         }
@@ -110,7 +111,7 @@ function TeacherAttendancePage() {
             const res = await api.get("/attendance/report", { params });
             setHistory(res.data.records || []);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load history.");
+            toast(error.response?.data?.message || "Unable to load history.");
         } finally {
             setHistoryLoading(false);
         }

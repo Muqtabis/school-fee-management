@@ -1,3 +1,4 @@
+import { toast } from "../services/notify";
 import { useEffect, useMemo, useState } from "react";
 
 import Sidebar from "../components/Sidebar";
@@ -57,7 +58,7 @@ function AttendanceOverviewPage() {
                 const names = [...new Set((res.data || []).map((c) => c.className))].sort();
                 setClasses(names);
             } catch (error) {
-                alert(error.response?.data?.message || "Unable to load classes.");
+                toast(error.response?.data?.message || "Unable to load classes.");
             }
         })();
     }, []);
@@ -68,7 +69,7 @@ function AttendanceOverviewPage() {
     // =====================================================
 
     const load = async () => {
-        if (!className) { alert("Choose a class first."); return; }
+        if (!className) { toast("Choose a class first."); return; }
         setLoading(true);
         setRecords(null);
         try {
@@ -77,7 +78,7 @@ function AttendanceOverviewPage() {
             });
             setRecords(res.data.records || []);
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to load attendance.");
+            toast(error.response?.data?.message || "Unable to load attendance.");
         } finally {
             setLoading(false);
         }

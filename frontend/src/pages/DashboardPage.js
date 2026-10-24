@@ -1,10 +1,26 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import DashboardCard from "../components/DashboardCard";
 import api from "../services/api";
 
+// Each stat card deep-links to the page where the number is
+// actionable, so the dashboard becomes a control panel.
+const CARD_ROUTES = {
+    "Students": "/students",
+    "Teachers": "/teacher-management",
+    "Total Fees": "/fees",
+    "Fee Collection": "/payments",
+    "Pending Fees": "/payments",
+    "School Expenses": "/expenses",
+    "Net Balance": "/reports",
+    "Total Payments": "/payments",
+    "Expense Transactions": "/expenses"
+};
+
 function DashboardPage() {
+    const navigate = useNavigate();
     const [summary, setSummary] = useState({
         academicYear: "",
         totalStudents: 0,
@@ -80,8 +96,22 @@ function DashboardPage() {
                 <Sidebar />
                 <div className="main-content">
                     <Navbar />
-                    <div className="page-content" style={{ padding: "40px", textAlign: "center" }}>
-                        <p>Loading dashboard...</p>
+                    <div className="page-content">
+                        <div className="p-skeleton p-skeleton-line short" />
+                        <div className="cards" style={{ marginTop: "18px" }}>
+                            {Array.from({ length: 5 }).map((_, i) => (
+                                <div key={i} className="p-skeleton p-skeleton-card" />
+                            ))}
+                        </div>
+                        <div className="cards" style={{ marginTop: "20px" }}>
+                            {Array.from({ length: 4 }).map((_, i) => (
+                                <div key={i} className="p-skeleton p-skeleton-card" />
+                            ))}
+                        </div>
+                        <div className="dashboard-grid" style={{ marginTop: "24px" }}>
+                            <div className="p-skeleton p-skeleton-table" />
+                            <div className="p-skeleton p-skeleton-table" />
+                        </div>
                     </div>
                 </div>
             </div>
@@ -107,19 +137,19 @@ function DashboardPage() {
 
                     {/* First Row of Cards */}
                     <div className="cards">
-                        <DashboardCard title="Students" value={summary.totalStudents} icon="👨‍🎓" color="#2563EB" />
-                        <DashboardCard title="Teachers" value={summary.totalTeachers} icon="🧑‍🏫" color="#0EA5E9" />
-                        <DashboardCard title="Total Fees" value={money(summary.totalFee)} icon="📚" color="#7C3AED" />
-                        <DashboardCard title="Fee Collection" value={money(summary.totalCollection)} icon="💰" color="#22C55E" />
-                        <DashboardCard title="Pending Fees" value={money(summary.pendingFees)} icon="⚠️" color="#DC2626" />
+                        <DashboardCard title="Students" value={summary.totalStudents} icon="👨‍🎓" color="var(--navy)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Students"])} />
+                        <DashboardCard title="Teachers" value={summary.totalTeachers} icon="🧑‍🏫" color="var(--navy)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Teachers"])} />
+                        <DashboardCard title="Total Fees" value={money(summary.totalFee)} icon="📚" color="var(--navy)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Total Fees"])} />
+                        <DashboardCard title="Fee Collection" value={money(summary.totalCollection)} icon="💰" color="var(--p-slate)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Fee Collection"])} />
+                        <DashboardCard title="Pending Fees" value={money(summary.pendingFees)} icon="⚠️" color="var(--danger)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Pending Fees"])} />
                     </div>
 
                     {/* Second Row of Cards */}
                     <div className="cards" style={{ marginTop: "20px" }}>
-                        <DashboardCard title="School Expenses" value={money(summary.totalExpenseAmount)} icon="💸" color="#EF4444" />
-                        <DashboardCard title="Net Balance" value={money(summary.netBalance)} icon="💵" color="#F59E0B" />
-                        <DashboardCard title="Total Payments" value={summary.totalPayments} icon="🧾" color="#7C3AED" />
-                        <DashboardCard title="Expense Transactions" value={summary.totalExpenses} icon="📋" color="#EA580C" />
+                        <DashboardCard title="School Expenses" value={money(summary.totalExpenseAmount)} icon="💸" color="var(--p-slate)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["School Expenses"])} />
+                        <DashboardCard title="Net Balance" value={money(summary.netBalance)} icon="💵" color="var(--p-slate)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Net Balance"])} />
+                        <DashboardCard title="Total Payments" value={summary.totalPayments} icon="🧾" color="var(--p-slate)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Total Payments"])} />
+                        <DashboardCard title="Expense Transactions" value={summary.totalExpenses} icon="📋" color="var(--p-slate)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Expense Transactions"])} />
                     </div>
 
                     {/* Tables Section */}

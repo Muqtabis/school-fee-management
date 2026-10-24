@@ -1,3 +1,4 @@
+import { toast } from "../services/notify";
 import {
     useState
 } from "react";
@@ -157,7 +158,7 @@ export default function LoginPage() {
             // INVALID ROLE
             // =================================================
 
-            alert(
+            toast(
                 "Your account does not have a valid system role."
             );
 
@@ -181,7 +182,7 @@ export default function LoginPage() {
             );
 
 
-            alert(
+            toast(
                 err.response?.data?.message ||
                 "Login Failed"
             );

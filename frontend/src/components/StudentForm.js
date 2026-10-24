@@ -1,5 +1,7 @@
+import { toast } from "../services/notify";
 import { useEffect, useState, useMemo } from "react";
 import api from "../services/api";
+import useModalBehavior from "./useModalBehavior";
 
 function StudentForm({ student, onClose }) {
     const [formData, setFormData] = useState({
@@ -139,7 +141,7 @@ function StudentForm({ student, onClose }) {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!formData.studentName.trim() || !formData.rollNumber.trim() || !formData.className) {
-            alert("Please fill in all required fields.");
+            toast("Please fill in all required fields.");
             return;
         }
 
@@ -160,15 +162,19 @@ function StudentForm({ student, onClose }) {
 
             onClose();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to save student.");
+            toast(error.response?.data?.message || "Unable to save student.");
         } finally {
             setLoading(false);
         }
     };
 
+    // Requirement 3: native-dialog behavior (Escape / backdrop /
+    // focus trap / scroll lock) for this legacy overlay.
+    const { overlayRef, contentRef, handleOverlayClick } = useModalBehavior(onClose);
+
     return (
-        <div className="modal-overlay">
-            <div className="student-modal" style={{ maxWidth: "800px", maxHeight: "90vh", overflowY: "auto" }}>
+        <div className="modal-overlay" ref={overlayRef} onClick={handleOverlayClick}>
+            <div ref={contentRef} className="student-modal" role="dialog" aria-modal="true" style={{ maxWidth: "800px", maxHeight: "90vh", overflowY: "auto" }}>
                 <div className="modal-header" style={{ position: "sticky", top: 0, backgroundColor: "#fff", zIndex: 10 }}>
                     <div>
                         <h2>{student ? "Edit Student" : "Register New Student"}</h2>

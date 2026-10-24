@@ -1,3 +1,4 @@
+import { toast } from "../services/notify";
 import { useEffect, useState } from "react";
 
 import Sidebar from "../components/Sidebar";
@@ -26,7 +27,7 @@ function MyAttendancePage() {
                 setRecords(res.data.records || []);
                 setRange({ from: res.data.from, to: res.data.to });
             } catch (error) {
-                alert(error.response?.data?.message || "Unable to load your attendance.");
+                toast(error.response?.data?.message || "Unable to load your attendance.");
             } finally {
                 setLoading(false);
             }

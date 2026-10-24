@@ -2,9 +2,19 @@
 <html lang="en">
 <head>
   <meta charset='UTF-8'>
-  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-  <meta name="theme-color" content="#0f2f5a" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#243447" />
   <title>THE AGE SCHOOL</title>
+  <script>
+    // Pre-paint theme: saved manual choice, else system preference.
+    try {
+      var __theme = localStorage.getItem("theme-preference");
+      if (__theme !== "dark" && __theme !== "light") {
+        __theme = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+      }
+      document.documentElement.setAttribute("data-theme", __theme);
+    } catch (e) { /* storage unavailable — default light */ }
+  </script>
 </head>
 <body>
   <div id='root'></div>

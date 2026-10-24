@@ -16,6 +16,11 @@ import { UIProvider }
 
 import "./styles/index.css";
 
+// Platform design system (Windows / Android / iOS responsive
+// layer, automatic dark mode, centered modal styles). Must
+// load AFTER index.css so its overrides win.
+import "./styles/platform.css";
+
 
 ReactDOM
     .createRoot(

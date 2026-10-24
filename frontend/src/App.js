@@ -71,10 +71,15 @@ import MyAttendancePage
 import ProtectedRoute
     from "./components/ProtectedRoute";
 
+import DialogHost
+    from "./components/DialogHost";
+
 
 function App() {
 
     return (
+
+        <>
 
         <Routes>
 
@@ -468,6 +473,10 @@ function App() {
             />
 
         </Routes>
+
+        <DialogHost />
+
+        </>
 
     );
 

@@ -1,5 +1,7 @@
+import { toast } from "../services/notify";
 import { useEffect, useState, useMemo } from "react";
 import api from "../services/api";
+import useModalBehavior from "./useModalBehavior";
 
 function PaymentForm({ onClose }) {
     const [students, setStudents] = useState([]);
@@ -255,9 +257,9 @@ function PaymentForm({ onClose }) {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        if (!activeYear) return alert("There is no active academic year.");
-        if (!formData.className || !formData.studentId) return alert("Please select a class and a student.");
-        if (!formData.amount || Number(formData.amount) <= 0) return alert("Please check and specify amounts to collect.");
+        if (!activeYear) return toast("There is no active academic year.");
+        if (!formData.className || !formData.studentId) return toast("Please select a class and a student.");
+        if (!formData.amount || Number(formData.amount) <= 0) return toast("Please check and specify amounts to collect.");
 
         const lineItems = Object.entries(selectedComponents)
             .filter(([_, amt]) => Number(amt) > 0)
@@ -279,7 +281,7 @@ function PaymentForm({ onClose }) {
             onClose();
         } catch (error) {
             console.error("Payment error:", error);
-            alert(error.response?.data?.message || "Unable to save payment.");
+            toast(error.response?.data?.message || "Unable to save payment.");
         } finally {
             setLoading(false);
         }
@@ -287,9 +289,13 @@ function PaymentForm({ onClose }) {
 
     const money = (value) => `₹${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+    // Requirement 3: native-dialog behavior (Escape / backdrop /
+    // focus trap / scroll lock) for this legacy overlay.
+    const { overlayRef, contentRef, handleOverlayClick } = useModalBehavior(onClose);
+
     return (
-        <div className="modal-overlay">
-            <div className="payment-modal" style={{ maxWidth: "650px", maxHeight: "90vh", overflowY: "auto" }}>
+        <div className="modal-overlay" ref={overlayRef} onClick={handleOverlayClick}>
+            <div ref={contentRef} className="payment-modal" role="dialog" aria-modal="true" style={{ maxWidth: "650px", maxHeight: "90vh", overflowY: "auto" }}>
                 <div className="modal-header" style={{ position: "sticky", top: 0, backgroundColor: "#fff", zIndex: 10 }}>
                     <div>
                         <h2>Collect Fee</h2>

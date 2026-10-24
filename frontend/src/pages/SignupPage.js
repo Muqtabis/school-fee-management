@@ -1,3 +1,4 @@
+import { toast } from "../services/notify";
 import { useState } from "react";
 
 import { Link, useNavigate } from "react-router-dom";
@@ -44,7 +45,7 @@ export default function SignupPage() {
 
             await api.post("/auth/signup", form);
 
-            alert("Account Created");
+            toast("Account Created");
 
             navigate("/login");
 
@@ -52,7 +53,7 @@ export default function SignupPage() {
 
         catch (err) {
 
-            alert(
+            toast(
 
                 err.response?.data?.message ||
 

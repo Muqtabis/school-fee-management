@@ -1,8 +1,11 @@
+import { toast, confirmDialog } from "../services/notify";
 import { useEffect, useState, useRef } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import StudentForm from "../components/StudentForm";
 import StudentSearch from "../components/StudentSearch";
+import OverlayDialog from "../components/OverlayDialog";
+import PromptDialog from "../components/PromptDialog";
 import api from "../services/api";
 
 const formatClass = (c) => {
@@ -124,37 +127,46 @@ function StudentsPage() {
 
     const handleEdit = (student) => {
         if (student.status === "archived") {
-            alert("Archived students cannot be edited. Restore the student first.");
+            toast("Archived students cannot be edited. Restore the student first.");
             return;
         }
         setSelectedStudent(student);
         setShowForm(true);
     };
 
-    const handleArchive = async (student) => {
-        const reason = window.prompt(`Why are you archiving ${student.studentName}?`);
-        if (!reason || !reason.trim()) return;
+    // Archive flow: centered PromptDialog replaces the old
+    // window.prompt + window.confirm pair.
+    const [archiveTarget, setArchiveTarget] = useState(null);
+    const [archiving, setArchiving] = useState(false);
 
-        const confirmed = window.confirm(`Archive ${student.studentName}?\n\nThe student will NOT be deleted. Their fee history will remain.`);
-        if (!confirmed) return;
+    const handleArchive = (student) => {
+        if (student.status === "archived") return;
+        setArchiveTarget(student);
+    };
 
+    const confirmArchive = async (reason) => {
+        if (!archiveTarget) return;
+        setArchiving(true);
         try {
-            await api.post(`/students/${student.id}/archive`, { reason: reason.trim() });
-            alert("Student archived successfully.");
+            await api.post(`/students/${archiveTarget.id}/archive`, { reason });
+            setArchiveTarget(null);
+            toast("Student archived successfully.");
             fetchStudents();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to archive student.");
+            toast(error.response?.data?.message || "Unable to archive student.");
+        } finally {
+            setArchiving(false);
         }
     };
 
     const handleRestore = async (student) => {
-        if (!window.confirm(`Restore ${student.studentName}?`)) return;
+        if (!(await confirmDialog({ message: `Restore ${student.studentName}? Their fee history and active status will be available again.`, confirmLabel: "Restore" }))) return;
         try {
             await api.post(`/students/${student.id}/restore`);
-            alert("Student restored successfully.");
+            toast("Student restored successfully.");
             fetchStudents();
         } catch (error) {
-            alert(error.response?.data?.message || "Unable to restore student.");
+            toast(error.response?.data?.message || "Unable to restore student.");
         }
     };
 
@@ -178,7 +190,7 @@ function StudentsPage() {
             const res = await api.post("/students/import", formData, {
                 headers: { "Content-Type": "multipart/form-data" }
             });
-            alert(res.data.message || "Import successful!");
+            toast(res.data.message || "Import successful!");
             
             // AUTOMATICALLY REFRESH BOTH TABLES AFTER IMPORT
             fetchStudents(); 
@@ -186,7 +198,7 @@ function StudentsPage() {
             
         } catch (error) {
             console.error("Import error:", error);
-            alert(error.response?.data?.message || "Failed to import students.");
+            toast(error.response?.data?.message || "Failed to import students.");
         } finally {
             setIsImporting(false);
             if (fileInputRef.current) fileInputRef.current.value = ""; // Reset the input
@@ -194,7 +206,7 @@ function StudentsPage() {
     };
 
     return (
-        <div className="dashboard">
+        <div className="dashboard p-cta-page">
             <Sidebar />
 
             <div className="main-content">
@@ -342,6 +354,15 @@ function StudentsPage() {
             </div>
 
             {/* MODALS */}
+            <button
+                type="button"
+                className="p-mobile-cta"
+                onClick={handleAddStudent}
+                aria-label="Add Student"
+            >
+                ＋ Add Student
+            </button>
+
             {showForm && (
                 <StudentForm
                     student={selectedStudent}
@@ -360,6 +381,19 @@ function StudentsPage() {
                     onClose={() => setDetailView(null)}
                 />
             )}
+
+            <PromptDialog
+                open={!!archiveTarget}
+                onClose={() => setArchiveTarget(null)}
+                onConfirm={confirmArchive}
+                title={archiveTarget ? `Archive ${archiveTarget.studentName}?` : ""}
+                message="The student will NOT be deleted. Their fee history will remain. A reason is required."
+                multiline
+                requireValue
+                placeholder="Reason for archiving (required)"
+                confirmLabel="Archive"
+                busy={archiving}
+            />
         </div>
     );
 }
@@ -428,7 +462,7 @@ function StudentDetailModal({ student, initialTab = "overview", onClose }) {
             window.URL.revokeObjectURL(url);
         } catch (error) {
             console.error("Download report card error:", error);
-            alert(error?.response?.data?.message || "Unable to download report card.");
+            toast(error?.response?.data?.message || "Unable to download report card.");
         } finally {
             setDlExamId(null);
         }
@@ -475,7 +509,7 @@ function StudentDetailModal({ student, initialTab = "overview", onClose }) {
     );
 
     return (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "16px" }}>
+        <OverlayDialog onClose={onClose} ariaLabel="Student detail">
             <div style={{ backgroundColor: "#ffffff", borderRadius: "14px", width: "100%", maxWidth: "720px", maxHeight: "92vh", display: "flex", flexDirection: "column", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)", overflow: "hidden" }}>
 
                 {/* Header Strip */}
@@ -597,7 +631,7 @@ function StudentDetailModal({ student, initialTab = "overview", onClose }) {
                     <button onClick={onClose} style={{ padding: "8px 24px", backgroundColor: "#fff", border: "1px solid #CBD5E1", borderRadius: "6px", cursor: "pointer", fontWeight: "600", color: "#334155" }}>Close</button>
                 </div>
             </div>
-        </div>
+        </OverlayDialog>
     );
 }
 
