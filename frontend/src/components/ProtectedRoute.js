@@ -76,7 +76,9 @@ export default function ProtectedRoute({
         // Redirect to the first page this user can open.
         const firstAllowed = APP_PAGES.find(
             (page) => allowedPages.includes(page.key)
-        );
+        // Settings is open to everyone — a user with no other
+        // grants still has somewhere to land.
+        ) || APP_PAGES.find((page) => page.key === "settings");
 
         if (firstAllowed) {
             return (

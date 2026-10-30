@@ -1,5 +1,5 @@
 import { toast, confirmDialog } from "../services/notify";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import StudentForm from "../components/StudentForm";
@@ -17,18 +17,26 @@ const formatClass = (c) => {
 
 function StudentsPage() {
     const [students, setStudents] = useState([]);
-    const [filteredStudents, setFilteredStudents] = useState([]);
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [showForm, setShowForm] = useState(false);
     
     const [classes, setClasses] = useState([]);
     
     const [selectedClass, setSelectedClass] = useState("All");
+    const [selectedCategory, setSelectedCategory] = useState("All");
     const [searchKeyword, setSearchKeyword] = useState("");
     const [sortBy, setSortBy] = useState("roll");
-    // Unified detail view: { student, tab } — tab is "overview" | "fees".
-    const [detailView, setDetailView] = useState(null);
+    // Unified detail view: { studentId, tab } — tab is "overview" | "fees" | "results".
+    // Only the id is kept; the student object is derived from the live list so the
+    // modal always shows fresh data after any refresh.
+    const [detailState, setDetailState] = useState(null);
     const [showArchived, setShowArchived] = useState(false);
+
+    // The student shown in the detail modal, derived live from the list —
+    // after every refresh the modal re-renders with the latest data.
+    const detailStudent = detailState
+        ? students.find((s) => Number(s.id) === Number(detailState.studentId)) || null
+        : null;
 
     // EXCEL IMPORT STATES & REFS
     const fileInputRef = useRef(null);
@@ -39,6 +47,20 @@ function StudentsPage() {
         fetchClasses();
     }, [showArchived]);
 
+    // Real-time refresh: refetch when the window regains focus and on a gentle
+    // timer, so edits made anywhere show up without a manual page refresh.
+    // The filtered list re-applies itself (derived below), so the view never
+    // jumps back to the unfiltered roster.
+    useEffect(() => {
+        const refresh = () => fetchStudents();
+        window.addEventListener("focus", refresh);
+        const timer = setInterval(refresh, 30000);
+        return () => {
+            window.removeEventListener("focus", refresh);
+            clearInterval(timer);
+        };
+    }, [showArchived]);
+
     const fetchStudents = async () => {
         try {
             const res = await api.get("/students", {
@@ -46,11 +68,9 @@ function StudentsPage() {
             });
             const data = Array.isArray(res.data) ? res.data : [];
             setStudents(data);
-            setFilteredStudents(sortStudents(data, sortBy));
         } catch (error) {
             console.error("Unable to fetch students:", error);
             setStudents([]);
-            setFilteredStudents([]);
         }
     };
 
@@ -83,9 +103,14 @@ function StudentsPage() {
         return copy;
     };
 
-    const filterStudents = (search, classFilter, mode = sortBy) => {
-        const keyword = String(search || "").toLowerCase().trim();
+    // Derived filtered list — the filters live in state and are re-applied
+    // automatically on EVERY refresh (save, archive, import, timer). This is
+    // what keeps the page returning to the same class/category view instead
+    // of falling back to the full roster.
+    const filteredStudents = useMemo(() => {
+        const keyword = String(searchKeyword || "").toLowerCase().trim();
         const result = students.filter((student) => {
+            console.log("Filtering student:", student.studentName, "keyword:", keyword, "class:", selectedClass, "category:", selectedCategory);
             const matchesSearch =
                 !keyword ||
                 student.studentName?.toLowerCase().includes(keyword) ||
@@ -96,34 +121,27 @@ function StudentsPage() {
                 student.contact1?.toLowerCase().includes(keyword) ||
                 student.contact2?.toLowerCase().includes(keyword);
 
-            const matchesClass = classFilter === "All" || student.className === classFilter;
-            return matchesSearch && matchesClass;
+            const matchesClass = selectedClass === "All" || student.className === selectedClass;
+            const matchesCategory =
+                selectedCategory === "All" || (student.studentCategory || "general") === selectedCategory;
+            return matchesSearch && matchesClass && matchesCategory;
         });
-        setFilteredStudents(sortStudents(result, mode));
-    };
+        console.log("Filtered result:", result.length, "of", students.length);
+        return sortStudents(result, sortBy);
+    }, [students, searchKeyword, selectedClass, selectedCategory, sortBy]);
 
-    const handleSearch = (value) => {
-        setSearchKeyword(value);
-        filterStudents(value, selectedClass);
-    };
+    // Plain setters — the actual filtering is derived above.
+    const handleSearch = (value) => setSearchKeyword(value);
 
-    const handleClassChange = (e) => {
-        const value = e.target.value;
-        setSelectedClass(value);
-        filterStudents(searchKeyword, value);
-    };
+    const handleClassChange = (e) => setSelectedClass(e.target.value);
 
-    const handleSortChange = (e) => {
-        const value = e.target.value;
-        setSortBy(value);
-        filterStudents(searchKeyword, selectedClass, value);
-    };
+    const handleCategoryChange = (e) => setSelectedCategory(e.target.value);
 
-    const handleStatusToggle = (archived) => {
-        setShowArchived(archived);
-        setSelectedClass("All");
-        setSearchKeyword("");
-    };
+    const handleSortChange = (e) => setSortBy(e.target.value);
+
+    // Toggling Active/Archived keeps the class/category/search filters, so the
+    // user lands back in the same view they came from.
+    const handleStatusToggle = (archived) => setShowArchived(archived);
 
     const handleEdit = (student) => {
         if (student.status === "archived") {
@@ -277,6 +295,14 @@ function StudentsPage() {
                             })}
                         </select>
 
+                        <select className="filter-select" value={selectedCategory} onChange={handleCategoryChange} style={{ minWidth: "150px" }}>
+                            <option value="All">All Categories</option>
+                            <option value="general">Regular</option>
+                            <option value="rte">RTE</option>
+                            <option value="management">Management</option>
+                            <option value="other">Others</option>
+                        </select>
+
                         <select className="filter-select" value={sortBy} onChange={handleSortChange} style={{ minWidth: "150px" }}>
                             <option value="roll">Sort: Roll No.</option>
                             <option value="name">Sort: Name (A–Z)</option>
@@ -293,6 +319,7 @@ function StudentsPage() {
                                     <th>Roll No.</th>
                                     <th>Student Name</th>
                                     <th>Class</th>
+                                    <th>Category</th>
                                     <th>Contact</th>
                                     <th>Status</th>
                                     <th style={{ textAlign: "right", paddingRight: "20px" }}>Actions</th>
@@ -301,7 +328,7 @@ function StudentsPage() {
                             <tbody>
                                 {filteredStudents.length === 0 ? (
                                     <tr>
-                                        <td colSpan="7" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
+                                        <td colSpan="8" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
                                             {showArchived ? "No archived students found." : "No active students found."}
                                         </td>
                                     </tr>
@@ -312,6 +339,13 @@ function StudentsPage() {
                                             <td data-label="Roll No."><strong>{student.rollNumber || "-"}</strong></td>
                                             <td data-label="Student"><strong>{student.studentName}</strong></td>
                                             <td data-label="Class">{student.className || "-"}</td>
+                                            <td data-label="Category">
+                                                <span className={student.studentCategory === "rte" ? "payment-badge mode-upi" : "payment-badge mode-default"}>
+                                                    {student.studentCategory === "rte" ? "RTE" :
+                                                     student.studentCategory === "management" ? "Management" :
+                                                     student.studentCategory === "other" ? "Others" : "Regular"}
+                                                </span>
+                                            </td>
                                             <td data-label="Contact">
                                                 <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.4 }}>
                                                     <span>{student.contact1 || "-"}</span>
@@ -328,7 +362,7 @@ function StudentsPage() {
                                             <td data-label="" style={{ textAlign: "right" }}>
                                                 <div className="action-buttons" style={{ justifyContent: "flex-end" }}>
                                                     <button
-                                                        onClick={() => setDetailView({ student, tab: "overview" })}
+                                                        onClick={() => setDetailState({ studentId: student.id, tab: "overview" })}
                                                         style={{ background: "#0F172A", border: "1px solid #0F172A", color: "#fff", padding: "6px 14px", borderRadius: "4px", cursor: "pointer", fontSize: "13px", fontWeight: "600" }}
                                                     >
                                                         View Details
@@ -363,6 +397,18 @@ function StudentsPage() {
                 ＋ Add Student
             </button>
 
+            {detailStudent && (
+                <StudentDetailModal
+                    student={detailStudent}
+                    initialTab={detailState.tab}
+                    onClose={() => setDetailState(null)}
+                    onEdit={handleEdit}
+                />
+            )}
+
+            {/* The form renders AFTER the detail modal so it stacks on top when
+                editing from inside the modal; on close both stay in place — the
+                detail view re-renders with the freshly saved data. */}
             {showForm && (
                 <StudentForm
                     student={selectedStudent}
@@ -371,14 +417,6 @@ function StudentsPage() {
                         setSelectedStudent(null);
                         fetchStudents();
                     }}
-                />
-            )}
-
-            {detailView && (
-                <StudentDetailModal
-                    student={detailView.student}
-                    initialTab={detailView.tab}
-                    onClose={() => setDetailView(null)}
                 />
             )}
 
@@ -402,7 +440,7 @@ function StudentsPage() {
 // UNIFIED STUDENT DETAIL MODAL
 // One place for everything: profile + full fee account.
 // =====================================================
-function StudentDetailModal({ student, initialTab = "overview", onClose }) {
+function StudentDetailModal({ student, initialTab = "overview", onClose, onEdit }) {
     const [tab, setTab] = useState(initialTab);
     const [history, setHistory] = useState(null);
     const [loadingFees, setLoadingFees] = useState(true);
@@ -514,7 +552,17 @@ function StudentDetailModal({ student, initialTab = "overview", onClose }) {
 
                 {/* Header Strip */}
                 <div style={{ backgroundColor: "#0F172A", padding: "24px", color: "#fff", position: "relative" }}>
-                    <button onClick={onClose} style={{ position: "absolute", top: "16px", right: "16px", background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", width: "30px", height: "30px", borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>✕</button>
+                    <div style={{ position: "absolute", top: "16px", right: "16px", display: "flex", gap: "8px", alignItems: "center" }}>
+                        {student.status !== "archived" && onEdit && (
+                            <button
+                                onClick={() => onEdit(student)}
+                                style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", padding: "6px 14px", borderRadius: "6px", cursor: "pointer", fontSize: "13px", fontWeight: "600" }}
+                            >
+                                Edit
+                            </button>
+                        )}
+                        <button onClick={onClose} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", width: "30px", height: "30px", borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>✕</button>
+                    </div>
                     <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
                         <div style={{ width: "64px", height: "64px", backgroundColor: "#334155", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", fontWeight: "bold", border: "2px solid #64748B" }}>
                             {student.studentName.charAt(0)}
@@ -555,6 +603,13 @@ function StudentDetailModal({ student, initialTab = "overview", onClose }) {
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
                                 <div><Label>Admission No.</Label><Value>{student.admissionNumber}</Value></div>
                                 <div><Label>SATS No.</Label><Value>{student.satsNumber}</Value></div>
+                                <div><Label>Student Category</Label><Value>
+                                    <span className={student.studentCategory === "rte" ? "payment-badge mode-upi" : "payment-badge mode-default"}>
+                                        {student.studentCategory === "rte" ? "RTE" :
+                                         student.studentCategory === "management" ? "Management" :
+                                         student.studentCategory === "other" ? "Others" : "Regular"}
+                                    </span>
+                                </Value></div>
                                 <div><Label>Enrollment Date</Label><Value>{student.createdAt ? new Date(student.createdAt).toLocaleDateString() : "-"}</Value></div>
                             </div>
 

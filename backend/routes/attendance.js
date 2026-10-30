@@ -4,21 +4,23 @@ const router = express.Router();
 const attendanceController = require("../controllers/attendanceController");
 
 const {
-    requireTeacher,
-    requirePage
+    requireRole,
+    requirePage,
+    requireAnyPage
 } = require("../middleware/authMiddleware");
 
 
 // =====================================================
-// TEACHER SELF-VIEW (read-only)
+// TEACHER / STAFF SELF-VIEW (read-only)
 //
-// Any teacher (or admin) may read their own attendance.
-// Declared BEFORE the marker page gate below.
+// Any logged-in staff user (teacher, accountant, principal,
+// manager, ...) may read their OWN attendance. Declared
+// BEFORE the marker page gate below.
 // =====================================================
 
 router.get(
     "/mine",
-    requireTeacher,
+    requireRole("admin", "teacher", "accountant", "principal", "manager"),
     attendanceController.getMyAttendance
 );
 
@@ -54,6 +56,16 @@ router.get(
     "/summary",
     requirePage("teacher_attendance"),
     attendanceController.getAttendanceSummary
+);
+
+// =====================================================
+// ATTENDANCE OVERVIEW
+// =====================================================
+// Shared with Student Attendance page
+router.get(
+    "/overview",
+    requireAnyPage("teacher_attendance", "attendance_overview"),
+    attendanceController.getAttendanceOverview
 );
 
 

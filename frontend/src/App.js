@@ -41,6 +41,9 @@ import UsersPage
 import FeesPage
     from "./pages/FeesPage";
 
+import FeeConcessionPage
+    from "./pages/FeeConcessionPage";
+
 import ClassManagementPage
     from "./pages/ClassManagementPage";
 
@@ -171,7 +174,7 @@ function App() {
 
             {/* =================================================
                 STUDENTS
-                ADMIN + RECEPTIONIST
+                ADMIN + STAFF
             ================================================= */}
 
             <Route
@@ -190,7 +193,7 @@ function App() {
 
             {/* =================================================
                 FEES
-                ADMIN + RECEPTIONIST
+                ADMIN + STAFF
             ================================================= */}
 
             <Route
@@ -208,8 +211,28 @@ function App() {
 
 
             {/* =================================================
+                FEE CONCESSIONS
+                ADMIN + STAFF (fee_concessions page key)
+                Categorise students & manage fee concessions.
+            ================================================= */}
+
+            <Route
+                path="/fee-concessions"
+                element={
+
+                    <ProtectedRoute pageKey="fee_concessions">
+
+                        <FeeConcessionPage />
+
+                    </ProtectedRoute>
+
+                }
+            />
+
+
+            {/* =================================================
                 PAYMENTS
-                ADMIN + RECEPTIONIST
+                ADMIN + STAFF
             ================================================= */}
 
             <Route
@@ -228,7 +251,7 @@ function App() {
 
             {/* =================================================
                 EXPENSES
-                ADMIN + RECEPTIONIST
+                ADMIN + STAFF
             ================================================= */}
 
             <Route
@@ -401,7 +424,7 @@ function App() {
 
             {/* =================================================
                 NOTIFICATIONS
-                ADMIN + RECEPTIONIST
+                ADMIN + STAFF
             ================================================= */}
 
             <Route
@@ -420,7 +443,7 @@ function App() {
 
             {/* =================================================
                 SETTINGS
-                ADMIN + RECEPTIONIST
+                ADMIN + STAFF
             ================================================= */}
 
             <Route

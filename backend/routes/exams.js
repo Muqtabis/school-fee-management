@@ -7,14 +7,25 @@ const gradingController = require("../controllers/gradingController");
 const coScholasticController = require("../controllers/coScholasticController");
 
 const {
-    requireAdmin,
-    requireTeacher,
-    requirePage
+    requireRole,
+    requirePage,
+    requireAnyPage
 } = require("../middleware/authMiddleware");
 
 // Guard shorthands: the two audiences for this router.
-const teacher = [requireTeacher, requirePage("marks_entry")];
-const admin = [requireAdmin, requirePage("exam_results")];
+// Marks Entry stays teacher-scoped inside the controller
+// (a principal/manager granted the page sees an empty
+// list rather than another teacher's work).
+const teacher = [
+    requireRole("admin", "teacher", "principal", "manager"),
+    requirePage("marks_entry")
+];
+// Exam & Results management: admin, or principal/manager
+// granted the "exam_results" page.
+const examAdmin = [
+    requireRole("admin", "principal", "manager"),
+    requirePage("exam_results")
+];
 
 
 // =====================================================
@@ -49,40 +60,42 @@ router.put("/:examId/term-meta", teacher, coScholasticController.saveTermMeta);
 // =====================================================
 
 // Grading scales (configurable grading).
-router.get("/grading-scales", admin, gradingController.getGradingScales);
-router.post("/grading-scales", admin, gradingController.createGradingScale);
-router.put("/grading-scales/:id", admin, gradingController.updateGradingScale);
-router.delete("/grading-scales/:id", admin, gradingController.deleteGradingScale);
+router.get("/grading-scales", examAdmin, gradingController.getGradingScales);
+router.post("/grading-scales", examAdmin, gradingController.createGradingScale);
+router.put("/grading-scales/:id", examAdmin, gradingController.updateGradingScale);
+router.delete("/grading-scales/:id", examAdmin, gradingController.deleteGradingScale);
 
 // Exam definitions (the exam as a whole, spanning classes).
-router.get("/definitions", requireTeacher, requirePage("marks_entry"), examController.getExamDefinitions);
-router.get("/definitions/:definitionId", admin, examController.getExamDefinition);
+// Shared by Marks Entry, Exam & Results AND Results Overview,
+// so any of those page grants opens it.
+router.get("/definitions", requireRole("admin", "teacher", "principal", "manager"), requireAnyPage("marks_entry", "exam_results", "results_overview"), examController.getExamDefinitions);
+router.get("/definitions/:definitionId", examAdmin, examController.getExamDefinition);
 
 // A student's structured result history across exams.
-router.get("/students/:studentId/results", admin, resultController.getStudentResultHistory);
+router.get("/students/:studentId/results", examAdmin, resultController.getStudentResultHistory);
 
 // Create an exam (definition + one child exam per class).
-router.post("/", admin, examController.createExam);
+router.post("/", examAdmin, examController.createExam);
 
 // Per-exam (child, per-class) admin operations.
-router.get("/:examId/subjects", admin, examController.getExamSubjects);
-router.put("/:examId/subjects", admin, examController.updateExamSubjects);
-router.post("/:examId/unlock", admin, examController.unlockExam);
+router.get("/:examId/subjects", examAdmin, examController.getExamSubjects);
+router.put("/:examId/subjects", examAdmin, examController.updateExamSubjects);
+router.post("/:examId/unlock", examAdmin, examController.unlockExam);
 
-router.get("/:examId/results", admin, resultController.getExamResults);
-router.post("/:examId/publish", admin, resultController.publishExam);
+router.get("/:examId/results", requireRole("admin", "principal", "manager"), requireAnyPage("exam_results", "results_overview"), resultController.getExamResults);
+router.post("/:examId/publish", examAdmin, resultController.publishExam);
 
-router.post("/:examId/deliver", admin, resultController.deliverResults);
-router.post("/:examId/deliver/:studentId", admin, resultController.resendResult);
-router.get("/:examId/notifications", admin, resultController.getExamNotifications);
+router.post("/:examId/deliver", examAdmin, resultController.deliverResults);
+router.post("/:examId/deliver/:studentId", examAdmin, resultController.resendResult);
+router.get("/:examId/notifications", examAdmin, resultController.getExamNotifications);
 
-router.get("/:examId/corrections", admin, resultController.getCorrections);
-router.post("/:examId/corrections", admin, resultController.correctMark);
+router.get("/:examId/corrections", examAdmin, resultController.getCorrections);
+router.post("/:examId/corrections", examAdmin, resultController.correctMark);
 
-router.get("/:examId/report-card/:studentId", admin, resultController.getReportCard);
+router.get("/:examId/report-card/:studentId", examAdmin, resultController.getReportCard);
 
 // All students' cards for the exam's class, one combined PDF.
-router.get("/:examId/report-cards", admin, resultController.getClassReportCards);
+router.get("/:examId/report-cards", examAdmin, resultController.getClassReportCards);
 
 
 module.exports = router;

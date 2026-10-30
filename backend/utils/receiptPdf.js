@@ -91,11 +91,15 @@ function generateReceiptBuffer(data) {
             // ---- Line items table ----
             const tableTop = doc.y + 5;
             const colItem = 50;
-            const colAmt = 420;
+            const colAmt = 380;
+            const colMode = 420;
+            const colDate = 500;
 
             doc.font("Helvetica-Bold").fontSize(11);
             doc.text("Fee Component", colItem, tableTop);
-            doc.text("Amount", colAmt, tableTop, { width: 125, align: "right" });
+            doc.text("Amount", colAmt, tableTop, { width: 80, align: "right" });
+            doc.text("Mode", colMode, tableTop, { width: 70, align: "left" });
+            doc.text("Date", colDate, tableTop, { width: 60, align: "right" });
             doc.moveTo(colItem, tableTop + 15).lineTo(545, tableTop + 15).stroke();
 
             let y = tableTop + 22;
@@ -104,14 +108,29 @@ function generateReceiptBuffer(data) {
             const lineItems = Array.isArray(payment.lineItems) ? payment.lineItems : [];
             if (lineItems.length > 0) {
                 lineItems.forEach((li) => {
-                    doc.text(li.componentName || "Fee", colItem, y, { width: 350 });
-                    doc.text(money(li.amount), colAmt, y, { width: 125, align: "right" });
+                    const mode = li.mode || payment.paymentMode || "Cash";
+                    const paidOn = li.paidOn || payment.paymentDate || "";
+                    const dateStr = paidOn ? new Date(paidOn).toLocaleDateString("en-IN") : "-";
+                    doc.text(li.componentName || "Fee", colItem, y, { width: 330 });
+                    doc.text(money(li.amount), colAmt, y, { width: 80, align: "right" });
+                    doc.text(mode, colMode, y, { width: 70 });
+                    doc.text(dateStr, colDate, y, { width: 60, align: "right" });
+                    // Reference / remark line if present
+                    if ((li.reference && li.reference.trim()) || (li.remark && li.remark.trim())) {
+                        y += 15;
+                        doc.fontSize(9).fillColor("#64748B");
+                        const ref = [li.reference && `Ref: ${li.reference}`, li.remark && `Remark: ${li.remark}`].filter(Boolean).join(" | ");
+                        doc.text(ref, colItem + 10, y, { width: 470 });
+                        doc.fontSize(11).fillColor("#000000");
+                    }
                     y += 20;
                 });
             } else {
                 // Un-itemized (legacy) payment — show the lump sum.
-                doc.text("Fee Payment", colItem, y, { width: 350 });
-                doc.text(money(payment.amount), colAmt, y, { width: 125, align: "right" });
+                doc.text("Fee Payment", colItem, y, { width: 330 });
+                doc.text(money(payment.amount), colAmt, y, { width: 80, align: "right" });
+                doc.text(payment.paymentMode || "Cash", colMode, y, { width: 70 });
+                doc.text(payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString("en-IN") : "-", colDate, y, { width: 60, align: "right" });
                 y += 20;
             }
 
@@ -121,11 +140,16 @@ function generateReceiptBuffer(data) {
             // ---- This payment total ----
             doc.font("Helvetica-Bold").fontSize(12);
             doc.text("Amount Paid", colItem, y);
-            doc.text(money(payment.amount), colAmt, y, { width: 125, align: "right" });
+            doc.text(money(payment.amount), colAmt, y, { width: 80, align: "right" });
             y += 24;
 
             doc.font("Helvetica").fontSize(11);
-            doc.text(`Payment Mode: ${(payment.paymentMode || "Cash")}`, colItem, y);
+            // Show overall payment mode summary if mixed
+            const modes = new Set(
+                lineItems.map(li => li.mode || payment.paymentMode || "Cash")
+            );
+            const modeSummary = modes.size > 1 ? Array.from(modes).join(", ") : (payment.paymentMode || "Cash");
+            doc.text(`Payment Mode: ${modeSummary}`, colItem, y);
             y += 18;
             if (payment.remarks) {
                 doc.text(`Remarks: ${payment.remarks}`, colItem, y, { width: 495 });

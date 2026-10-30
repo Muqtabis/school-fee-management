@@ -16,14 +16,16 @@ const {
 
 
 // =====================================================
-// ADMIN + RECEPTIONIST, WITH "expenses" PAGE ACCESS
+// ADMIN + STAFF, WITH "expenses" PAGE ACCESS
 // (admin bypasses the page check)
 // =====================================================
 
 router.use(
     requireRole(
         "admin",
-        "receptionist"
+        "accountant",
+        "principal",
+        "manager"
     )
 );
 
@@ -34,7 +36,7 @@ router.use(
 
 // =====================================================
 // LIST
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // =====================================================
 
 router.get(
@@ -45,7 +47,7 @@ router.get(
 
 // =====================================================
 // EXPENSE SUMMARY
-// ADMIN ONLY
+// ADMIN ONLY (finance)
 // =====================================================
 
 router.get(
@@ -57,7 +59,7 @@ router.get(
 
 // =====================================================
 // EXPENSE CATEGORIES (dynamic)
-// LIST: admin + receptionist  |  MUTATE: admin only
+// LIST: admin + staff  |  MUTATE: admin only (finance)
 // Declared before "/:id" so "categories" isn't captured as an id.
 // =====================================================
 
@@ -87,7 +89,7 @@ router.delete(
 
 // =====================================================
 // SINGLE EXPENSE
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // =====================================================
 
 router.get(
@@ -98,7 +100,7 @@ router.get(
 
 // =====================================================
 // CREATE EXPENSE
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // =====================================================
 
 router.post(
@@ -109,7 +111,7 @@ router.post(
 
 // =====================================================
 // EDIT EXPENSE
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // =====================================================
 
 router.put(
@@ -120,7 +122,7 @@ router.put(
 
 // =====================================================
 // REVERSE EXPENSE
-// ADMIN ONLY
+// ADMIN ONLY (finance)
 // =====================================================
 
 router.post(

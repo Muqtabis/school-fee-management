@@ -20,87 +20,110 @@ const PAGES = [
     {
         key: "dashboard",
         label: "Dashboard",
-        path: "/dashboard"
+        path: "/dashboard",
+        description: "Main overview with key metrics, summaries, and quick actions."
     },
     {
         key: "students",
         label: "Students",
-        path: "/students"
+        path: "/students",
+        description: "View, add, edit, import, and categorize student records."
+    },
+    {
+        key: "fee_concessions",
+        label: "Fee Concessions",
+        path: "/fee-concessions",
+        description: "Manage student fee categories (Regular, RTE, Management, Others) and grant fee waivers."
     },
     {
         key: "fees",
         label: "Fee Management",
-        path: "/fees"
+        path: "/fees",
+        description: "Define fee structures, manage academic years, and configure class-wise fees."
     },
     {
         key: "payments",
         label: "Payments",
-        path: "/payments"
+        path: "/payments",
+        description: "Record fee payments, view receipts, and track payment history."
     },
     {
         key: "expenses",
         label: "Expenses",
-        path: "/expenses"
+        path: "/expenses",
+        description: "Log school expenses, track budgets, and manage vendor payments."
     },
     {
         key: "reports",
         label: "Reports",
-        path: "/reports"
+        path: "/reports",
+        description: "Generate comprehensive financial and student attendance reports."
     },
     {
         key: "notifications",
         label: "Notifications",
-        path: "/notifications"
+        path: "/notifications",
+        description: "Send announcements, reminders, and alerts to staff and parents."
     },
     {
         key: "settings",
         label: "Settings",
-        path: "/settings"
+        path: "/settings",
+        description: "Update your profile information and change your password."
     },
     {
         key: "users",
         label: "Users",
-        path: "/users"
+        path: "/users",
+        description: "Manage staff accounts, roles, and page access permissions."
     },
     {
         key: "class_management",
         label: "Class Management",
-        path: "/class-management"
+        path: "/class-management",
+        description: "Create classes, assign sections, and manage class-related settings."
     },
     {
         key: "teacher_management",
         label: "Teacher Management",
-        path: "/teacher-management"
+        path: "/teacher-management",
+        description: "Manage teacher profiles, class assignments, and subject linkages."
     },
     {
         key: "student_attendance",
         label: "Student Attendance",
-        path: "/student-attendance"
+        path: "/student-attendance",
+        description: "Mark and track student attendance by class and date."
     },
     {
         key: "exam_results",
         label: "Exam & Results",
-        path: "/exam-results"
+        path: "/exam-results",
+        description: "Create exams, publish results, and manage report cards."
     },
     {
         key: "results_overview",
         label: "Results Overview",
-        path: "/results-overview"
+        path: "/results-overview",
+        description: "View and analyze student performance across exams and subjects."
     },
     {
         key: "attendance_overview",
         label: "Attendance Overview",
-        path: "/attendance-overview"
+        path: "/attendance-overview",
+        description: "Monitor overall attendance patterns and generate attendance reports."
     },
     {
         key: "marks_entry",
         label: "Marks Entry",
-        path: "/marks-entry"
+        path: "/marks-entry",
+        description: "Enter exam marks, manage co-scholastic grades, and lock submissions."
     },
     {
         key: "teacher_attendance",
-        label: "Teacher Attendance",
-        path: "/teacher-attendance"
+        label: "Staff Attendance",
+        path: "/teacher-attendance",
+        description: "Mark and review attendance for all staff (teachers, accountant, manager, etc.) and generate reports."
     }
 ];
 
@@ -117,36 +140,41 @@ const isValidPageKey = (key) => PAGE_KEYS.includes(key);
 // =====================================================
 // ROLE → GRANTABLE PAGES
 //
-// A page is only grantable to a role whose API routes can
-// actually serve it. Granting a page the role's endpoints
-// reject just produced a sidebar link that 403'd on open,
-// so the admin checklist and the backend both use this map.
+// Which pages the admin checklist offers per role. What each
+// INDIVIDUAL user actually gets is whatever admin ticks in
+// the Users page checklist (user_page_access rows).
 //
-// Derived from the route guards:
-//  - most staff pages are requireRole("admin","receptionist")
-//  - marks_entry is requireTeacher (admin, teacher)
-//  - teacher_attendance is page-gated only (any granted role)
-//  - users / teacher_management / exam_results are admin-only
-//    (not grantable to anyone else)
+//  - accountant keeps the classic staff page set (matches original receptionist)
+//  - principal and manager may be granted ANY registered
+//    page — admin decides per user; route guards accept
+//    them wherever the matching page grant exists
+//  - teacher keeps the teacher page set
 // =====================================================
 
+const STAFF_ROLE_PAGES = [
+    "dashboard",
+    "students",
+    "fees",
+    "payments",
+    "expenses",
+    "teacher_attendance"
+];
+
+const TEACHER_ROLE_PAGES = [
+    "marks_entry",
+    "teacher_attendance",
+    "student_attendance"
+];
+
+// Pages that can NEVER be granted to principal/manager —
+// they stay admin-only no matter what.
+const ADMIN_ONLY_PAGES = ["users"];
+
 const ROLE_PAGE_KEYS = {
-    receptionist: [
-        "dashboard",
-        "students",
-        "fees",
-        "payments",
-        "expenses",
-        "reports",
-        "notifications",
-        "settings",
-        "teacher_attendance"
-    ],
-    teacher: [
-        "marks_entry",
-        "teacher_attendance",
-        "student_attendance"
-    ]
+    accountant: STAFF_ROLE_PAGES,
+    principal: PAGE_KEYS.filter((key) => !ADMIN_ONLY_PAGES.includes(key)),
+    manager: PAGE_KEYS.filter((key) => !ADMIN_ONLY_PAGES.includes(key)),
+    teacher: TEACHER_ROLE_PAGES
 };
 
 // Admin can hold every page; other roles are limited to the

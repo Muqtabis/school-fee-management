@@ -9,6 +9,8 @@ import api from "../services/api";
 
 function FeesPage() {
     const { user } = useAuth();
+    // Finance actions (years, components) stay admin-only;
+    // principal/manager work within the granted structures.
     const isAdmin = user?.role === "admin";
 
     // Data State

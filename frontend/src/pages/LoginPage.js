@@ -112,15 +112,37 @@ export default function LoginPage() {
 
 
             // =================================================
-            // RECEPTIONIST
+            // ACCOUNTANT (formerly "receptionist")
             // =================================================
 
             if (
-                user.role === "receptionist"
+                user.role === "accountant"
             ) {
 
                 navigate(
                     "/fees",
+                    {
+                        replace: true
+                    }
+                );
+
+                return;
+
+            }
+
+
+            // =================================================
+            // PRINCIPAL / MANAGER
+            // Land on Dashboard; ProtectedRoute falls back to
+            // the first page admin actually granted them.
+            // =================================================
+
+            if (
+                user.role === "principal" || user.role === "manager"
+            ) {
+
+                navigate(
+                    "/dashboard",
                     {
                         replace: true
                     }
@@ -261,8 +283,8 @@ export default function LoginPage() {
                         src="/logo.png"
                         alt="The Age School Logo"
                         style={{
-                            width: "65px",
-                            height: "65px",
+                            width: "100px",
+                            height: "100px",
                             objectFit: "contain",
                             margin: "0 auto 12px",
                             display: "block"
@@ -306,7 +328,7 @@ export default function LoginPage() {
                         }}
                     >
 
-                        The Age School ERP
+                        Institute of Pre, Primary and Secondary Education
 
                     </p>
 
@@ -348,7 +370,7 @@ export default function LoginPage() {
                     }}
                 >
 
-                    Enter your ERP account details
+                    Enter your account details
 
                 </p>
 

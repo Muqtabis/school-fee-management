@@ -9,6 +9,14 @@ const { PAGES, isValidPageKey, grantablePagesForRole } = require("../config/page
 const logAudit =
     require("../utils/auditLogger");
 
+// Display label for the manageable (non-admin) roles.
+const roleLabelFor = (role) =>
+    role === "teacher" ? "Teacher" :
+    role === "principal" ? "Principal" :
+    role === "manager" ? "Manager" :
+    role === "accountant" ? "Accountant" :
+    "Staff";
+
 
 // =====================================================
 // GET USERS
@@ -62,7 +70,7 @@ exports.getUsers = (
 
 
 // =====================================================
-// CREATE RECEPTIONIST
+// CREATE STAFF / TEACHER USER
 // ADMIN ONLY
 // =====================================================
 
@@ -107,12 +115,12 @@ exports.createUser = async (
     }
 
 
-    // Admin may create receptionist or teacher accounts.
-    // Absent role defaults to receptionist for backward compatibility
+    // Admin may create accountant, principal, manager or teacher accounts.
+    // Absent role defaults to accountant for backward compatibility
     // with the old create flow (which sent no role). An explicitly
     // supplied role that isn't allowed is rejected rather than silently
     // coerced, so callers aren't surprised by the account they got.
-    const allowedRoles = ["receptionist", "teacher"];
+    const allowedRoles = ["accountant", "principal", "manager", "teacher"];
     if (role !== undefined && role !== null && String(role).trim() !== "" &&
         !allowedRoles.includes(role)) {
         return res.status(400).json({
@@ -120,7 +128,7 @@ exports.createUser = async (
             message: `Invalid role. Allowed roles: ${allowedRoles.join(", ")}.`
         });
     }
-    const newRole = allowedRoles.includes(role) ? role : "receptionist";
+    const newRole = allowedRoles.includes(role) ? role : "accountant";
 
 
     const normalizedEmail =
@@ -219,9 +227,7 @@ exports.createUser = async (
 
 
                         const roleLabel =
-                            newRole === "teacher"
-                                ? "Teacher"
-                                : "Receptionist";
+                            roleLabelFor(newRole);
 
 
                         logAudit({
@@ -315,7 +321,7 @@ exports.createUser = async (
 
 
 // =====================================================
-// RESET RECEPTIONIST PASSWORD
+// RESET STAFF / TEACHER PASSWORD
 // ADMIN ONLY
 // =====================================================
 
@@ -420,18 +426,19 @@ exports.resetPassword = async (
             // Admin cannot use this endpoint
             // to reset another admin's password.
 
-            if (
-                user.role !== "receptionist" &&
-                user.role !== "teacher"
-            ) {
+            const resettableRoles = ["accountant", "principal", "manager", "teacher"];
+
+            if (!resettableRoles.includes(user.role)) {
 
                 return res.status(403).json({
                     success: false,
                     message:
-                        "Only receptionist or teacher passwords can be reset here."
+                        "Only accountant, principal, manager or teacher passwords can be reset here."
                 });
 
             }
+
+            const resetLabel = roleLabelFor(user.role);
 
 
             try {
@@ -505,7 +512,7 @@ exports.resetPassword = async (
                                     success: true,
 
                                     message:
-                                        "Receptionist password reset successfully."
+                                        `${resetLabel} password reset successfully.`
 
                                 });
 
@@ -523,7 +530,7 @@ exports.resetPassword = async (
                                         success: true,
 
                                         message:
-                                            "Receptionist password reset successfully."
+                                            `${resetLabel} password reset successfully.`
 
                                     });
 
@@ -555,7 +562,7 @@ exports.resetPassword = async (
 
 
 // =====================================================
-// DELETE RECEPTIONIST
+// DELETE STAFF / TEACHER USER
 // ADMIN ONLY
 // =====================================================
 
@@ -640,21 +647,22 @@ exports.deleteUser = (
             }
 
 
-            // Only receptionist and teacher accounts
+            // Only staff and teacher accounts
             // can be deleted from Users page.
 
-            if (
-                user.role !== "receptionist" &&
-                user.role !== "teacher"
-            ) {
+            const deletableRoles = ["accountant", "principal", "manager", "teacher"];
+
+            if (!deletableRoles.includes(user.role)) {
 
                 return res.status(403).json({
                     success: false,
                     message:
-                        "Only receptionist or teacher accounts can be deleted."
+                        "Only accountant, principal, manager or teacher accounts can be deleted."
                 });
 
             }
+
+            const deleteLabel = roleLabelFor(user.role);
 
 
             db.run(
@@ -718,7 +726,7 @@ exports.deleteUser = (
                                 success: true,
 
                                 message:
-                                    "Receptionist deleted successfully."
+                                    `${deleteLabel} account deleted successfully.`
 
                             });
 
@@ -736,7 +744,7 @@ exports.deleteUser = (
                                     success: true,
 
                                     message:
-                                        "Receptionist deleted successfully."
+                                        `${deleteLabel} account deleted successfully.`
 
                                 });
 
@@ -1273,11 +1281,12 @@ exports.getMyPages = async (req, res) => {
             pageKeys.push("my_attendance");
         }
 
-        // Every teacher also gets the Settings page (self-service
-        // profile + change-own-password), no admin grant required.
-        // Change-own-password is already open to any authenticated
-        // user server-side; this only surfaces the frontend page.
-        if (req.user.role === "teacher" && !pageKeys.includes("settings")) {
+        // Every non-admin staff user gets the Settings page
+        // (self-service profile + change-own-password), no admin
+        // grant required. Change-own-password is already open to
+        // any authenticated user server-side; this only surfaces
+        // the frontend page.
+        if (req.user.role !== "admin" && !pageKeys.includes("settings")) {
             pageKeys.push("settings");
         }
 

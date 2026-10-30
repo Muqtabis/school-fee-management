@@ -13,10 +13,11 @@ function todayIso() {
     return new Date().toISOString().slice(0, 10);
 }
 
-// Admin always may. A teacher may manage a class only if they are the
-// CLASS TEACHER of it (a teacher_assignments row with role 'class_teacher').
+// Admin and principal/manager always may. A teacher may manage a class
+// only if they are the CLASS TEACHER of it (a teacher_assignments row
+// with role 'class_teacher').
 async function canManageClass(user, className) {
-    if (user.role === "admin") return true;
+    if (user.role === "admin" || user.role === "principal" || user.role === "manager") return true;
     const rows = await allQuery(
         `SELECT 1 FROM teacher_assignments
          WHERE teacherId = ? AND className = ? AND role = 'class_teacher' LIMIT 1`,
@@ -36,7 +37,7 @@ async function canManageClass(user, className) {
 exports.getMyAttendanceClasses = async (req, res) => {
     try {
         let classNames;
-        if (req.user.role === "admin") {
+        if (req.user.role === "admin" || req.user.role === "principal" || req.user.role === "manager") {
             const rows = await allQuery(
                 `SELECT className FROM classes ORDER BY className ASC`
             );

@@ -4,9 +4,10 @@ const router = express.Router();
 const teacherController = require("../controllers/teacherController");
 
 const {
-    requireAdmin,
+    requireRole,
     requireTeacher,
-    requirePage
+    requirePage,
+    requireAnyPage
 } = require("../middleware/authMiddleware");
 
 
@@ -25,32 +26,36 @@ router.get(
 
 
 // =====================================================
-// EVERYTHING BELOW IS TEACHER MANAGEMENT (ADMIN ONLY)
-// Gated by both the admin role and the page permission.
+// EVERYTHING BELOW IS TEACHER MANAGEMENT
+// Role gate: admin, or principal/manager. The page
+// permission is applied PER ROUTE because the subjects
+// catalog is shared with Class Management (either page
+// grant opens it).
 // =====================================================
 
-router.use(requireAdmin);
-router.use(requirePage("teacher_management"));
+router.use(requireRole("admin", "principal", "manager"));
 
 
 // ---- Teachers ----
-router.get("/", teacherController.getTeachers);
+router.get("/", requirePage("teacher_management"), teacherController.getTeachers);
 
 
 // ---- Class assignments (class teacher / general class link) ----
-router.post("/:teacherId/classes", teacherController.assignClass);
-router.delete("/:teacherId/classes", teacherController.unassignClass);
+router.post("/:teacherId/classes", requirePage("teacher_management"), teacherController.assignClass);
+router.delete("/:teacherId/classes", requirePage("teacher_management"), teacherController.unassignClass);
 
 
 // ---- Subject-teacher assignments (standing Teacher -> Subject) ----
-router.post("/:teacherId/subjects", teacherController.assignSubjectTeacher);
-router.delete("/:teacherId/subjects", teacherController.unassignSubjectTeacher);
+router.post("/:teacherId/subjects", requirePage("teacher_management"), teacherController.assignSubjectTeacher);
+router.delete("/:teacherId/subjects", requirePage("teacher_management"), teacherController.unassignSubjectTeacher);
 
 
 // ---- Subjects catalog (retrieved from Class Management) ----
-router.get("/subjects", teacherController.getSubjects);
-router.post("/subjects", teacherController.createSubject);
-router.delete("/subjects/:id", teacherController.deleteSubject);
+// The catalog is edited from BOTH Teacher Management and
+// Class Management, so either page grant opens it.
+router.get("/subjects", requireAnyPage("teacher_management", "class_management"), teacherController.getSubjects);
+router.post("/subjects", requireAnyPage("teacher_management", "class_management"), teacherController.createSubject);
+router.delete("/subjects/:id", requireAnyPage("teacher_management", "class_management"), teacherController.deleteSubject);
 
 
 module.exports = router;

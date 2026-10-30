@@ -29,6 +29,7 @@ import api
 function ExpensesPage() {
 
     const { user } = useAuth();
+    // Finance actions (reverse, categories) stay admin-only.
     const isAdmin = user?.role === "admin";
 
     const [

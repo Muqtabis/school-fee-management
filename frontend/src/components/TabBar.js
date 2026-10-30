@@ -29,7 +29,11 @@ function TabBar() {
 
     const isAdmin = user?.role === "admin";
     const menuItems = APP_PAGES.filter(
-        (page) => isAdmin || allowedPages.includes(page.key)
+        (page) =>
+            isAdmin ||
+            // Settings is open to every user by default.
+            page.key === "settings" ||
+            allowedPages.includes(page.key)
     );
 
     // First four pages sit directly on the bar; everything else
@@ -70,6 +74,18 @@ function TabBar() {
         );
     };
 
+    const renderMoreItem = (item) => (
+        <button
+            key={item.key}
+            type="button"
+            className="app-more-item"
+            onClick={() => go(item.path)}
+        >
+            <span aria-hidden="true">{item.icon}</span>
+            <span>{item.label}</span>
+        </button>
+    );
+
     return (
         <>
             <nav
@@ -99,38 +115,27 @@ function TabBar() {
                 ariaLabel="All pages menu"
             >
                 <div className="app-more-menu">
-                    {ungrouped.length > 0 && (
+                    {!isAdmin ? (
+                        // Non-admin: one flat, always-open list.
                         <div className="app-more-group">
-                            {ungrouped.map((item) => (
-                                <button
-                                    key={item.key}
-                                    type="button"
-                                    className="app-more-item"
-                                    onClick={() => go(item.path)}
-                                >
-                                    <span aria-hidden="true">{item.icon}</span>
-                                    <span>{item.label}</span>
-                                </button>
-                            ))}
+                            {menuItems.map(renderMoreItem)}
                         </div>
-                    )}
+                    ) : (
+                        <>
+                            {ungrouped.length > 0 && (
+                                <div className="app-more-group">
+                                    {ungrouped.map(renderMoreItem)}
+                                </div>
+                            )}
 
-                    {groups.map((g) => (
-                        <div key={g.name} className="app-more-group">
-                            <h3>{g.name}</h3>
-                            {g.items.map((item) => (
-                                <button
-                                    key={item.key}
-                                    type="button"
-                                    className="app-more-item"
-                                    onClick={() => go(item.path)}
-                                >
-                                    <span aria-hidden="true">{item.icon}</span>
-                                    <span>{item.label}</span>
-                                </button>
+                            {groups.map((g) => (
+                                <div key={g.name} className="app-more-group">
+                                    <h3>{g.name}</h3>
+                                    {g.items.map(renderMoreItem)}
+                                </div>
                             ))}
-                        </div>
-                    ))}
+                        </>
+                    )}
 
                     {menuItems.length === 0 && (
                         <p style={{ color: "var(--text-secondary)" }}>

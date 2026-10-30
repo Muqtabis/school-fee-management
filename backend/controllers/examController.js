@@ -42,6 +42,13 @@ async function canTeachClass(user, className) {
     return rows.length > 0;
 }
 
+// Exam management authority: admin, or principal/manager granted the
+// page (the routes already enforce the page grant). The two staff roles
+// work EXAMS AND MARKS like admin: every class, every subject.
+function isExamManager(user) {
+    return !!user && ["admin", "principal", "manager"].includes(user.role);
+}
+
 async function getExam(examId) {
     const rows = await allQuery(
         `SELECT e.id, e.examName, e.className, e.status, e.examDefinitionId,
@@ -109,13 +116,13 @@ async function marksEntered(examId) {
 }
 
 // Which subjectIds may THIS user edit for the exam (spec items 6, 10).
-// Admin: all. Class teacher of the exam's class: all subjects (owns the
-// class). Otherwise a teacher gets ONLY the subjects for which they are the
-// resolved subject teacher (per-exam override, else standing assignment —
-// already resolved into `subjects[].teacherId` by getEffectiveSubjects).
-// Returns a Set of subjectIds.
+// Admin, principal and manager: all (they work like admin). Class teacher
+// of the exam's class: all subjects (owns the class). Otherwise a teacher
+// gets ONLY the subjects for which they are the resolved subject teacher
+// (per-exam override, else standing assignment — already resolved into
+// `subjects[].teacherId` by getEffectiveSubjects). Returns a Set of subjectIds.
 async function teacherEditableSubjectIds(user, exam, subjects) {
-    if (user.role === "admin") return new Set(subjects.map((s) => s.subjectId));
+    if (isExamManager(user)) return new Set(subjects.map((s) => s.subjectId));
     if (await isClassTeacher(user, exam.className)) {
         return new Set(subjects.map((s) => s.subjectId));
     }
@@ -268,11 +275,12 @@ exports.getExamDefinitions = async (req, res) => {
              ORDER BY d.id DESC`
         );
 
-        // Attach child exams (per class). Filter for teachers: a teacher
-        // sees a definition only if it includes a class where they are the
-        // standing subject teacher for at least one subject.
+        // Attach child exams (per class). Filter only for TEACHERS: a
+        // teacher sees a definition only if it includes a class where they
+        // are the standing subject teacher for at least one subject.
+        // Principal/manager work like admin and see every definition.
         let allowedClasses = null;
-        if (req.user.role !== "admin") {
+        if (!isExamManager(req.user)) {
             const rows = await allQuery(
                 `SELECT DISTINCT s.className AS className
                  FROM subject_teacher_assignments sta
@@ -530,7 +538,7 @@ exports.updateExamSubjects = async (req, res) => {
 exports.getExams = async (req, res) => {
     try {
         let exams;
-        if (req.user.role === "admin") {
+        if (isExamManager(req.user)) {
             exams = await allQuery(
                 `SELECT e.id, e.examName, e.className, e.status, e.examDefinitionId,
                         e.createdAt, e.lockedAt, e.publishedAt, d.examType,
@@ -903,6 +911,7 @@ exports._helpers = {
     seedExamSubjects,
     canTeachClass,
     isClassTeacher,
+    isExamManager,
     teacherEditableSubjectIds
 };
 

@@ -20,10 +20,16 @@ function Sidebar() {
     const isAdmin = user?.role === "admin";
 
     const menuItems = APP_PAGES.filter(
-        (page) => isAdmin || allowedPages.includes(page.key)
+        (page) =>
+            isAdmin ||
+            // Settings is open to every user by default.
+            page.key === "settings" ||
+            allowedPages.includes(page.key)
     );
     // Ungrouped items (Dashboard) pin to the top; the rest fall into
     // collapsible sections. The section holding the current route starts open.
+    // ADMIN ONLY: other users get a flat, always-open list instead of
+    // stacked collapsible sections.
     const topItems = menuItems.filter((i) => !i.group);
     const groups = PAGE_GROUPS
         .map((name) => ({ name, items: menuItems.filter((i) => i.group === name) }))
@@ -83,25 +89,34 @@ function Sidebar() {
                         }}
                     />
                     <h2 style={{ fontSize: "16px", margin: "0" }}>THE AGE SCHOOL</h2>
-                    <p style={{ fontSize: "11px", margin: "2px 0 0", color: "#aaa" }}>ERP</p>
+                    <p style={{ fontSize: "11px", margin: "2px 0 0", color: "#aaa" }}>Institute of Pre, Primary and Secondary Education</p>
+                    <p style={{ fontSize: "11px", margin: "2px 0 0", color: "#aaa" }}>BASAVAKALYAN</p>
                 </div>
 
                 <nav className="sidebar-menu">
-                    {topItems.map(renderLink)}
-                    {groups.map((g) => (
-                        <div key={g.name} className={"sidebar-group" + (isOpen(g.name) ? " open" : "")}>
-                            <button
-                                type="button"
-                                className="sidebar-group-header"
-                                onClick={() => toggleGroup(g.name)}
-                                aria-expanded={isOpen(g.name)}
-                            >
-                                <span>{g.name}</span>
-                                <span className="group-chevron">{isOpen(g.name) ? "▾" : "▸"}</span>
-                            </button>
-                            {isOpen(g.name) && g.items.map(renderLink)}
-                        </div>
-                    ))}
+                    {isAdmin ? (
+                        <>
+                            {topItems.map(renderLink)}
+                            {groups.map((g) => (
+                                <div key={g.name} className={"sidebar-group" + (isOpen(g.name) ? " open" : "")}>
+                                    <button
+                                        type="button"
+                                        className="sidebar-group-header"
+                                        onClick={() => toggleGroup(g.name)}
+                                        aria-expanded={isOpen(g.name)}
+                                    >
+                                        <span>{g.name}</span>
+                                        <span className="group-chevron">{isOpen(g.name) ? "▾" : "▸"}</span>
+                                    </button>
+                                    {isOpen(g.name) && g.items.map(renderLink)}
+                                </div>
+                            ))}
+                        </>
+                    ) : (
+                        // Non-admin: flat list, every granted page visible
+                        // directly (no collapsible stacked sections).
+                        menuItems.map(renderLink)
+                    )}
                 </nav>
 
                 <div className="sidebar-footer">

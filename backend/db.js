@@ -123,6 +123,7 @@ async function initializeDatabase() {
                 tuitionFee REAL DEFAULT 0,
                 concessionAmount REAL DEFAULT 0,
                 concessionReason TEXT,
+                studentCategory TEXT DEFAULT 'general',
                 status TEXT NOT NULL DEFAULT 'active',
                 archivedAt TEXT,
                 archivedBy INTEGER,
@@ -708,6 +709,22 @@ async function initializeDatabase() {
         await migrateDatabase();
         await seedFeeComponents();
         await seedPageAccess();
+
+        // Remove page grants for keys that no longer exist in the
+        // registry (e.g. principal_dashboard / manager_dashboard,
+        // which were replaced by the shared dashboard).
+        await run(
+            `DELETE FROM user_page_access
+             WHERE pageKey NOT IN ('dashboard','students','fee_concessions','fees','payments','expenses','reports','notifications','users','class_management','teacher_management','student_attendance','exam_results','results_overview','attendance_overview','marks_entry','teacher_attendance','my_attendance')`
+        );
+
+        // "users" is admin-only now: strip it from any
+        // principal/manager who was granted it earlier.
+        await run(
+            `DELETE FROM user_page_access
+             WHERE pageKey = 'users'
+               AND userId IN (SELECT id FROM users WHERE role IN ('principal', 'manager'))`
+        );
         await seedGradingScale();
         await backfillExamDefinitions();
         await backfillSubjectTeachers();
@@ -749,6 +766,14 @@ async function migrateDatabase() {
     await addColumnIfMissing("students", "remark", "TEXT");
     await addColumnIfMissing("students", "concessionAmount", "REAL DEFAULT 0");
     await addColumnIfMissing("students", "concessionReason", "TEXT");
+    await addColumnIfMissing("students", "studentCategory", "TEXT DEFAULT 'general'");
+    // Role rename: "receptionist" became "accountant". Idempotent — after the
+    // first run no receptionist rows remain. Page-access rows are keyed by
+    // userId, so existing grants stay attached to the renamed accounts.
+    await run(`UPDATE users SET role = 'accountant' WHERE role = 'receptionist'`);
+    // Only four categories exist now (Regular, RTE, Management, Others). Merge
+    // any legacy values (staff, scholarship, ...) into "general" (Regular).
+    await run(`UPDATE students SET studentCategory = 'general' WHERE studentCategory IS NULL OR studentCategory NOT IN ('general', 'rte', 'management', 'other')`);
 
     await addColumnIfMissing("payments", "feeAccountId", "INTEGER");
     await addColumnIfMissing("payments", "remarks", "TEXT");
@@ -756,6 +781,13 @@ async function migrateDatabase() {
     await addColumnIfMissing("payments", "voidedAt", "TEXT");
     await addColumnIfMissing("payments", "voidedBy", "INTEGER");
     await addColumnIfMissing("payments", "voidReason", "TEXT");
+
+    // PAYMENT LINE ITEMS PER-COMPONENT MODE & DATE
+    // Safe to add multiple times — addColumnIfMissing is idempotent.
+    await addColumnIfMissing("payment_line_items", "mode", "TEXT");
+    await addColumnIfMissing("payment_line_items", "paidOn", "DATE");
+    await addColumnIfMissing("payment_line_items", "reference", "TEXT");
+    await addColumnIfMissing("payment_line_items", "remark", "TEXT");
 
     await addColumnIfMissing("expenses", "status", "TEXT NOT NULL DEFAULT 'completed'");
     await addColumnIfMissing("expenses", "voidedAt", "TEXT");
@@ -839,7 +871,7 @@ async function seedFeeComponents() {
 //
 // Runs only when user_page_access is completely empty
 // (i.e. the very first boot after this feature ships).
-// Grants existing receptionists exactly the pages they
+// Grants existing staff accounts exactly the pages they
 // could reach before, so behavior is unchanged on day one.
 //
 // Admin is never seeded here (admin always has full
@@ -855,26 +887,24 @@ async function seedPageAccess() {
         return;
     }
 
-    // The pages receptionists had access to before this feature.
-    const defaultReceptionistPages = [
+    // The pages staff accounts had access to before this feature.
+    const defaultStaffPages = [
         "students",
         "fees",
         "payments",
-        "expenses",
-        "notifications",
-        "settings"
+        "expenses"
     ];
 
-    const receptionists = await all(
-        `SELECT id FROM users WHERE role = 'receptionist'`
+    const staffUsers = await all(
+        `SELECT id FROM users WHERE role = 'accountant'`
     );
 
-    if (receptionists.length === 0) {
+    if (staffUsers.length === 0) {
         return;
     }
 
-    for (const user of receptionists) {
-        for (const pageKey of defaultReceptionistPages) {
+    for (const user of staffUsers) {
+        for (const pageKey of defaultStaffPages) {
             await run(
                 `INSERT OR IGNORE INTO user_page_access (userId, pageKey) VALUES (?, ?)`,
                 [user.id, pageKey]
@@ -883,7 +913,7 @@ async function seedPageAccess() {
     }
 
     console.log(
-        `Seeded default page access for ${receptionists.length} receptionist(s).`
+        `Seeded default page access for ${staffUsers.length} staff account(s).`
     );
 }
 

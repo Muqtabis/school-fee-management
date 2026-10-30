@@ -21,13 +21,19 @@ api.interceptors.request.use((config) => {
 // Session handling on error responses:
 //  - 401 (not authenticated / token expired/invalid): the session is dead, so
 //    clear it and send the user to /login.
+//  - EXCEPTION: the login request itself. A wrong email/password returns 401,
+//    but the user is already on /login — redirecting would wipe the screen and
+//    hide the error message. Let LoginPage surface the message instead.
 //  - 403 (authenticated but not allowed on this page/action): the token is
 //    still valid — do NOT log the user out. Let the calling page surface an
 //    "access denied" message instead of bouncing to /login.
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && error.response.status === 401) {
+    const isLoginRequest =
+      error.config && error.config.url && error.config.url.includes("/auth/login");
+
+    if (error.response && error.response.status === 401 && !isLoginRequest) {
       sessionStorage.clear();
       window.location.href = "/login";
     }

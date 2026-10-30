@@ -723,7 +723,7 @@ exports.getStudentResultHistory = async (req, res) => {
 // it straight from memory — NOTHING is written to disk — so
 // a preview/reprint always reflects the published (and any
 // corrected) result. Mounted twice: admin-only under the
-// exams module, and admin+receptionist under the students
+// exams module, and admin+staff under the students
 // module (both reuse this same handler; RBAC is on the route).
 // =====================================================
 

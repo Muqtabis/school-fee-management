@@ -8,14 +8,16 @@ const userController =
     require("../controllers/userController");
 
 const {
-    requireAdmin
+    requireAdmin,
+    requireRole,
+    requirePage
 } =
     require("../middleware/authMiddleware");
 
 
 // =====================================================
 // CHANGE OWN PASSWORD (any authenticated user)
-// Declared BEFORE the admin gate so receptionists/teachers
+// Declared BEFORE the admin gate so staff/teacher accounts
 // can change their own password. Uses req.user.id, never a param.
 // =====================================================
 
@@ -26,12 +28,15 @@ router.put(
 
 
 // =====================================================
-// ALL REMAINING USER ROUTES ARE ADMIN ONLY
+// ALL REMAINING USER ROUTES
+// ADMIN ONLY
+//
+// User management (accounts, roles, page access) never
+// leaves admin hands: principal/manager are not granted
+// the "users" page and the API rejects them outright.
 // =====================================================
 
-router.use(
-    requireAdmin
-);
+router.use(requireAdmin);
 
 
 // =====================================================
@@ -45,7 +50,7 @@ router.get(
 
 
 // =====================================================
-// CREATE RECEPTIONIST
+// CREATE STAFF / TEACHER USER
 // =====================================================
 
 router.post(
@@ -55,7 +60,7 @@ router.post(
 
 
 // =====================================================
-// RESET RECEPTIONIST PASSWORD
+// RESET STAFF / TEACHER PASSWORD
 // =====================================================
 
 router.put(
@@ -65,7 +70,7 @@ router.put(
 
 
 // =====================================================
-// DELETE RECEPTIONIST
+// DELETE STAFF / TEACHER USER
 // =====================================================
 
 router.delete(
@@ -76,7 +81,8 @@ router.delete(
 
 // =====================================================
 // PAGE ACCESS MANAGEMENT
-// ADMIN ONLY (whole router is requireAdmin)
+// Same gate as above (admin, or principal/manager granted
+// the "users" page).
 // =====================================================
 
 // Master list of assignable pages

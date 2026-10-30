@@ -19,7 +19,7 @@ const PAGE_TITLES = {
   "/results-overview": "Results Overview",
   "/attendance-overview": "Attendance Overview",
   "/student-attendance": "Student Attendance",
-  "/teacher-attendance": "Teacher Attendance",
+  "/teacher-attendance": "Staff Attendance",
   "/marks-entry": "Marks Entry",
   "/my-attendance": "My Attendance",
   "/notifications": "Notifications",

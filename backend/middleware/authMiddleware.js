@@ -75,11 +75,9 @@ function authenticateToken(
         // ONLY VALID APPLICATION ROLES
         // =================================================
 
-        if (
-            decoded.role !== "admin" &&
-            decoded.role !== "receptionist" &&
-            decoded.role !== "teacher"
-        ) {
+        const VALID_ROLES = ["admin", "accountant", "principal", "manager", "teacher"];
+
+        if (!VALID_ROLES.includes(decoded.role)) {
 
             return res.status(403).json({
 
@@ -246,6 +244,81 @@ function requirePage(pageKey) {
 
 
 // =====================================================
+// REQUIRE ANY PAGE
+//
+// Like requirePage, but passes when the user holds ANY of
+// the given page keys. Used by endpoints shared by two
+// pages (e.g. exam definitions serve both Marks Entry and
+// Exam & Results; the attendance report serves both Student
+// Attendance and Attendance Overview).
+// =====================================================
+
+function requireAnyPage(...pageKeys) {
+
+    return async (req, res, next) => {
+
+        if (!req.user) {
+
+            return res.status(401).json({
+                success: false,
+                message: "Authentication required."
+            });
+
+        }
+
+
+        // Admin bypasses page access entirely.
+        if (req.user.role === "admin") {
+
+            return next();
+
+        }
+
+
+        try {
+
+            const placeholders = pageKeys.map(() => "?").join(", ");
+
+            const rows = await allQuery(
+                `
+                SELECT 1
+                FROM user_page_access
+                WHERE userId = ? AND pageKey IN (${placeholders})
+                LIMIT 1
+                `,
+                [req.user.id, ...pageKeys]
+            );
+
+
+            if (!rows || rows.length === 0) {
+
+                return res.status(403).json({
+                    success: false,
+                    message: "You do not have access to this page."
+                });
+
+            }
+
+
+            next();
+
+        } catch (error) {
+
+            console.error("Page Access Check Error:", error);
+
+            return res.status(500).json({
+                success: false,
+                message: "Unable to verify page access."
+            });
+
+        }
+
+    };
+
+}
+
+
+// =====================================================
 // ADMIN ONLY
 // =====================================================
 
@@ -254,14 +327,18 @@ const requireAdmin =
 
 
 // =====================================================
-// ADMIN + RECEPTIONIST
+// STAFF ROLES (page-access managed)
+//
+// accountant (formerly "receptionist"), principal and
+// manager all share the staff API surface; what each user
+// actually reaches is narrowed by the admin-configured
+// user_page_access rows (requirePage on page routes).
 // =====================================================
 
+const STAFF_ROLES = ["accountant", "principal", "manager"];
+
 const requireStaff =
-    requireRole(
-        "admin",
-        "receptionist"
-    );
+    requireRole("admin", ...STAFF_ROLES);
 
 
 // =====================================================
@@ -292,6 +369,8 @@ module.exports = {
 
     requireTeacher,
 
-    requirePage
+    requirePage,
+
+    requireAnyPage
 
 };

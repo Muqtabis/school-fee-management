@@ -19,9 +19,12 @@ function PaymentForm({ onClose }) {
         studentId: "",
         paymentDate: new Date().toISOString().split("T")[0],
         amount: "",
-        paymentMode: "Cash",
+        paymentMode: "",
         remarks: ""
     });
+
+    // Per-component mode/date/ref for multi-mode payments
+    const [componentDetails, setComponentDetails] = useState({});
 
     useEffect(() => {
         loadData();
@@ -171,7 +174,7 @@ function PaymentForm({ onClose }) {
         }
 
         return {
-            studentPrevDues, concession, netTuition,
+            studentPrevDues, concession, totalTuitionAmount, netTuition,
             rawAdditionalItems, paidMap
         };
     }, [feeSummary, selectedStudent]);
@@ -226,13 +229,49 @@ function PaymentForm({ onClose }) {
             const updated = { ...prev };
             if (isChecked) {
                 updated[componentName] = maxAmount;
+                // Initialize per-component details with defaults
+                setComponentDetails((cd) => ({
+                    ...cd,
+                    [componentName]: {
+                        mode: "Cash",
+                        paidOn: formData.paymentDate,
+                        reference: "",
+                        remark: ""
+                    }
+                }));
             } else {
                 delete updated[componentName];
+                setComponentDetails((cd) => {
+                    const copy = { ...cd };
+                    delete copy[componentName];
+                    return copy;
+                });
             }
             const newTotal = Object.values(updated).reduce((sum, val) => sum + Number(val || 0), 0);
             setFormData((f) => ({ ...f, amount: newTotal > 0 ? String(newTotal) : "" }));
             return updated;
         });
+    };
+
+    const getCompDetail = (compName, field, defaultVal) => {
+        if (componentDetails[compName] && componentDetails[compName][field] !== undefined) {
+            return componentDetails[compName][field];
+        }
+        return defaultVal;
+    };
+
+    const updateCompDetail = (compName, field, val) => {
+        setComponentDetails((prev) => ({
+            ...prev,
+            [compName]: {
+                mode: "Cash",
+                paidOn: formData.paymentDate,
+                reference: "",
+                remark: "",
+                ...(prev[compName] || {}),
+                [field]: val
+            }
+        }));
     };
 
     const handleComponentAmountChange = (componentName, value, maxAllowed) => {
@@ -263,10 +302,21 @@ function PaymentForm({ onClose }) {
 
         const lineItems = Object.entries(selectedComponents)
             .filter(([_, amt]) => Number(amt) > 0)
-            .map(([componentName, amount]) => ({
-                componentName,
-                amount: Number(amount)
-            }));
+            .map(([componentName, amount]) => {
+                const details = componentDetails[componentName] || {};
+                return {
+                    componentName,
+                    amount: Number(amount),
+                    mode: details.mode || "Cash", // Default to Cash if not changed
+                    paidOn: details.paidOn || formData.paymentDate,
+                    reference: details.reference || "",
+                    remark: details.remark || ""
+                };
+            });
+
+        // Compute overall payment mode for the header (audit trail)
+        const uniqueModes = Array.from(new Set(lineItems.map(item => item.mode).filter(Boolean)));
+        const computedPaymentMode = uniqueModes.length > 0 ? uniqueModes.join(", ") : "Cash";
 
         try {
             setLoading(true);
@@ -274,7 +324,7 @@ function PaymentForm({ onClose }) {
                 studentId: formData.studentId,
                 paymentDate: formData.paymentDate,
                 amount: Number(formData.amount),
-                paymentMode: formData.paymentMode,
+                paymentMode: computedPaymentMode,
                 remarks: formData.remarks,
                 lineItems: lineItems.length > 0 ? lineItems : undefined 
             });
@@ -343,7 +393,39 @@ function PaymentForm({ onClose }) {
                                         <div className="fee-summary-item"><span>Total Demand</span><strong>{money(financialOverview.totalAssessedDemand)}</strong></div>
                                         <div className="fee-summary-item"><span>Paid Till Date</span><strong className="fee-paid">{money(financialOverview.previouslyPaid)}</strong></div>
                                         <div className="fee-summary-item remaining"><span>Current Due</span><strong className="fee-remaining">{money(financialOverview.currentBalanceDue)}</strong></div>
+                                        {Number(selectedStudent?.concessionAmount || 0) > 0 && (
+                                            <div className="fee-summary-item"><span>Concession</span><strong style={{ color: "#16A34A" }}>- {money(selectedStudent.concessionAmount)}</strong></div>
+                                        )}
                                     </div>
+
+                                    {/* READ-ONLY CONCESSION BREAKDOWN — shows how the
+                                        concession reduces the standard tuition so the
+                                        collector can see the real math. Not editable. */}
+                                    {parsedLedger.concession > 0 && (
+                                        <div style={{ marginTop: "12px", border: "1px solid #FDE68A", borderRadius: "6px", overflow: "hidden" }}>
+                                            <div style={{ backgroundColor: "#FEF3C7", padding: "6px 12px", fontSize: "11px", fontWeight: "700", color: "#92400E", textTransform: "uppercase" }}>
+                                                Fee Concession Applied (Read-only)
+                                            </div>
+                                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                                                <tbody>
+                                                    <tr>
+                                                        <td style={{ padding: "7px 12px", color: "#475569" }}>Standard Tuition Fee</td>
+                                                        <td style={{ padding: "7px 12px", textAlign: "right", fontWeight: "600", color: "#0F172A" }}>{money(parsedLedger.totalTuitionAmount)}</td>
+                                                    </tr>
+                                                    <tr style={{ backgroundColor: "#FFFBEB" }}>
+                                                        <td style={{ padding: "7px 12px", color: "#92400E" }}>
+                                                            Concession{selectedStudent?.concessionReason ? ` — ${selectedStudent.concessionReason}` : ""}
+                                                        </td>
+                                                        <td style={{ padding: "7px 12px", textAlign: "right", fontWeight: "700", color: "#16A34A" }}>- {money(parsedLedger.concession)}</td>
+                                                    </tr>
+                                                    <tr style={{ borderTop: "1px solid #FDE68A" }}>
+                                                        <td style={{ padding: "7px 12px", fontWeight: "700", color: "#0F172A" }}>Net Tuition Fee</td>
+                                                        <td style={{ padding: "7px 12px", textAlign: "right", fontWeight: "700", color: "#0F172A" }}>{money(parsedLedger.netTuition)}</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
 
                                     <div style={{ marginTop: "14px" }}>
                                         <span style={{ fontSize: "12px", fontWeight: "700", color: "#475569", textTransform: "uppercase" }}>Settlement Tracker</span>
@@ -363,29 +445,60 @@ function PaymentForm({ onClose }) {
                                         <span style={{ fontSize: "12px", fontWeight: "700", color: "#475569", textTransform: "uppercase" }}>Select Fees To Collect (Customizable)</span>
 
                                         {componentBreakdown.previousDues > 0 && (
-                                            <div style={{ marginTop: "8px", background: "#fef2f2", padding: "8px 12px", borderRadius: "6px", border: "1px solid #fecaca", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                                                    <input type="checkbox" checked={selectedComponents["Previous Dues"] !== undefined} onChange={(e) => handleToggleComponent("Previous Dues", componentBreakdown.previousDues, e.target.checked)} />
-                                                    <strong style={{ fontSize: "12px", color: "#b91c1c" }}>Previous Dues (Carry Forward)</strong>
-                                                </label>
-                                                {selectedComponents["Previous Dues"] !== undefined ? (
-                                                    <input type="number" value={selectedComponents["Previous Dues"]} onChange={(e) => handleComponentAmountChange("Previous Dues", e.target.value, componentBreakdown.previousDues)} style={{ width: "85px", padding: "2px 4px", fontSize: "12px", textAlign: "right" }} />
-                                                ) : (
-                                                    <span style={{ fontSize: "12px", fontWeight: "700", color: "#b91c1c" }}>{money(componentBreakdown.previousDues)}</span>
+                                            <div style={{ marginTop: "8px", background: "#fef2f2", padding: "8px 12px", borderRadius: "6px", border: "1px solid #fecaca", display: "flex", flexDirection: "column", gap: "6px" }}>
+                                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                                    <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                                                        <input type="checkbox" checked={selectedComponents["Previous Dues"] !== undefined} onChange={(e) => handleToggleComponent("Previous Dues", componentBreakdown.previousDues, e.target.checked)} />
+                                                        <strong style={{ fontSize: "12px", color: "#b91c1c" }}>Previous Dues (Carry Forward)</strong>
+                                                    </label>
+                                                    {selectedComponents["Previous Dues"] !== undefined ? (
+                                                        <input type="number" value={selectedComponents["Previous Dues"]} onChange={(e) => handleComponentAmountChange("Previous Dues", e.target.value, componentBreakdown.previousDues)} style={{ width: "85px", padding: "2px 4px", fontSize: "12px", textAlign: "right" }} />
+                                                    ) : (
+                                                        <span style={{ fontSize: "12px", fontWeight: "700", color: "#b91c1c" }}>{money(componentBreakdown.previousDues)}</span>
+                                                    )}
+                                                </div>
+                                                {selectedComponents["Previous Dues"] !== undefined && (
+                                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px", fontSize: "11px" }}>
+                                                        <select value={getCompDetail("Previous Dues", "mode", "Cash")} onChange={(e) => updateCompDetail("Previous Dues", "mode", e.target.value)} style={{ padding: "2px 4px" }}>
+                                                            <option>Cash</option><option>UPI</option><option>Card</option><option>Bank Transfer</option><option>Cheque</option>
+                                                        </select>
+                                                        <input type="date" value={getCompDetail("Previous Dues", "paidOn", formData.paymentDate)} onChange={(e) => updateCompDetail("Previous Dues", "paidOn", e.target.value)} style={{ padding: "2px 4px" }} />
+                                                        <input type="text" placeholder="Ref/Remarks" value={getCompDetail("Previous Dues", "reference", "")} onChange={(e) => updateCompDetail("Previous Dues", "reference", e.target.value)} style={{ padding: "2px 4px" }} />
+                                                    </div>
                                                 )}
                                             </div>
                                         )}
 
+                                        {parsedLedger.concession > 0 && (
+                                            <div style={{ marginTop: "10px", background: "#f0fdf4", padding: "8px 12px", borderRadius: "6px", border: "1px dashed #86EFAC", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                                <span style={{ fontSize: "12px", fontWeight: "700", color: "#15803d" }}>
+                                                    🏷️ Concession Applied (not collectible){selectedStudent?.concessionReason ? ` — ${selectedStudent.concessionReason}` : ""}
+                                                </span>
+                                                <span style={{ fontSize: "12px", fontWeight: "700", color: "#16A34A" }}>- {money(parsedLedger.concession)}</span>
+                                            </div>
+                                        )}
+
                                         {componentBreakdown.tuition && (
-                                            <div style={{ marginTop: "10px", background: selectedComponents["Tuition Fee"] !== undefined ? "#f0fdf4" : "#f8fafc", padding: "8px 12px", borderRadius: "6px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                                                    <input type="checkbox" checked={selectedComponents["Tuition Fee"] !== undefined} onChange={(e) => handleToggleComponent("Tuition Fee", componentBreakdown.tuition.amount, e.target.checked)} />
-                                                    <strong style={{ fontSize: "12px", color: "#15803d" }}>Tuition Fee</strong>
-                                                </label>
-                                                {selectedComponents["Tuition Fee"] !== undefined ? (
-                                                    <input type="number" value={selectedComponents["Tuition Fee"]} onChange={(e) => handleComponentAmountChange("Tuition Fee", e.target.value, componentBreakdown.tuition.amount)} style={{ width: "85px", padding: "2px 4px", fontSize: "12px", textAlign: "right" }} />
-                                                ) : (
-                                                    <span style={{ fontSize: "12px", fontWeight: "700", color: "#15803d" }}>{money(componentBreakdown.tuition.amount)}</span>
+                                            <div style={{ marginTop: "10px", background: selectedComponents["Tuition Fee"] !== undefined ? "#f0fdf4" : "#f8fafc", padding: "8px 12px", borderRadius: "6px", border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: "6px" }}>
+                                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                                    <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                                                        <input type="checkbox" checked={selectedComponents["Tuition Fee"] !== undefined} onChange={(e) => handleToggleComponent("Tuition Fee", componentBreakdown.tuition.amount, e.target.checked)} />
+                                                        <strong style={{ fontSize: "12px", color: "#15803d" }}>Tuition Fee</strong>
+                                                    </label>
+                                                    {selectedComponents["Tuition Fee"] !== undefined ? (
+                                                        <input type="number" value={selectedComponents["Tuition Fee"]} onChange={(e) => handleComponentAmountChange("Tuition Fee", e.target.value, componentBreakdown.tuition.amount)} style={{ width: "85px", padding: "2px 4px", fontSize: "12px", textAlign: "right" }} />
+                                                    ) : (
+                                                        <span style={{ fontSize: "12px", fontWeight: "700", color: "#15803d" }}>{money(componentBreakdown.tuition.amount)}</span>
+                                                    )}
+                                                </div>
+                                                {selectedComponents["Tuition Fee"] !== undefined && (
+                                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px", fontSize: "11px" }}>
+                                                        <select value={getCompDetail("Tuition Fee", "mode", "Cash")} onChange={(e) => updateCompDetail("Tuition Fee", "mode", e.target.value)} style={{ padding: "2px 4px" }}>
+                                                            <option>Cash</option><option>UPI</option><option>Card</option><option>Bank Transfer</option><option>Cheque</option>
+                                                        </select>
+                                                        <input type="date" value={getCompDetail("Tuition Fee", "paidOn", formData.paymentDate)} onChange={(e) => updateCompDetail("Tuition Fee", "paidOn", e.target.value)} style={{ padding: "2px 4px" }} />
+                                                        <input type="text" placeholder="Ref/Remarks" value={getCompDetail("Tuition Fee", "reference", "")} onChange={(e) => updateCompDetail("Tuition Fee", "reference", e.target.value)} style={{ padding: "2px 4px" }} />
+                                                    </div>
                                                 )}
                                             </div>
                                         )}
@@ -393,17 +506,28 @@ function PaymentForm({ onClose }) {
                                         {componentBreakdown.additionalItems.length > 0 && (
                                             <div style={{ marginTop: "12px" }}>
                                                 <div style={{ fontSize: "11px", fontWeight: "700", color: "#64748b", marginBottom: "6px" }}>ADDITIONAL COMPONENTS</div>
-                                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                                                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "8px" }}>
                                                     {componentBreakdown.additionalItems.map((comp, idx) => (
-                                                        <div key={idx} style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #e2e8f0", background: selectedComponents[comp.name] !== undefined ? "#f0fdf4" : "#ffffff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                                            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "12px", fontWeight: "600" }}>
-                                                                <input type="checkbox" checked={selectedComponents[comp.name] !== undefined} onChange={(e) => handleToggleComponent(comp.name, comp.amount, e.target.checked)} />
-                                                                {comp.name}
-                                                            </label>
-                                                            {selectedComponents[comp.name] !== undefined ? (
-                                                                <input type="number" value={selectedComponents[comp.name]} onChange={(e) => handleComponentAmountChange(comp.name, e.target.value, comp.amount)} style={{ width: "75px", padding: "2px 4px", fontSize: "12px", textAlign: "right" }} />
-                                                            ) : (
-                                                                <span style={{ fontSize: "12px", fontWeight: "600", color: "#475569" }}>{money(comp.amount)}</span>
+                                                        <div key={idx} style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #e2e8f0", background: selectedComponents[comp.name] !== undefined ? "#f0fdf4" : "#ffffff", display: "flex", flexDirection: "column", gap: "6px" }}>
+                                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                                                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "12px", fontWeight: "600" }}>
+                                                                    <input type="checkbox" checked={selectedComponents[comp.name] !== undefined} onChange={(e) => handleToggleComponent(comp.name, comp.amount, e.target.checked)} />
+                                                                    {comp.name}
+                                                                </label>
+                                                                {selectedComponents[comp.name] !== undefined ? (
+                                                                    <input type="number" value={selectedComponents[comp.name]} onChange={(e) => handleComponentAmountChange(comp.name, e.target.value, comp.amount)} style={{ width: "75px", padding: "2px 4px", fontSize: "12px", textAlign: "right" }} />
+                                                                ) : (
+                                                                    <span style={{ fontSize: "12px", fontWeight: "600", color: "#475569" }}>{money(comp.amount)}</span>
+                                                                )}
+                                                            </div>
+                                                            {selectedComponents[comp.name] !== undefined && (
+                                                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px", fontSize: "11px" }}>
+                                                                    <select value={getCompDetail(comp.name, "mode", "Cash")} onChange={(e) => updateCompDetail(comp.name, "mode", e.target.value)} style={{ padding: "2px 4px" }}>
+                                                                        <option>Cash</option><option>UPI</option><option>Card</option><option>Bank Transfer</option><option>Cheque</option>
+                                                                    </select>
+                                                                    <input type="date" value={getCompDetail(comp.name, "paidOn", formData.paymentDate)} onChange={(e) => updateCompDetail(comp.name, "paidOn", e.target.value)} style={{ padding: "2px 4px" }} />
+                                                                    <input type="text" placeholder="Ref/Remarks" value={getCompDetail(comp.name, "reference", "")} onChange={(e) => updateCompDetail(comp.name, "reference", e.target.value)} style={{ padding: "2px 4px" }} />
+                                                                </div>
                                                             )}
                                                         </div>
                                                     ))}
@@ -418,20 +542,13 @@ function PaymentForm({ onClose }) {
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "14px" }}>
                         <div className="form-group">
-                            <label>Payment Date *</label>
+                            <label>Receipt Date *</label>
                             <input type="date" name="paymentDate" value={formData.paymentDate} onChange={handleChange} required />
                         </div>
                         <div className="form-group">
-                            <label>Amount (₹) *</label>
-                            <input type="number" name="amount" value={formData.amount} readOnly style={{ backgroundColor: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold" }} placeholder="Auto-calculated from checkboxes" required />
+                            <label>Total Amount (₹) *</label>
+                            <input type="number" name="amount" value={formData.amount} readOnly style={{ backgroundColor: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold" }} placeholder="Auto-calculated" required />
                         </div>
-                    </div>
-
-                    <div className="form-group">
-                        <label>Payment Mode *</label>
-                        <select name="paymentMode" value={formData.paymentMode} onChange={handleChange}>
-                            <option>Cash</option><option>UPI</option><option>Card</option><option>Bank Transfer</option><option>Cheque</option>
-                        </select>
                     </div>
 
                     <div className="form-group">

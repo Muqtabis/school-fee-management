@@ -296,7 +296,7 @@ function SettingsPage() {
                                     "#666"
                             }}
                         >
-                            Change your ERP login
+                            Change your login
                             password securely.
                         </p>
 

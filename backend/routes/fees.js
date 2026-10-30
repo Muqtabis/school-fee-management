@@ -12,15 +12,31 @@ const {
 
 // =====================================================
 // ALLOWED ROLES
-// ADMIN + RECEPTIONIST, WITH "fees" PAGE ACCESS
+// ADMIN + STAFF, WITH "fees" PAGE ACCESS
 // (admin bypasses the page check)
 // =====================================================
 
 router.use(
     requireRole(
         "admin",
-        "receptionist"
+        "accountant",
+        "principal",
+        "manager"
     )
+);
+
+// -----------------------------------------------------
+// READ-ONLY ACADEMIC YEAR LIST
+//
+// Reference data consumed by many pages (Students, Payments,
+// Reports, Exam & Results, ...), not just Fee Management.
+// Declared BEFORE the "fees" page gate below so any granted
+// page that needs the year list works standalone. Mutations
+// remain gated.
+// -----------------------------------------------------
+router.get(
+    "/academic-years",
+    feeController.getAcademicYears
 );
 
 router.use(
@@ -31,15 +47,9 @@ router.use(
 // ACADEMIC YEARS
 // =====================================================
 
-// View academic years
-router.get(
-    "/academic-years",
-    feeController.getAcademicYears
-);
-
 // -----------------------------------------------------
 // CREATE ACADEMIC YEAR
-// ADMIN ONLY
+// ADMIN ONLY (finance)
 // -----------------------------------------------------
 router.post(
     "/academic-years",
@@ -49,7 +59,7 @@ router.post(
 
 // -----------------------------------------------------
 // ACTIVATE ACADEMIC YEAR
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // -----------------------------------------------------
 router.post(
     "/academic-years/:id/activate",
@@ -58,7 +68,7 @@ router.post(
 
 // =====================================================
 // FEE STRUCTURES
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // =====================================================
 
 // -----------------------------------------------------
@@ -79,7 +89,7 @@ router.get(
 
 // -----------------------------------------------------
 // CREATE CLASS STRUCTURE
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // -----------------------------------------------------
 router.post(
     "/structures",
@@ -88,7 +98,7 @@ router.post(
 
 // -----------------------------------------------------
 // UPDATE CLASS STRUCTURE
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // -----------------------------------------------------
 router.put(
     "/structures/:id",
@@ -97,7 +107,7 @@ router.put(
 
 // -----------------------------------------------------
 // COPY STRUCTURE
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // -----------------------------------------------------
 router.post(
     "/structures/:id/copy/:targetYearId",
@@ -106,7 +116,7 @@ router.post(
 
 // =====================================================
 // PREPARE ACADEMIC YEAR
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // =====================================================
 router.post(
     "/academic-years/:id/prepare",
@@ -115,7 +125,7 @@ router.post(
 
 // =====================================================
 // STUDENT FEE ACCOUNT
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // =====================================================
 router.get(
     "/student/:studentId",

@@ -15,14 +15,16 @@ const {
 
 
 // =====================================================
-// ADMIN + RECEPTIONIST, WITH "notifications" PAGE ACCESS
+// ADMIN + STAFF, WITH "notifications" PAGE ACCESS
 // (admin bypasses the page check)
 // =====================================================
 
 router.use(
     requireRole(
         "admin",
-        "receptionist"
+        "accountant",
+        "principal",
+        "manager"
     )
 );
 

@@ -18,9 +18,10 @@ function todayIso() {
 // =====================================================
 // ATTENDANCE FOR A DATE
 //
-// Lists every teacher LEFT JOINed to their record for
-// the given date (status null when not yet marked), so
-// the marker sees the whole staff roster to fill in.
+// Lists every STAFF USER (teacher, accountant, principal,
+// manager, ...) LEFT JOINed to their record for the given
+// date (status null when not yet marked), so the marker
+// sees the whole staff roster to fill in.
 //
 // MARKER (granted teacher_attendance) or ADMIN.
 // =====================================================
@@ -34,12 +35,11 @@ exports.getAttendanceForDate = async (req, res) => {
 
     try {
         const rows = await allQuery(
-            `SELECT u.id AS teacherId, u.name, u.email,
+            `SELECT u.id AS teacherId, u.name, u.email, u.role,
                     ta.status, ta.remark
              FROM users u
              LEFT JOIN teacher_attendance ta
                ON ta.teacherId = u.id AND ta.attendanceDate = ?
-             WHERE u.role = 'teacher'
              ORDER BY u.name ASC`,
             [date]
         );
@@ -72,16 +72,17 @@ exports.saveAttendance = async (req, res) => {
     }
 
     try {
-        // Only accept teacherIds that are actually teachers.
-        const teachers = await allQuery(`SELECT id FROM users WHERE role = 'teacher'`);
-        const teacherIds = new Set(teachers.map((t) => t.id));
+        // Accept ids of ANY staff user (teacher, accountant, principal,
+        // manager, ...) — attendance is now taken for all staff.
+        const staff = await allQuery(`SELECT id FROM users`);
+        const staffIds = new Set(staff.map((t) => t.id));
 
         let saved = 0;
         for (const r of records) {
             const teacherId = Number(r.teacherId);
             const status = String(r.status || "").trim();
 
-            if (!teacherIds.has(teacherId)) continue;      // not a teacher
+            if (!staffIds.has(teacherId)) continue;         // not a real user
             if (!STATUSES.includes(status)) continue;       // invalid status -> skip
 
             const remark = r.remark ? String(r.remark).trim().slice(0, 500) : null;
@@ -107,7 +108,7 @@ exports.saveAttendance = async (req, res) => {
             details: { date, saved }
         }).catch((e) => console.error("Audit Error:", e));
 
-        res.json({ success: true, message: `Saved attendance for ${saved} teacher(s).`, saved });
+        res.json({ success: true, message: `Saved attendance for ${saved} staff member(s).`, saved });
     } catch (error) {
         console.error("Save Attendance Error:", error);
         res.status(500).json({ success: false, message: "Unable to save attendance." });
@@ -188,14 +189,16 @@ exports.getAttendanceSummary = async (req, res) => {
 
     try {
         // Date range is applied in the JOIN's ON clause (not WHERE) so that
-        // teachers with zero rows in the range are still returned with zeros.
+        // staff users with zero rows in the range are still returned with
+        // zeros. Covers ALL staff users now (teacher, accountant,
+        // principal, manager, ...).
         const joinClauses = ["ta.teacherId = u.id"];
         const params = [];
         if (from) { joinClauses.push("ta.attendanceDate >= ?"); params.push(from); }
         if (to) { joinClauses.push("ta.attendanceDate <= ?"); params.push(to); }
 
         const rows = await allQuery(
-            `SELECT u.id AS teacherId, u.name, u.email,
+            `SELECT u.id AS teacherId, u.name, u.email, u.role,
                     SUM(CASE WHEN ta.status = 'present'  THEN 1 ELSE 0 END) AS present,
                     SUM(CASE WHEN ta.status = 'absent'   THEN 1 ELSE 0 END) AS absent,
                     SUM(CASE WHEN ta.status = 'half_day' THEN 1 ELSE 0 END) AS half_day,
@@ -203,8 +206,7 @@ exports.getAttendanceSummary = async (req, res) => {
                     COUNT(ta.id) AS markedDays
              FROM users u
              LEFT JOIN teacher_attendance ta ON ${joinClauses.join(" AND ")}
-             WHERE u.role = 'teacher'
-             GROUP BY u.id, u.name, u.email
+             GROUP BY u.id, u.name, u.email, u.role
              ORDER BY u.name ASC`,
             params
         );
@@ -256,5 +258,50 @@ exports.getMyAttendance = async (req, res) => {
     } catch (error) {
         console.error("My Attendance Error:", error);
         res.status(500).json({ success: false, message: "Unable to load your attendance." });
+    }
+};
+
+
+// =====================================================
+// ATTENDANCE OVERVIEW
+//
+// Provides overall attendance statistics across ALL STAFF
+// USERS for a given date range.
+//
+// Shared with Student Attendance page.
+// =====================================================
+
+exports.getAttendanceOverview = async (req, res) => {
+    let from = req.query.from ? String(req.query.from).trim() : null;
+    let to = req.query.to ? String(req.query.to).trim() : null;
+
+    if (!from) {
+        const now = new Date();
+        from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    }
+    if (!to) {
+        to = new Date().toISOString().slice(0, 10);
+    }
+
+    try {
+        const rows = await allQuery(
+            `
+            SELECT
+                u.name AS teacherName,
+                u.email AS teacherEmail,
+                ta.attendanceDate,
+                ta.status,
+                ta.remark
+            FROM users u
+            LEFT JOIN teacher_attendance ta ON u.id = ta.teacherId AND ta.attendanceDate BETWEEN ? AND ?
+            ORDER BY u.name, ta.attendanceDate DESC
+            `,
+            [from, to]
+        );
+
+        res.json({ success: true, from, to, overview: rows });
+    } catch (error) {
+        console.error("Attendance Overview Error:", error);
+        res.status(500).json({ success: false, message: "Unable to load attendance overview." });
     }
 };

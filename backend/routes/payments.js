@@ -16,14 +16,16 @@ const {
 
 
 // =====================================================
-// ADMIN + RECEPTIONIST, WITH "payments" PAGE ACCESS
+// ADMIN + STAFF, WITH "payments" PAGE ACCESS
 // (admin bypasses the page check)
 // =====================================================
 
 router.use(
     requireRole(
         "admin",
-        "receptionist"
+        "accountant",
+        "principal",
+        "manager"
     )
 );
 
@@ -34,7 +36,7 @@ router.use(
 
 // =====================================================
 // PAYMENT LIST
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // =====================================================
 
 router.get(
@@ -45,19 +47,19 @@ router.get(
 
 // =====================================================
 // DASHBOARD FINANCIAL SUMMARY
-// ADMIN ONLY
+// ADMIN + STAFF (accountant, principal, manager)
 // =====================================================
 
 router.get(
     "/summary",
-    requireAdmin,
+    requireRole("admin", "accountant", "principal", "manager"),
     paymentController.dashboardSummary
 );
 
 
 // =====================================================
 // FINANCIAL REPORT
-// ADMIN ONLY
+// ADMIN ONLY (finance)
 // =====================================================
 
 router.get(
@@ -69,7 +71,7 @@ router.get(
 
 // =====================================================
 // MONTHLY COLLECTION
-// ADMIN ONLY
+// ADMIN ONLY (finance)
 // =====================================================
 
 router.get(
@@ -81,7 +83,7 @@ router.get(
 
 // =====================================================
 // EXPORT BUNDLE (.zip: Excel + receipt PDFs)
-// ADMIN ONLY  (declared before "/:id")
+// ADMIN ONLY (finance)  (declared before "/:id")
 // =====================================================
 
 router.get(
@@ -93,7 +95,7 @@ router.get(
 
 // =====================================================
 // STUDENT FEE HISTORY
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // =====================================================
 
 router.get(
@@ -104,7 +106,7 @@ router.get(
 
 // =====================================================
 // RECEIPT
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // =====================================================
 
 router.get(
@@ -115,7 +117,7 @@ router.get(
 
 // =====================================================
 // SINGLE PAYMENT
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // =====================================================
 
 router.get(
@@ -126,7 +128,7 @@ router.get(
 
 // =====================================================
 // ADD PAYMENT
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // =====================================================
 
 router.post(
@@ -137,7 +139,7 @@ router.post(
 
 // =====================================================
 // REVERSE PAYMENT
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // =====================================================
 
 router.post(

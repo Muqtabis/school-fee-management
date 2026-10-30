@@ -400,11 +400,11 @@ function TeacherManagementPage() {
                                 TEACHER ATTENDANCE SUMMARY (per teacher)
                             ============================================ */}
                             <div className="settings-card" style={{ marginTop: "25px" }}>
-                                <h3>Teacher Attendance Summary</h3>
+                                <h3>Staff Attendance Summary</h3>
                                 <p style={{ color: "#666", marginTop: "6px" }}>
-                                    Days present, absent, half-day and on leave for each teacher, pulled
+                                    Days present, absent, half-day and on leave for each staff member, pulled
                                     automatically from the marked attendance. Daily marking and the full
-                                    day-by-day history live on the Teacher Attendance page.
+                                    day-by-day history live on the Staff Attendance page.
                                 </p>
 
                                 <div style={{ display: "flex", gap: "12px", marginTop: "18px", flexWrap: "wrap", alignItems: "center" }}>

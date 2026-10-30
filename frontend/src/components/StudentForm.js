@@ -21,7 +21,8 @@ function StudentForm({ student, onClose }) {
         previousDues: "",
         tuitionFee: "",
         concessionAmount: "",
-        concessionReason: ""
+        concessionReason: "",
+        studentCategory: "general"
     });
 
     const [classFeeStructures, setClassFeeStructures] = useState([]);
@@ -78,7 +79,8 @@ function StudentForm({ student, onClose }) {
                 previousDues: student.previousDues || "",
                 tuitionFee: student.tuitionFee || "",
                 concessionAmount: student.concessionAmount || "",
-                concessionReason: student.concessionReason || ""
+                concessionReason: student.concessionReason || "",
+                studentCategory: student.studentCategory || "general"
             });
         }
     }, [student]);
@@ -102,22 +104,6 @@ function StudentForm({ student, onClose }) {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-
-        if (name === "concessionAmount") {
-            const matchingStructure = classFeeStructures.find(
-                (s) => String(s.className).trim().toLowerCase() === String(formData.className).trim().toLowerCase()
-            );
-            const standardAmount = matchingStructure ? Number(matchingStructure.totalAmount || 0) : Number(formData.tuitionFee || 0);
-            const concession = Number(value || 0);
-            const netTuition = Math.max(0, standardAmount - concession);
-
-            setFormData((prev) => ({
-                ...prev,
-                concessionAmount: value,
-                tuitionFee: netTuition
-            }));
-            return;
-        }
 
         setFormData((prev) => ({ ...prev, [name]: value }));
     };
@@ -197,12 +183,17 @@ function StudentForm({ student, onClose }) {
                             <input type="text" name="satsNumber" value={formData.satsNumber} onChange={handleChange} placeholder="e.g. 123456" />
                         </div>
                         <div className="form-group">
-                            <label>Roll Number *</label>
-                            <input type="text" name="rollNumber" value={formData.rollNumber} onChange={handleChange} required />
+                            <label>Student Category</label>
+                            <select name="studentCategory" value={formData.studentCategory} onChange={handleChange}>
+                                <option value="general">Regular</option>
+                                <option value="rte">RTE</option>
+                                <option value="management">Management</option>
+                                <option value="other">Others</option>
+                            </select>
                         </div>
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "12px", marginBottom: "24px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "12px", marginBottom: "24px" }}>
                         <div className="form-group">
                             <label>Student Name *</label>
                             <input type="text" name="studentName" value={formData.studentName} onChange={handleChange} required />
@@ -216,6 +207,10 @@ function StudentForm({ student, onClose }) {
                                     return <option key={c.id} value={displayClass}>{displayClass}</option>;
                                 })}
                             </select>
+                        </div>
+                        <div className="form-group">
+                            <label>Roll Number *</label>
+                            <input type="text" name="rollNumber" value={formData.rollNumber} onChange={handleChange} required />
                         </div>
                     </div>
 
@@ -277,17 +272,25 @@ function StudentForm({ student, onClose }) {
                             <input type="number" min="0" step="0.01" name="previousDues" value={formData.previousDues} onChange={handleChange} />
                         </div>
                         <div className="form-group">
-                            <label>Negotiated Concession (₹) <small style={{ color: "#16A34A" }}>(Discount)</small></label>
-                            <input type="number" min="0" step="0.01" name="concessionAmount" value={formData.concessionAmount} onChange={handleChange} />
+                            <label>Fee Concession <small style={{ color: "#64748B" }}>(Read-only)</small></label>
+                            {Number(formData.concessionAmount) > 0 ? (
+                                <div style={{ padding: "10px 12px", border: "1px solid #FDE68A", backgroundColor: "#FEF3C7", borderRadius: "6px", fontSize: "13px", color: "#92400E" }}>
+                                    <strong>{money(formData.concessionAmount)}</strong>
+                                    {formData.concessionReason ? <span> — {formData.concessionReason}</span> : null}
+                                    <div style={{ fontSize: "11px", marginTop: "4px" }}>
+                                        Managed in Finance → Fee Concessions
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{ padding: "10px 12px", border: "1px dashed #CBD5E1", borderRadius: "6px", fontSize: "13px", color: "#64748B", backgroundColor: "#F8FAFC" }}>
+                                    No concession
+                                    <div style={{ fontSize: "11px", marginTop: "4px" }}>
+                                        Grant or change it in Finance → Fee Concessions (after saving)
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
-
-                    {Number(formData.concessionAmount) > 0 && (
-                        <div className="form-group" style={{ marginTop: "12px" }}>
-                            <label>Concession Reason</label>
-                            <input type="text" name="concessionReason" value={formData.concessionReason} onChange={handleChange} placeholder="e.g., Sibling discount, Management approval" required />
-                        </div>
-                    )}
 
                     <div style={{ marginTop: "20px", padding: "16px", backgroundColor: "#F8FAFC", borderRadius: "8px", border: "1px solid #E2E8F0" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px", borderBottom: "1px solid #E2E8F0", paddingBottom: "8px" }}>

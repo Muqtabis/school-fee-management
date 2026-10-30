@@ -10,102 +10,102 @@ const upload = multer({ dest: "uploads/" });
 
 // =====================================================
 // PAGE ACCESS: "students"
-// Admin bypasses; receptionist needs the page assigned.
+// Admin bypasses; staff roles need the page assigned.
 // =====================================================
 router.use(requirePage("students"));
 
 // =====================================================
 // LIST
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // =====================================================
 router.get(
     "/",
-    requireRole("admin", "receptionist"),
+    requireRole("admin", "accountant", "principal", "manager"),
     studentController.getStudents
 );
 
 // =====================================================
 // BULK IMPORT EXCEL
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // (Must be placed before /:id)
 // =====================================================
 router.post(
     "/import",
-    requireRole("admin", "receptionist"),
+    requireRole("admin", "accountant", "principal", "manager"),
     upload.single("file"),
     studentController.importStudents
 );
 
 // =====================================================
 // SINGLE STUDENT
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // =====================================================
 router.get(
     "/:id",
-    requireRole("admin", "receptionist"),
+    requireRole("admin", "accountant", "principal", "manager"),
     studentController.getStudent
 );
 
 // =====================================================
 // EXAM RESULT HISTORY (published results only)
-// ADMIN + RECEPTIONIST — mirrors fee-history access so the
+// ADMIN + STAFF — mirrors fee-history access so the
 // student detail modal can show a "Results" tab alongside
 // "Fee Account". Reuses the exams-module controller.
 // (Multi-segment paths — no clash with GET "/:id".)
 // =====================================================
 router.get(
     "/:studentId/results",
-    requireRole("admin", "receptionist"),
+    requireRole("admin", "accountant", "principal", "manager"),
     resultController.getStudentResultHistory
 );
 
 // =====================================================
 // DOWNLOAD ONE REPORT CARD (in-memory PDF, no disk write)
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // =====================================================
 router.get(
     "/:studentId/report-card/:examId",
-    requireRole("admin", "receptionist"),
+    requireRole("admin", "accountant", "principal", "manager"),
     resultController.getReportCard
 );
 
 // =====================================================
 // CREATE
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // =====================================================
 router.post(
     "/",
-    requireRole("admin", "receptionist"),
+    requireRole("admin", "accountant", "principal", "manager"),
     studentController.addStudent
 );
 
 // =====================================================
 // UPDATE
-// ADMIN + RECEPTIONIST
+// ADMIN + STAFF
 // =====================================================
 router.put(
     "/:id",
-    requireRole("admin", "receptionist"),
+    requireRole("admin", "accountant", "principal", "manager"),
     studentController.updateStudent
 );
 
 // =====================================================
 // ARCHIVE
-// ADMIN ONLY
+// ADMIN + PRINCIPAL + MANAGER (students page)
 // =====================================================
 router.post(
     "/:id/archive",
-    requireAdmin,
+    requireRole("admin", "principal", "manager"),
     studentController.archiveStudent
 );
 
 // =====================================================
 // RESTORE
-// ADMIN ONLY
+// ADMIN + PRINCIPAL + MANAGER (students page)
 // =====================================================
 router.post(
     "/:id/restore",
-    requireAdmin,
+    requireRole("admin", "principal", "manager"),
     studentController.restoreStudent
 );
 

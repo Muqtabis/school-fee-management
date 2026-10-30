@@ -174,7 +174,9 @@ exports.login = (
 
                 if (
                     user.role !== "admin" &&
-                    user.role !== "receptionist" &&
+                    user.role !== "accountant" &&
+                    user.role !== "principal" &&
+                    user.role !== "manager" &&
                     user.role !== "teacher"
                 ) {
 
@@ -332,7 +334,9 @@ exports.profile = (
 
             if (
                 user.role !== "admin" &&
-                user.role !== "receptionist" &&
+                user.role !== "accountant" &&
+                user.role !== "principal" &&
+                user.role !== "manager" &&
                 user.role !== "teacher"
             ) {
 

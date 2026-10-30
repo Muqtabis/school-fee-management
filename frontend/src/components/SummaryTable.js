@@ -103,12 +103,22 @@ function SummaryTable({ payments = [], onReverse }) {
 
         const getPaidTodayForComponent = (compName) => {
             let sum = 0;
+            let modes = new Set();
+            let dates = new Set();
             (payment.lineItems || []).forEach(li => {
                 const ln = (li.componentName || "").toLowerCase();
                 const cn = compName.toLowerCase();
-                if (ln.includes(cn) || cn.includes(ln)) sum += Number(li.amount || 0);
+                if (ln.includes(cn) || cn.includes(ln)) {
+                    sum += Number(li.amount || 0);
+                    if (li.mode) modes.add(li.mode);
+                    if (li.paidOn) dates.add(li.paidOn);
+                }
             });
-            return sum;
+            return {
+                sum,
+                mode: modes.size > 0 ? Array.from(modes).join(", ") : null,
+                date: dates.size > 0 ? Array.from(dates).map(d => formatDate(d)).join(", ") : null
+            };
         };
 
         // 1. Process Previous Dues explicitly
@@ -118,13 +128,15 @@ function SummaryTable({ payments = [], onReverse }) {
                 let applyPrev = Math.min(prevDues - pastPaid, unassignedPastPool);
                 if (applyPrev > 0) { pastPaid += applyPrev; unassignedPastPool -= applyPrev; }
             }
-            const paidNow = getPaidTodayForComponent("previous");
-            if (prevDues > 0 || paidNow > 0) {
+            const paidInfo = getPaidTodayForComponent("previous");
+            if (prevDues > 0 || paidInfo.sum > 0) {
                 componentLedger.push({
                     name: "Previous Dues (Carry Forward)",
                     total: prevDues,
-                    paidNow: paidNow,
-                    balance: Math.max(0, prevDues - pastPaid - paidNow)
+                    paidNow: paidInfo.sum,
+                    balance: Math.max(0, prevDues - pastPaid - paidInfo.sum),
+                    mode: paidInfo.mode,
+                    date: paidInfo.date
                 });
             }
         }
@@ -154,15 +166,21 @@ function SummaryTable({ payments = [], onReverse }) {
                 if (applyT > 0) { pastPaid += applyT; unassignedPastPool -= applyT; }
             }
 
-            let paidNow = (payment.lineItems || [])
-                .filter(li => li.componentName.toLowerCase().includes("tuition") || li.componentName.toLowerCase().includes("tution") || li.componentName.toLowerCase().includes("term"))
-                .reduce((sum, li) => sum + li.amount, 0);
+            let paidInfo = getPaidTodayForComponent("tuition");
+            if (paidInfo.sum === 0) {
+                paidInfo = getPaidTodayForComponent("tution");
+            }
+            if (paidInfo.sum === 0) {
+                paidInfo = getPaidTodayForComponent("term");
+            }
 
             componentLedger.push({
                 name: "Tuition Fee",
                 total: netTuition,
-                paidNow: paidNow,
-                balance: Math.max(0, netTuition - pastPaid - paidNow)
+                paidNow: paidInfo.sum,
+                balance: Math.max(0, netTuition - pastPaid - paidInfo.sum),
+                mode: paidInfo.mode,
+                date: paidInfo.date
             });
         }
 
@@ -174,12 +192,14 @@ function SummaryTable({ payments = [], onReverse }) {
                 if (applyO > 0) { pastPaid += applyO; unassignedPastPool -= applyO; }
             }
 
-            const paidNow = getPaidTodayForComponent(item.componentName);
+            const paidInfo = getPaidTodayForComponent(item.componentName);
             componentLedger.push({
                 name: item.componentName,
                 total: item.amount,
-                paidNow: paidNow,
-                balance: Math.max(0, item.amount - pastPaid - paidNow)
+                paidNow: paidInfo.sum,
+                balance: Math.max(0, item.amount - pastPaid - paidInfo.sum),
+                mode: paidInfo.mode,
+                date: paidInfo.date
             });
         });
 
@@ -221,15 +241,19 @@ function SummaryTable({ payments = [], onReverse }) {
 
             let feeRowsHTML = "";
             componentLedger.forEach(item => {
-                const tick = item.paidNow > 0 ? ` <span style="color: #16a34a; font-weight: 900; font-size: 14px; margin-left: 6px;">&#10003;</span>` : "";
+                const tick = item.paidNow > 0 ? ` <span style="color: #16a34a; font-weight: 900; font-size: 13px; margin-left: 4px;">&#10003;</span>` : "";
                 const paidNowDisplay = item.paidNow > 0 ? `₹ ${formatMoney(item.paidNow)}` : "-"; 
                 const balanceColor = item.balance > 0 ? "#dc2626" : "#16a34a"; 
+                const modeDisplay = item.paidNow > 0 ? (item.mode || paymentMode || "-") : "-";
+                const dateDisplay = item.paidNow > 0 ? (item.date || paymentDate || "-") : "-";
 
                 feeRowsHTML += `
                     <tr>
                         <td>${item.name}${tick}</td>
                         <td style="text-align:right;">₹ ${formatMoney(item.total)}</td>
                         <td style="text-align:right; color:#16a34a; font-weight:bold;">${paidNowDisplay}</td>
+                        <td style="text-align:center; font-size:9px;">${modeDisplay}</td>
+                        <td style="text-align:center; font-size:9px;">${dateDisplay}</td>
                         <td style="text-align:right; color:${balanceColor};">₹ ${formatMoney(item.balance)}</td>
                     </tr>
                 `;
@@ -239,9 +263,7 @@ function SummaryTable({ payments = [], onReverse }) {
                 feeRowsHTML += `
                     <tr style="background-color: #f0fdf4;">
                         <td><strong>Concession (Discount)</strong></td>
-                        <td style="text-align:right; color: #16a34a;"><strong>- ₹ ${formatMoney(concession)}</strong></td>
-                        <td style="text-align:right;">-</td>
-                        <td style="text-align:right;">-</td>
+                        <td style="text-align:right; color: #16a34a;" colspan="5"><strong>- ₹ ${formatMoney(concession)}</strong></td>
                     </tr>
                 `;
             }
@@ -281,11 +303,13 @@ function SummaryTable({ payments = [], onReverse }) {
                                 <th>Fee Component</th>
                                 <th style="text-align:right;">Total Fee</th>
                                 <th style="text-align:right;">Paid Now</th>
+                                <th style="text-align:center;">Mode</th>
+                                <th style="text-align:center;">Date</th>
                                 <th style="text-align:right;">Balance</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${feeRowsHTML || `<tr><td colspan="4" style="text-align:center;">Standard Structured Fees</td></tr>`}
+                            ${feeRowsHTML || `<tr><td colspan="6" style="text-align:center;">Standard Structured Fees</td></tr>`}
                         </tbody>
                     </table>
 

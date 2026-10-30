@@ -79,6 +79,12 @@ app.use(
     require("./routes/students")
 );
 
+// Student category & fee concession management
+app.use(
+    "/concessions",
+    require("./routes/concessions")
+);
+
 // NEW: Classes Route Mounted Here
 app.use(
     "/classes",
@@ -88,6 +94,12 @@ app.use(
 app.use(
     "/fees",
     require("./routes/fees")
+);
+
+// Dashboard summary (role-guarded, no page grant needed)
+app.use(
+    "/dashboard",
+    require("./routes/dashboard")
 );
 
 app.use(

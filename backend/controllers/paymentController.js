@@ -139,8 +139,18 @@ exports.addPayment = async (req, res) => {
             // Strictly save checkbox line items to database
             if (Array.isArray(lineItems) && lineItems.length > 0) {
                 for (const item of lineItems) {
-                    await runQ(`INSERT INTO payment_line_items (paymentId, componentName, amount) VALUES (?, ?, ?)`,
-                        [paymentId, item.componentName, item.amount]);
+                    await runQ(
+                        `INSERT INTO payment_line_items (paymentId, componentName, amount, mode, paidOn, reference, remark) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                        [
+                            paymentId,
+                            item.componentName,
+                            item.amount,
+                            item.mode || paymentMode,
+                            item.paidOn || paymentDate,
+                            item.reference || "",
+                            item.remark || ""
+                        ]
+                    );
                 }
             }
             await runQ("COMMIT");
@@ -268,7 +278,7 @@ exports.dashboardSummary = async (req, res) => {
         if (!year) return res.status(404).json({ success: false, message: "No active academic year." });
 
         // These aggregates are independent — run them concurrently.
-        const [totalStudents, feeData, paymentData, totalTeachers] = await Promise.all([
+        const [totalStudents, feeData, paymentData, totalTeachers, concessionData] = await Promise.all([
             new Promise((resolve, reject) => {
                 db.get(`SELECT COUNT(*) AS total FROM student_enrollments WHERE academicYearId = ? AND status = 'active'`, [year.id], (err, row) => {
                     if (err) reject(err); else resolve(Number(row.total || 0));
@@ -302,8 +312,26 @@ exports.dashboardSummary = async (req, res) => {
                 db.get(`SELECT COUNT(*) AS total FROM users WHERE role = 'teacher'`, [], (err, row) => {
                     if (err) reject(err); else resolve(Number(row.total || 0));
                 });
+            }),
+            new Promise((resolve, reject) => {
+                // Sum of granted concessions for every actively enrolled student
+                // this year — the same join shape as the fee-items sum above, so
+                // there is no double counting.
+                db.get(`
+                    SELECT COALESCE(SUM(s.concessionAmount), 0) AS totalConcessions
+                    FROM student_enrollments se
+                    INNER JOIN students s ON s.id = se.studentId
+                    WHERE se.academicYearId = ? AND se.status = 'active'
+                `, [year.id], (err, row) => {
+                    if (err) reject(err); else resolve(Number(row.totalConcessions || 0));
+                });
             })
         ]);
+
+        // Concessions lower the real demand: net fee = standard - concessions.
+        // Pending = net fee - collected, so the numbers always add up:
+        // Total Fees (net) = Fee Collection + Pending Fees.
+        const netFee = Math.max(0, feeData - concessionData);
 
         res.json({
             academicYear: { id: year.id, name: year.name },
@@ -312,7 +340,9 @@ exports.dashboardSummary = async (req, res) => {
             totalPayments: Number(paymentData.totalPayments || 0),
             totalCollection: Number(paymentData.totalCollection || 0),
             totalFee: feeData,
-            pendingFees: Math.max(0, feeData - Number(paymentData.totalCollection || 0))
+            totalConcessions: concessionData,
+            netFee,
+            pendingFees: Math.max(0, netFee - Number(paymentData.totalCollection || 0))
         });
     } catch (error) {
         console.error(error);

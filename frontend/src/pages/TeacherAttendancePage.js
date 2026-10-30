@@ -139,8 +139,8 @@ function TeacherAttendancePage() {
                 <div className="page-content">
                     <div className="page-header">
                         <div>
-                            <h2>Teacher Attendance</h2>
-                            <p>Mark daily attendance for the teaching staff and search past records.</p>
+                            <h2>Staff Attendance</h2>
+                            <p>Mark daily attendance for all staff — teachers, accountant, manager and every other user — and search past records.</p>
                         </div>
                     </div>
 
@@ -177,7 +177,7 @@ function TeacherAttendancePage() {
                                 <table className="compact-table stack-sm">
                                     <thead>
                                         <tr>
-                                            <th>Teacher</th>
+                                            <th>Staff</th>
                                             <th>Email</th>
                                             <th>Status</th>
                                             <th>Remark</th>
@@ -189,13 +189,13 @@ function TeacherAttendancePage() {
                                         ) : rows.length === 0 ? (
                                             <tr>
                                                 <td colSpan="4">
-                                                    No teachers found. Create teacher accounts from the Users page first.
+                                                    No staff found. Create user accounts from the Users page first.
                                                 </td>
                                             </tr>
                                         ) : (
                                             rows.map((r) => (
                                                 <tr key={r.teacherId}>
-                                                    <td data-label="Teacher">{r.name}</td>
+                                                    <td data-label="Staff">{r.name}</td>
                                                     <td data-label="Email">{r.email}</td>
                                                     <td data-label="Status">
                                                         <select
@@ -240,9 +240,9 @@ function TeacherAttendancePage() {
                     {activeTab === "history" && (
                         <div className="settings-card exam-tabpanel">
                             <div className="attendance-filters">
-                                <label>Teacher
+                                <label>Staff
                                     <select value={histTeacherId} onChange={(e) => setHistTeacherId(e.target.value)}>
-                                        <option value="">All teachers</option>
+                                        <option value="">All staff</option>
                                         {teacherOptions.map((t) => (
                                             <option key={t.id} value={t.id}>{t.name}</option>
                                         ))}
@@ -282,7 +282,7 @@ function TeacherAttendancePage() {
                                     <thead>
                                         <tr>
                                             <th>Date</th>
-                                            <th>Teacher</th>
+                                            <th>Staff</th>
                                             <th>Status</th>
                                             <th>Remark</th>
                                         </tr>
@@ -294,7 +294,7 @@ function TeacherAttendancePage() {
                                             filteredHistory.map((h) => (
                                                 <tr key={h.id}>
                                                     <td data-label="Date">{h.attendanceDate}</td>
-                                                    <td data-label="Teacher">{h.teacherName}</td>
+                                                    <td data-label="Staff">{h.teacherName}</td>
                                                     <td data-label="Status"><span className={`att-badge ${STATUS_CLASS[h.status] || ""}`}>{STATUS_LABEL[h.status] || h.status}</span></td>
                                                     <td data-label="Remark">{h.remark || "-"}</td>
                                                 </tr>

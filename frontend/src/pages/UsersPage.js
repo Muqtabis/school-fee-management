@@ -16,7 +16,9 @@ function UsersPage() {
     const [pageRegistry, setPageRegistry] = useState([]);
 
     // The user whose access is being edited, plus working state.
-    const [accessUser, setAccessUser] = useState(null);
+    // accessUserId === user.id means the panel is open inline below
+    // that user's row (not at the bottom of the page).
+    const [accessUserId, setAccessUserId] = useState(null);
     const [accessKeys, setAccessKeys] = useState([]);
     // Page keys valid for the selected user's role (from the backend).
     const [grantableKeys, setGrantableKeys] = useState([]);
@@ -28,7 +30,7 @@ function UsersPage() {
         name: "",
         email: "",
         password: "",
-        role: "receptionist"
+        role: "accountant"
     });
 
 
@@ -76,7 +78,7 @@ function UsersPage() {
 
 
     // =====================================================
-    // CREATE USER (receptionist or teacher)
+    // CREATE USER (accountant, principal, manager or teacher)
     // =====================================================
 
     const createUser = async (e) => {
@@ -84,7 +86,7 @@ function UsersPage() {
         try {
             await api.post("/users", form);
             toast(`${labelForRole(form.role)} created successfully.`);
-            setForm({ name: "", email: "", password: "", role: "receptionist" });
+            setForm({ name: "", email: "", password: "", role: "accountant" });
             loadUsers();
         } catch (error) {
             toast(error.response?.data?.message || "Unable to create user.");
@@ -157,7 +159,7 @@ function UsersPage() {
         try {
             await api.delete(`/users/${user.id}`);
             toast("User deleted successfully.");
-            if (accessUser && accessUser.id === user.id) closeAccess();
+            if (accessUserId && accessUserId === user.id) closeAccess();
             loadUsers();
         } catch (error) {
             toast(error.response?.data?.message || "Unable to delete user.");
@@ -170,7 +172,7 @@ function UsersPage() {
     // =====================================================
 
     const openAccess = async (user) => {
-        setAccessUser(user);
+        setAccessUserId(user.id);
         setAccessLoading(true);
         setAccessKeys([]);
         setGrantableKeys([]);
@@ -184,14 +186,14 @@ function UsersPage() {
             setAccessLocked(res.data.accessLocked || false);
         } catch (error) {
             toast(error.response?.data?.message || "Unable to load page access.");
-            setAccessUser(null);
+            setAccessUserId(null);
         } finally {
             setAccessLoading(false);
         }
     };
 
     const closeAccess = () => {
-        setAccessUser(null);
+        setAccessUserId(null);
         setAccessKeys([]);
         setGrantableKeys([]);
         setAccessLocked(false);
@@ -206,10 +208,10 @@ function UsersPage() {
     };
 
     const saveAccess = async () => {
-        if (!accessUser) return;
+        if (!accessUserId) return;
         try {
             setSavingAccess(true);
-            await api.put(`/users/${accessUser.id}/pages`, { pageKeys: accessKeys });
+            await api.put(`/users/${accessUserId}/pages`, { pageKeys: accessKeys });
             toast("Page access updated successfully.");
             loadUsers();
         } catch (error) {
@@ -220,10 +222,10 @@ function UsersPage() {
     };
 
     const toggleLock = async () => {
-        if (!accessUser) return;
+        if (!accessUserId) return;
         const nextLocked = !accessLocked;
         try {
-            await api.post(`/users/${accessUser.id}/${nextLocked ? "lock" : "unlock"}`);
+            await api.post(`/users/${accessUserId}/${nextLocked ? "lock" : "unlock"}`);
             setAccessLocked(nextLocked);
             toast(nextLocked ? "Page access locked." : "Page access unlocked.");
             loadUsers();
@@ -239,12 +241,15 @@ function UsersPage() {
 
     const labelForRole = (role) => {
         if (role === "teacher") return "Teacher";
-        if (role === "receptionist") return "Receptionist";
+        if (role === "accountant") return "Accountant";
+        if (role === "principal") return "Principal";
+        if (role === "manager") return "Manager";
         if (role === "admin") return "Admin";
         return role;
     };
 
-    const isManageable = (role) => role === "receptionist" || role === "teacher";
+    const isManageable = (role) =>
+        ["accountant", "principal", "manager", "teacher"].includes(role);
 
 
     // =====================================================
@@ -313,7 +318,9 @@ function UsersPage() {
                                 value={form.role}
                                 onChange={handleChange}
                             >
-                                <option value="receptionist">Receptionist</option>
+                                <option value="accountant">Accountant</option>
+                                <option value="principal">Principal</option>
+                                <option value="manager">Manager</option>
                                 <option value="teacher">Teacher</option>
                             </select>
 
@@ -325,6 +332,9 @@ function UsersPage() {
 
                     {/* =================================================
                         USERS TABLE
+                        The Page Access panel renders INLINE — a full-width
+                        row right below the user whose "Page Access"
+                        button was clicked, not at the bottom of the page.
                     ================================================= */}
                     <div className="table-container" style={{ marginTop: "25px" }}>
                         <table className="stack-sm">
@@ -349,7 +359,8 @@ function UsersPage() {
                                         <td colSpan="6">No users found.</td>
                                     </tr>
                                 ) : (
-                                    users.map((user) => (
+                                    users.flatMap((user) => {
+                                        const rows = [
                                         <tr key={user.id}>
                                             <td data-label="Name">{user.name}</td>
                                             <td data-label="Email">{user.email}</td>
@@ -380,93 +391,104 @@ function UsersPage() {
                                                 )}
                                             </td>
                                         </tr>
-                                    ))
+                                        ];
+
+                                        // Inline Page Access panel — appears right
+                                        // below this user's row, not at page bottom.
+                                        if (accessUserId === user.id) {
+                                            rows.push(
+                                                <tr key={`${user.id}-access`} className="access-panel-row">
+                                                    <td colSpan="6" style={{ padding: "0" }}>
+                                                        <div className="settings-card" style={{ margin: "0", borderRadius: "0" }}>
+                                                            <div
+                                                                style={{
+                                                                    display: "flex",
+                                                                    justifyContent: "space-between",
+                                                                    alignItems: "center",
+                                                                    flexWrap: "wrap",
+                                                                    gap: "10px"
+                                                                }}
+                                                            >
+                                                                <h3 style={{ margin: 0 }}>
+                                                                    Page Access — {user.name} ({labelForRole(user.role)})
+                                                                </h3>
+                                                                <button type="button" onClick={closeAccess}>Close</button>
+                                                            </div>
+
+                                                            {accessLocked && (
+                                                                <p style={{ color: "#b45309", marginTop: "12px" }}>
+                                                                    🔒 This user's access is locked. Unlock to make changes.
+                                                                </p>
+                                                            )}
+
+                                                            {accessLoading ? (
+                                                                <p style={{ marginTop: "15px" }}>Loading access...</p>
+                                                            ) : (
+                                                                <>
+                                                                    <div
+                                                                        style={{
+                                                                            display: "grid",
+                                                                            gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+                                                                            gap: "10px",
+                                                                            marginTop: "18px"
+                                                                        }}
+                                                                    >
+                                                                        {/* Settings is open to every user by
+                                                                            default — nothing to grant here. */}
+                                                                        {pageRegistry.filter((page) => page.key !== "settings" && grantableKeys.includes(page.key)).map((page) => (
+                                                                            <label
+                                                                                key={page.key}
+                                                                                style={{
+                                                                                    display: "flex",
+                                                                                    alignItems: "center",
+                                                                                    gap: "8px",
+                                                                                    padding: "8px 10px",
+                                                                                    border: "1px solid #e2e2e2",
+                                                                                    borderRadius: "6px",
+                                                                                    opacity: accessLocked ? 0.6 : 1,
+                                                                                    cursor: accessLocked ? "not-allowed" : "pointer"
+                                                                                }}
+                                                                            >
+                                                                                <input
+                                                                                    type="checkbox"
+                                                                                    checked={accessKeys.includes(page.key)}
+                                                                                    disabled={accessLocked}
+                                                                                    onChange={() => toggleKey(page.key)}
+                                                                                />
+                                                                                <span>{page.label}</span>
+                                                                                <small style={{ color: "#64748B", fontSize: "12px", marginLeft: "8px" }}>({page.description})</small>
+                                                                            </label>
+                                                                        ))}
+                                                                    </div>
+
+                                                                    <div style={{ display: "flex", gap: "10px", marginTop: "20px", flexWrap: "wrap" }}>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="primary-btn"
+                                                                            onClick={saveAccess}
+                                                                            disabled={accessLocked || savingAccess}
+                                                                        >
+                                                                            {savingAccess ? "Saving..." : "Save Access"}
+                                                                        </button>
+
+                                                                        <button type="button" onClick={toggleLock}>
+                                                                            {accessLocked ? "Unlock" : "Lock"}
+                                                                        </button>
+                                                                    </div>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        }
+
+                                        return rows;
+                                    })
                                 )}
                             </tbody>
                         </table>
                     </div>
-
-                    {/* =================================================
-                        PAGE ACCESS PANEL
-                    ================================================= */}
-                    {accessUser && (
-                        <div className="settings-card" style={{ marginTop: "25px" }}>
-                            <div
-                                style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    alignItems: "center",
-                                    flexWrap: "wrap",
-                                    gap: "10px"
-                                }}
-                            >
-                                <h3 style={{ margin: 0 }}>
-                                    Page Access — {accessUser.name} ({labelForRole(accessUser.role)})
-                                </h3>
-                                <button type="button" onClick={closeAccess}>Close</button>
-                            </div>
-
-                            {accessLocked && (
-                                <p style={{ color: "#b45309", marginTop: "12px" }}>
-                                    🔒 This user's access is locked. Unlock to make changes.
-                                </p>
-                            )}
-
-                            {accessLoading ? (
-                                <p style={{ marginTop: "15px" }}>Loading access...</p>
-                            ) : (
-                                <>
-                                    <div
-                                        style={{
-                                            display: "grid",
-                                            gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-                                            gap: "10px",
-                                            marginTop: "18px"
-                                        }}
-                                    >
-                                        {pageRegistry.filter((page) => grantableKeys.includes(page.key)).map((page) => (
-                                            <label
-                                                key={page.key}
-                                                style={{
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    gap: "8px",
-                                                    padding: "8px 10px",
-                                                    border: "1px solid #e2e2e2",
-                                                    borderRadius: "6px",
-                                                    opacity: accessLocked ? 0.6 : 1,
-                                                    cursor: accessLocked ? "not-allowed" : "pointer"
-                                                }}
-                                            >
-                                                <input
-                                                    type="checkbox"
-                                                    checked={accessKeys.includes(page.key)}
-                                                    disabled={accessLocked}
-                                                    onChange={() => toggleKey(page.key)}
-                                                />
-                                                <span>{page.label}</span>
-                                            </label>
-                                        ))}
-                                    </div>
-
-                                    <div style={{ display: "flex", gap: "10px", marginTop: "20px", flexWrap: "wrap" }}>
-                                        <button
-                                            type="button"
-                                            className="primary-btn"
-                                            onClick={saveAccess}
-                                            disabled={accessLocked || savingAccess}
-                                        >
-                                            {savingAccess ? "Saving..." : "Save Access"}
-                                        </button>
-
-                                        <button type="button" onClick={toggleLock}>
-                                            {accessLocked ? "Unlock" : "Lock"}
-                                        </button>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    )}
 
                 </div>
             </div>

@@ -203,7 +203,7 @@ exports.getStudent = (req, res) => {
 exports.addStudent = (req, res) => {
     const {
         studentName, rollNumber, className, fatherName, contact1, contact2, previousDues, tuitionFee,
-        admissionNumber, satsNumber, motherName, gender, dob, address, remark, concessionAmount, concessionReason
+        admissionNumber, satsNumber, motherName, gender, dob, address, remark, concessionAmount, concessionReason, studentCategory
     } = req.body;
 
     if (!studentName || !rollNumber || !className) {
@@ -215,6 +215,7 @@ exports.addStudent = (req, res) => {
     const numericPreviousDues = Number(previousDues) || 0;
     const numericTuitionFee = Number(tuitionFee) || 0;
     const numericConcession = Number(concessionAmount) || 0;
+    const cleanStudentCategory = studentCategory || 'general';
 
     if (numericPreviousDues < 0 || numericTuitionFee < 0 || numericConcession < 0) {
         return res.status(400).json({ success: false, message: "Fee values cannot be negative." });
@@ -237,8 +238,8 @@ exports.addStudent = (req, res) => {
                 INSERT INTO students (
                     studentName, rollNumber, className, fatherName, contact1, contact2,
                     previousDues, tuitionFee, status, admissionNumber, satsNumber,
-                    motherName, gender, dob, address, remark, concessionAmount, concessionReason
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    motherName, gender, dob, address, remark, concessionAmount, concessionReason, studentCategory
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `,
                 [
                     cleanStudentName, cleanRollNumber, className,
@@ -254,7 +255,8 @@ exports.addStudent = (req, res) => {
                     address ? String(address).trim() : "",
                     remark ? String(remark).trim() : "",
                     numericConcession,
-                    concessionReason ? String(concessionReason).trim() : ""
+                    concessionReason ? String(concessionReason).trim() : "",
+                    cleanStudentCategory
                 ],
                 function (err) {
                     if (err) {
@@ -297,7 +299,7 @@ exports.addStudent = (req, res) => {
 exports.updateStudent = (req, res) => {
     const {
         studentName, rollNumber, className, fatherName, contact1, contact2, previousDues, tuitionFee,
-        admissionNumber, satsNumber, motherName, gender, dob, address, remark, concessionAmount, concessionReason
+        admissionNumber, satsNumber, motherName, gender, dob, address, remark, concessionAmount, concessionReason, studentCategory
     } = req.body;
 
     if (!studentName || !rollNumber || !className) {
@@ -309,6 +311,7 @@ exports.updateStudent = (req, res) => {
     const numericPreviousDues = Number(previousDues) || 0;
     const numericTuitionFee = Number(tuitionFee) || 0;
     const numericConcession = Number(concessionAmount) || 0;
+    const cleanStudentCategory = studentCategory || 'general';
 
     if (numericPreviousDues < 0 || numericTuitionFee < 0 || numericConcession < 0) {
         return res.status(400).json({ success: false, message: "Fee values cannot be negative." });
@@ -345,7 +348,7 @@ exports.updateStudent = (req, res) => {
                             studentName = ?, rollNumber = ?, className = ?, fatherName = ?, contact1 = ?, contact2 = ?,
                             previousDues = ?, tuitionFee = ?, admissionNumber = ?, satsNumber = ?,
                             motherName = ?, gender = ?, dob = ?, address = ?, remark = ?,
-                            concessionAmount = ?, concessionReason = ?
+                            concessionAmount = ?, concessionReason = ?, studentCategory = ?
                         WHERE id = ?
                         `,
                         [
@@ -363,6 +366,7 @@ exports.updateStudent = (req, res) => {
                             remark ? String(remark).trim() : "",
                             numericConcession,
                             concessionReason ? String(concessionReason).trim() : "",
+                            cleanStudentCategory,
                             req.params.id
                         ],
                         function (err) {
@@ -624,12 +628,12 @@ exports.importStudents = async (req, res) => {
                         INSERT INTO students (
                             studentName, rollNumber, className, fatherName, contact1,
                             previousDues, tuitionFee, status, admissionNumber, satsNumber,
-                            motherName, gender, dob, address, remark, concessionAmount, concessionReason
-                        ) VALUES (?, ?, ?, ?, ?, 0, 0, 'active', ?, ?, ?, ?, ?, ?, ?, 0, '')
+                            motherName, gender, dob, address, remark, concessionAmount, concessionReason, studentCategory
+                        ) VALUES (?, ?, ?, ?, ?, 0, 0, 'active', ?, ?, ?, ?, ?, ?, ?, 0, '', ?)
                         `,
                         [
                             studentName, rollNumber, className, fatherName, contact1,
-                            admissionNumber, satsNumber, motherName, gender, dob, address, remark
+                            admissionNumber, satsNumber, motherName, gender, dob, address, remark, 'general'
                         ],
                         function (err) {
                             if (err) reject(err);

@@ -16,11 +16,12 @@ const logAudit = require("../utils/auditLogger");
 const { CO_SCHOLASTIC_AREAS } = require("../utils/progressCard");
 const { _helpers } = require("./examController");
 
-const { getExam, isClassTeacher } = _helpers;
+const { getExam, isClassTeacher, isExamManager } = _helpers;
 
-// Admin, or the class teacher of the exam's class, may author these fields.
+// Admin, principal/manager (page granted at the route), or the class
+// teacher of the exam's class may author these fields.
 async function canAuthor(user, exam) {
-    if (user.role === "admin") return true;
+    if (isExamManager(user)) return true;
     return isClassTeacher(user, exam.className);
 }
 
