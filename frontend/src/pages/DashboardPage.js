@@ -111,6 +111,14 @@ function DashboardPage() {
 
     const money = value => `₹ ${Number(value || 0).toLocaleString("en-IN")}`;
 
+    // "2026-11-02" -> "02 Nov 2026" — plain string math, no Date
+    // parsing, so no timezone ever shifts the shown day.
+    const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const dateFmt = value => {
+        const m = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return m ? `${m[3]} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : String(value || "");
+    };
+
     if (loading) {
         return (
             <div className="dashboard">
@@ -189,63 +197,59 @@ function DashboardPage() {
                             {/* Recent Payments Table */}
                             <div className="dashboard-table">
                                 <h3>Recent Payments</h3>
-                                <table className="stack-sm">
-                                    <thead>
-                                        <tr>
-                                            <th>Student</th>
-                                            <th>Amount</th>
-                                            <th>Date</th>
-                                            <th>Mode</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {recentPayments.length === 0 ? (
+                                {recentPayments.length === 0 ? (
+                                    <p className="empty-note">No payments recorded yet.</p>
+                                ) : (
+                                    <table className="stack-sm">
+                                        <thead>
                                             <tr>
-                                                <td colSpan="4" style={{ textAlign: "center" }}>No Payments Found</td>
+                                                <th>Student</th>
+                                                <th>Amount</th>
+                                                <th>Date</th>
+                                                <th>Mode</th>
                                             </tr>
-                                        ) : (
-                                            recentPayments.map(payment => (
+                                        </thead>
+                                        <tbody>
+                                            {recentPayments.map(payment => (
                                                 <tr key={payment.id}>
                                                     <td data-label="Student">{payment.studentName}</td>
                                                     <td data-label="Amount">{money(payment.amount)}</td>
-                                                    <td data-label="Date">{payment.paymentDate}</td>
+                                                    <td data-label="Date">{dateFmt(payment.paymentDate)}</td>
                                                     <td data-label="Mode">{payment.paymentMode}</td>
                                                 </tr>
-                                            ))
-                                        )}
-                                    </tbody>
-                                </table>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
                             </div>
 
                             {/* Recent Expenses Table */}
-                            <div className="dashboard-table" style={{ marginTop: "20px" }}>
+                            <div className="dashboard-table">
                                 <h3>Recent School Expenses</h3>
-                                <table className="stack-sm">
-                                    <thead>
-                                        <tr>
-                                            <th>Expense</th>
-                                            <th>Category</th>
-                                            <th>Amount</th>
-                                            <th>Date</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {recentExpenses.length === 0 ? (
+                                {recentExpenses.length === 0 ? (
+                                    <p className="empty-note">No expenses recorded yet.</p>
+                                ) : (
+                                    <table className="stack-sm">
+                                        <thead>
                                             <tr>
-                                                <td colSpan="4" style={{ textAlign: "center" }}>No Expenses Found</td>
+                                                <th>Expense</th>
+                                                <th>Category</th>
+                                                <th>Amount</th>
+                                                <th>Date</th>
                                             </tr>
-                                        ) : (
-                                            recentExpenses.map(expense => (
+                                        </thead>
+                                        <tbody>
+                                            {recentExpenses.map(expense => (
                                                 <tr key={expense.id}>
                                                     <td data-label="Expense">{expense.expenseName}</td>
                                                     <td data-label="Category">{expense.category}</td>
                                                     <td data-label="Amount">{money(expense.amount)}</td>
-                                                    <td data-label="Date">{expense.expenseDate}</td>
+                                                    <td data-label="Date">{dateFmt(expense.expenseDate)}</td>
                                                 </tr>
-                                            ))
-                                        )}
-                                    </tbody>
-                                </table>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
                             </div>
 
                         </div>
