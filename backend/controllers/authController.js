@@ -341,7 +341,8 @@ exports.profile = (
                 user.role !== "accountant" &&
                 user.role !== "principal" &&
                 user.role !== "manager" &&
-                user.role !== "teacher"
+                user.role !== "teacher" &&
+                user.role !== "supporting_teacher"
             ) {
 
                 return res.status(403).json({
