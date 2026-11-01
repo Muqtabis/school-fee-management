@@ -224,7 +224,7 @@ function StudentAttendancePage() {
                                 </div>
                             </div>
 
-                            {/* Tabs */}
+                            {/* Tabs (badge = total students in the selected class) */}
                             <div className="exam-tabbar">
                                 <button
                                     type="button"
@@ -232,6 +232,11 @@ function StudentAttendancePage() {
                                     onClick={() => setActiveTab("mark")}
                                 >
                                     Mark Attendance
+                                    {selectedClass && !loading && (
+                                        <span className="exam-badge" title={`${rows.length} students in ${selectedClass}`}>
+                                            {rows.length}
+                                        </span>
+                                        )}
                                 </button>
                                 <button
                                     type="button"
@@ -239,6 +244,11 @@ function StudentAttendancePage() {
                                     onClick={() => setActiveTab("history")}
                                 >
                                     History
+                                    {selectedClass && !loading && (
+                                        <span className="exam-badge" title={`${rows.length} students in ${selectedClass}`}>
+                                            {rows.length}
+                                        </span>
+                                        )}
                                 </button>
                             </div>
 

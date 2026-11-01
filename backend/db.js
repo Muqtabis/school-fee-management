@@ -392,6 +392,23 @@ async function initializeDatabase() {
             )
         `);
 
+        // SUBJECT MASTER — the catalogue created FIRST, then the subjects that
+        // are actually taught are selected per class (mirrors fee components
+        // -> per-class fee structures). Backfilled from the distinct names
+        // already in `subjects`, so existing classes keep working unchanged.
+        await run(`
+            CREATE TABLE IF NOT EXISTS subjects_master (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subjectName TEXT NOT NULL UNIQUE,
+                createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        // Idempotent backfill — runs on every boot, never duplicates.
+        await run(`
+            INSERT OR IGNORE INTO subjects_master (subjectName)
+            SELECT DISTINCT subjectName FROM subjects
+        `);
+
         // TEACHER ASSIGNMENTS — which class each teacher handles.
         await run(`
             CREATE TABLE IF NOT EXISTS teacher_assignments (
@@ -470,6 +487,7 @@ async function initializeDatabase() {
                 attendanceDate TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'present',
                 remark TEXT,
+                isLocked INTEGER DEFAULT 0,
                 markedBy INTEGER,
                 updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
                 createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -802,6 +820,11 @@ async function migrateDatabase() {
     // 'subject_teacher' (default) can enter marks for the class; 'class_teacher'
     // additionally owns the class and can mark student attendance for it.
     await addColumnIfMissing("teacher_assignments", "role", "TEXT NOT NULL DEFAULT 'subject_teacher'");
+
+    // STAFF ATTENDANCE LOCK
+    // 0 = every marker may still edit the record; 1 = frozen for the day —
+    // only an admin or the principal can unlock it. Idempotent like the rest.
+    await addColumnIfMissing("teacher_attendance", "isLocked", "INTEGER DEFAULT 0");
 
     // =====================================================
     // EXAM MODULE REFINEMENT (Part 1)

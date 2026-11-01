@@ -154,12 +154,14 @@ export default function AuthProvider({ children }) {
 
     // Helper: can this user open a given page key?
     // Admin always can. Settings (profile + change own
-    // password) is open to every logged-in user by default —
+    // password) and My Attendance (own record, read-only)
+    // are open to every logged-in user by default —
     // no page grant needed.
     const canAccess = useCallback(
         (pageKey) => {
             if (user?.role === "admin") return true;
             if (pageKey === "settings") return true;
+            if (pageKey === "my_attendance") return true;
             return allowedPages.includes(pageKey);
         },
         [user, allowedPages]

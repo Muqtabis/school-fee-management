@@ -15,9 +15,11 @@ const {
 // Guard shorthands: the two audiences for this router.
 // Marks Entry stays teacher-scoped inside the controller
 // (a principal/manager granted the page sees an empty
-// list rather than another teacher's work).
+// list rather than another teacher's work). supporting_teacher
+// works like a teacher, scoped to the classes they were
+// assigned as supporting teacher.
 const teacher = [
-    requireRole("admin", "teacher", "principal", "manager"),
+    requireRole("admin", "teacher", "supporting_teacher", "principal", "manager"),
     requirePage("marks_entry")
 ];
 // Exam & Results management: admin, or principal/manager
@@ -68,7 +70,7 @@ router.delete("/grading-scales/:id", examAdmin, gradingController.deleteGradingS
 // Exam definitions (the exam as a whole, spanning classes).
 // Shared by Marks Entry, Exam & Results AND Results Overview,
 // so any of those page grants opens it.
-router.get("/definitions", requireRole("admin", "teacher", "principal", "manager"), requireAnyPage("marks_entry", "exam_results", "results_overview"), examController.getExamDefinitions);
+router.get("/definitions", requireRole("admin", "teacher", "supporting_teacher", "principal", "manager"), requireAnyPage("marks_entry", "exam_results", "results_overview"), examController.getExamDefinitions);
 router.get("/definitions/:definitionId", examAdmin, examController.getExamDefinition);
 
 // A student's structured result history across exams.

@@ -28,11 +28,13 @@ function TabBar() {
     const [moreOpen, setMoreOpen] = useState(false);
 
     const isAdmin = user?.role === "admin";
+    // Pages every logged-in user gets without a grant (matches Sidebar):
+    // Settings (profile) and My Attendance (own record, read-only).
+    const DEFAULT_PAGES = ["settings", "my_attendance"];
     const menuItems = APP_PAGES.filter(
         (page) =>
             isAdmin ||
-            // Settings is open to every user by default.
-            page.key === "settings" ||
+            DEFAULT_PAGES.includes(page.key) ||
             allowedPages.includes(page.key)
     );
 

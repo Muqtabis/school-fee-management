@@ -1,5 +1,5 @@
 import { toast, confirmDialog } from "../services/notify";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
@@ -7,10 +7,31 @@ import PromptDialog from "../components/PromptDialog";
 import api from "../services/api";
 
 
+// Stable ordering for the Users page role filter tabs.
+const ROLE_TAB_ORDER = [
+    "admin",
+    "principal",
+    "manager",
+    "accountant",
+    "teacher",
+    "supporting_teacher",
+    "supporting_staff"
+];
+
 function UsersPage() {
 
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    // Role filter tabs — with many staff accounts, jumping straight
+    // to a role is faster than scanning the full list.
+    const [roleFilter, setRoleFilter] = useState("All");
+
+    // The filtered rows the table renders.
+    const visibleUsers = useMemo(
+        () => (roleFilter === "All" ? users : users.filter((u) => u.role === roleFilter)),
+        [users, roleFilter]
+    );
 
     // Master list of assignable pages (from backend registry).
     const [pageRegistry, setPageRegistry] = useState([]);
@@ -241,6 +262,8 @@ function UsersPage() {
 
     const labelForRole = (role) => {
         if (role === "teacher") return "Teacher";
+        if (role === "supporting_teacher") return "Supporting Teacher";
+        if (role === "supporting_staff") return "Supporting Staff";
         if (role === "accountant") return "Accountant";
         if (role === "principal") return "Principal";
         if (role === "manager") return "Manager";
@@ -249,7 +272,7 @@ function UsersPage() {
     };
 
     const isManageable = (role) =>
-        ["accountant", "principal", "manager", "teacher"].includes(role);
+        ["accountant", "principal", "manager", "teacher", "supporting_teacher", "supporting_staff"].includes(role);
 
 
     // =====================================================
@@ -322,6 +345,8 @@ function UsersPage() {
                                 <option value="principal">Principal</option>
                                 <option value="manager">Manager</option>
                                 <option value="teacher">Teacher</option>
+                                <option value="supporting_teacher">Supporting Teacher</option>
+                                <option value="supporting_staff">Supporting Staff</option>
                             </select>
 
                             <button type="submit" className="primary-btn">
@@ -329,6 +354,38 @@ function UsersPage() {
                             </button>
                         </form>
                     </div>
+
+                    {/* =================================================
+                        ROLE FILTER TABS
+                        All + every role actually present (so the bar
+                        stays short early on), each with a count badge.
+                    ================================================= */}
+                    {users.length > 0 && (
+                        <div className="exam-tabbar" style={{ marginTop: "25px" }}>
+                            <button
+                                type="button"
+                                className={`exam-tab ${roleFilter === "All" ? "exam-tab-active" : ""}`}
+                                onClick={() => setRoleFilter("All")}
+                            >
+                                All
+                                <span className="exam-badge">{users.length}</span>
+                            </button>
+                            {ROLE_TAB_ORDER
+                                .map((role) => ({ role, count: users.filter((u) => u.role === role).length }))
+                                .filter((t) => t.count > 0)
+                                .map((t) => (
+                                    <button
+                                        key={t.role}
+                                        type="button"
+                                        className={`exam-tab ${roleFilter === t.role ? "exam-tab-active" : ""}`}
+                                        onClick={() => setRoleFilter(t.role)}
+                                    >
+                                        {labelForRole(t.role)}
+                                        <span className="exam-badge">{t.count}</span>
+                                    </button>
+                                ))}
+                        </div>
+                    )}
 
                     {/* =================================================
                         USERS TABLE
@@ -354,12 +411,16 @@ function UsersPage() {
                                     <tr>
                                         <td colSpan="6">Loading...</td>
                                     </tr>
-                                ) : users.length === 0 ? (
+                                ) : visibleUsers.length === 0 ? (
                                     <tr>
-                                        <td colSpan="6">No users found.</td>
+                                        <td colSpan="6">
+                                            {roleFilter === "All"
+                                                ? "No users found."
+                                                : `No ${labelForRole(roleFilter)} accounts yet.`}
+                                        </td>
                                     </tr>
                                 ) : (
-                                    users.flatMap((user) => {
+                                    visibleUsers.flatMap((user) => {
                                         const rows = [
                                         <tr key={user.id}>
                                             <td data-label="Name">{user.name}</td>

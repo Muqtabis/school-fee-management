@@ -9,13 +9,13 @@ const get = (sql, params = []) =>
     });
 
 // Fire-and-forget audit write; never breaks the request on failure.
-const safeLogAudit = async (req, action, entityId, details) => {
+const safeLogAudit = async (req, action, entityId, details, entityType = "class") => {
     try {
         if (typeof logAudit !== "function") return;
         await logAudit({
             userId: req.user?.id ?? null,
             action,
-            entityType: "class",
+            entityType,
             entityId,
             details: details ? JSON.stringify(details) : null
         });
@@ -559,3 +559,388 @@ const setClassLock = async (req, res, lockValue) => {
 
 exports.lockClass = (req, res) => setClassLock(req, res, 1);
 exports.unlockClass = (req, res) => setClassLock(req, res, 0);
+
+
+// =====================================================
+// SUBJECTS — MASTER CATALOGUE + PER-CLASS SELECTION
+//
+// Mirrors the fee-structure flow: subjects are created in
+// the catalogue FIRST, then a class's modal selects which
+// of them are actually taught there.
+//
+// The per-class rows stay in the legacy `subjects` table
+// (className + subjectName) — exams, subject-teacher
+// assignments and progress cards reference those row ids,
+// so saving a class's selection simply syncs that table:
+//   - selected   -> ensure a row exists (default maxMarks)
+//   - deselected -> remove the row ONLY if nothing
+//                   (exam / teacher assignment) uses it
+// =====================================================
+
+const sanitizeSubjectName = (value) =>
+    String(value ?? "").replace(/\s+/g, " ").trim();
+
+// How much an individual legacy subject row is referenced.
+const countSubjectUsage = async (subjectId) => {
+    const row = await get(
+        `
+        SELECT
+            (SELECT COUNT(*) FROM exam_subjects WHERE subjectId = ?) AS exams,
+            (SELECT COUNT(*) FROM subject_teacher_assignments WHERE subjectId = ?) AS teachers
+        `,
+        [subjectId, subjectId]
+    );
+    return {
+        exams: row ? Number(row.exams) : 0,
+        teachers: row ? Number(row.teachers) : 0
+    };
+};
+
+// -----------------------------------------------------
+// MASTER SUBJECTS
+// -----------------------------------------------------
+
+exports.getMasterSubjects = async (req, res) => {
+    try {
+        const rows = await allQuery(
+            `
+            SELECT m.id, m.subjectName,
+                   (SELECT COUNT(DISTINCT s.className)
+                      FROM subjects s
+                     WHERE s.subjectName = m.subjectName) AS classCount
+            FROM subjects_master m
+            ORDER BY m.subjectName ASC
+            `
+        );
+        res.json({ success: true, subjects: rows });
+    } catch (err) {
+        console.error("Get Master Subjects Error:", err);
+        res.status(500).json({ success: false, message: "Unable to load the subject catalogue." });
+    }
+};
+
+exports.createMasterSubject = async (req, res) => {
+    const subjectName = sanitizeSubjectName(req.body?.subjectName);
+
+    if (!subjectName) {
+        return res.status(400).json({ success: false, message: "Subject name is required." });
+    }
+
+    try {
+        const duplicate = await get(
+            `SELECT id FROM subjects_master WHERE LOWER(subjectName) = LOWER(?)`,
+            [subjectName]
+        );
+        if (duplicate) {
+            return res.status(409).json({
+                success: false,
+                message: `"${subjectName}" already exists in the catalogue.`
+            });
+        }
+
+        const result = await runQuery(
+            `INSERT INTO subjects_master (subjectName) VALUES (?)`,
+            [subjectName]
+        );
+
+        const created = await get(
+            `SELECT id, subjectName FROM subjects_master WHERE id = ?`,
+            [result.lastID]
+        );
+
+        await safeLogAudit(req, "subject_master.create", result.lastID, { subjectName }, "subject");
+
+        return res.status(201).json({
+            success: true,
+            message: `Subject "${subjectName}" added to the catalogue.`,
+            subject: created
+        });
+    } catch (err) {
+        console.error("Create Master Subject Error:", err);
+        res.status(500).json({ success: false, message: "Unable to create subject." });
+    }
+};
+
+exports.updateMasterSubject = async (req, res) => {
+    const { id } = req.params;
+    const subjectName = sanitizeSubjectName(req.body?.subjectName);
+
+    if (!subjectName) {
+        return res.status(400).json({ success: false, message: "Subject name is required." });
+    }
+
+    try {
+        const existing = await get(
+            `SELECT id, subjectName FROM subjects_master WHERE id = ?`,
+            [id]
+        );
+        if (!existing) {
+            return res.status(404).json({ success: false, message: "Subject not found." });
+        }
+
+        const duplicate = await get(
+            `SELECT id FROM subjects_master WHERE id != ? AND LOWER(subjectName) = LOWER(?)`,
+            [id, subjectName]
+        );
+        if (duplicate) {
+            return res.status(409).json({
+                success: false,
+                message: `"${subjectName}" already exists in the catalogue.`
+            });
+        }
+
+        // Renaming would collide with a per-class copy of the new name when
+        // the same class offers both names (UNIQUE(className, subjectName)).
+        const clash = await get(
+            `
+            SELECT s1.className
+            FROM subjects s1
+            JOIN subjects s2 ON s1.className = s2.className
+            WHERE s1.subjectName = ? AND s2.subjectName = ?
+            LIMIT 1
+            `,
+            [existing.subjectName, subjectName]
+        );
+        if (clash) {
+            return res.status(409).json({
+                success: false,
+                message: `Class ${clash.className} already has "${subjectName}" — rename would clash there.`
+            });
+        }
+
+        await runQuery("BEGIN");
+        try {
+            // Keep the master row and every per-class copy in step so the
+            // class-selection mapping (joined on subjectName) keeps working.
+            await runQuery(`UPDATE subjects_master SET subjectName = ? WHERE id = ?`, [subjectName, id]);
+            await runQuery(`UPDATE subjects SET subjectName = ? WHERE subjectName = ?`, [subjectName, existing.subjectName]);
+            await runQuery("COMMIT");
+        } catch (txErr) {
+            await runQuery("ROLLBACK").catch(() => {});
+            throw txErr;
+        }
+
+        await safeLogAudit(req, "subject_master.rename", id, {
+            from: existing.subjectName,
+            to: subjectName
+        }, "subject");
+
+        return res.json({
+            success: true,
+            message: `Subject renamed to "${subjectName}".`
+        });
+    } catch (err) {
+        console.error("Update Master Subject Error:", err);
+        res.status(500).json({ success: false, message: "Unable to rename subject." });
+    }
+};
+
+exports.deleteMasterSubject = async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const existing = await get(
+            `SELECT id, subjectName FROM subjects_master WHERE id = ?`,
+            [id]
+        );
+        if (!existing) {
+            return res.status(404).json({ success: false, message: "Subject not found." });
+        }
+
+        // A subject that is (still) offered in classes cannot be deleted from
+        // the catalogue — remove it from the classes first.
+        const usedIn = await allQuery(
+            `SELECT DISTINCT className FROM subjects WHERE subjectName = ?`,
+            [existing.subjectName]
+        );
+        if (usedIn.length > 0) {
+            return res.status(409).json({
+                success: false,
+                message: `"${existing.subjectName}" is still used in ${usedIn.length} class(es). Remove it from those classes first.`
+            });
+        }
+
+        const result = await runQuery(`DELETE FROM subjects_master WHERE id = ?`, [id]);
+        if (result.changes === 0) {
+            return res.status(404).json({ success: false, message: "Subject not found." });
+        }
+
+        await safeLogAudit(req, "subject_master.delete", id, { subjectName: existing.subjectName }, "subject");
+
+        return res.json({
+            success: true,
+            message: `Subject "${existing.subjectName}" deleted from the catalogue.`
+        });
+    } catch (err) {
+        console.error("Delete Master Subject Error:", err);
+        res.status(500).json({ success: false, message: "Unable to delete subject." });
+    }
+};
+
+// -----------------------------------------------------
+// PER-CLASS SELECTION (checkbox modal endpoints)
+// -----------------------------------------------------
+
+exports.getClassSubjects = async (req, res) => {
+    const classId = Number(req.params.id);
+
+    if (!Number.isInteger(classId)) {
+        return res.status(400).json({ success: false, message: "A valid class id is required." });
+    }
+
+    try {
+        const cls = await get(
+            `SELECT id, className, section, isLocked FROM classes WHERE id = ?`,
+            [classId]
+        );
+        if (!cls) {
+            return res.status(404).json({ success: false, message: "Class not found." });
+        }
+
+        // Legacy rows store the display name ("10 - A") after renames and the
+        // raw name before them — match either so old data still lines up.
+        const display = classDisplay(cls.className, cls.section);
+        const raw = normalizeName(cls.className);
+        const classKeys = raw === display ? [raw] : [display, raw];
+        const inClause = `(${classKeys.map(() => "?").join(",")})`;
+
+        const subjects = await allQuery(
+            `
+            SELECT m.id, m.subjectName,
+                   CASE WHEN s.id IS NULL THEN 0 ELSE 1 END AS selected,
+                   s.id AS subjectRowId,
+                   (SELECT COUNT(*) FROM exam_subjects es WHERE es.subjectId = s.id) AS examCount
+            FROM subjects_master m
+            LEFT JOIN subjects s
+              ON s.subjectName = m.subjectName AND s.className IN ${inClause}
+            ORDER BY m.subjectName ASC
+            `,
+            classKeys
+        );
+
+        res.json({
+            success: true,
+            class: serializeClass(cls),
+            locked: cls.isLocked === undefined || cls.isLocked === null ? true : !!cls.isLocked,
+            subjects
+        });
+    } catch (err) {
+        console.error("Get Class Subjects Error:", err);
+        res.status(500).json({ success: false, message: "Unable to load the class subjects." });
+    }
+};
+
+exports.saveClassSubjects = async (req, res) => {
+    const classId = Number(req.params.id);
+    const subjectIds = Array.isArray(req.body?.subjectIds)
+        ? req.body.subjectIds.map(Number).filter(Number.isInteger)
+        : null;
+
+    if (!Number.isInteger(classId)) {
+        return res.status(400).json({ success: false, message: "A valid class id is required." });
+    }
+    if (subjectIds === null) {
+        return res.status(400).json({ success: false, message: "A subjectIds array is required." });
+    }
+
+    try {
+        const cls = await get(
+            `SELECT id, className, section, isLocked FROM classes WHERE id = ?`,
+            [classId]
+        );
+        if (!cls) {
+            return res.status(404).json({ success: false, message: "Class not found." });
+        }
+
+        // Same freeze rule as rename/delete: unknown lock state counts as locked.
+        const locked = cls.isLocked === undefined || cls.isLocked === null
+            ? true
+            : !!cls.isLocked;
+        if (locked) {
+            return res.status(409).json({
+                success: false,
+                message: "This class is locked. Unlock it first to change its subjects."
+            });
+        }
+
+        // Only subjects that really exist in the catalogue can be selected.
+        const wantedNames = [...new Set(
+            (subjectIds.length
+                ? await allQuery(
+                    `SELECT subjectName FROM subjects_master
+                     WHERE id IN (${subjectIds.map(() => "?").join(",")})`,
+                    subjectIds
+                )
+                : []
+            ).map((r) => r.subjectName)
+        )];
+
+        const display = classDisplay(cls.className, cls.section);
+        const raw = normalizeName(cls.className);
+        const classKeys = raw === display ? [raw] : [display, raw];
+        const inClause = `(${classKeys.map(() => "?").join(",")})`;
+
+        const current = await allQuery(
+            `SELECT id, subjectName FROM subjects WHERE className IN ${inClause}`,
+            classKeys
+        );
+        const currentNames = new Set(current.map((r) => r.subjectName));
+
+        let added = 0;
+        let removed = 0;
+        let kept = 0;
+
+        await runQuery("BEGIN");
+        try {
+            // Select -> make sure the class has a row (default maxMarks 100).
+            for (const subjectName of wantedNames) {
+                if (currentNames.has(subjectName)) continue;
+                await runQuery(
+                    `INSERT INTO subjects (className, subjectName) VALUES (?, ?)`,
+                    [display, subjectName]
+                );
+                added++;
+            }
+
+            // Deselect -> drop the row unless exams or teacher assignments use
+            // it (those are protected so no marks/history can ever dangle).
+            for (const row of current) {
+                if (wantedNames.includes(row.subjectName)) continue;
+                const usage = await countSubjectUsage(row.id);
+                if (usage.exams > 0 || usage.teachers > 0) {
+                    kept++;
+                    continue;
+                }
+                await runQuery(`DELETE FROM subjects WHERE id = ?`, [row.id]);
+                removed++;
+            }
+
+            await runQuery("COMMIT");
+        } catch (txErr) {
+            await runQuery("ROLLBACK").catch(() => {});
+            throw txErr;
+        }
+
+        await safeLogAudit(req, "class.subjects.save", cls.id, {
+            classDisplay: display,
+            added,
+            removed,
+            kept
+        });
+
+        const keptNote = kept > 0
+            ? ` ${kept} subject(s) were left in place because exams or teacher assignments already use them.`
+            : "";
+
+        return res.json({
+            success: true,
+            message: `Subjects for ${display} saved — added ${added}, removed ${removed}.${keptNote}`,
+            added,
+            removed,
+            kept
+        });
+    } catch (err) {
+        console.error("Save Class Subjects Error:", err);
+        res.status(500).json({ success: false, message: "Unable to save the class subjects." });
+    }
+};

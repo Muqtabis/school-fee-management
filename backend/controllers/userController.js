@@ -120,7 +120,7 @@ exports.createUser = async (
     // with the old create flow (which sent no role). An explicitly
     // supplied role that isn't allowed is rejected rather than silently
     // coerced, so callers aren't surprised by the account they got.
-    const allowedRoles = ["accountant", "principal", "manager", "teacher"];
+    const allowedRoles = ["accountant", "principal", "manager", "teacher", "supporting_teacher", "supporting_staff"];
     if (role !== undefined && role !== null && String(role).trim() !== "" &&
         !allowedRoles.includes(role)) {
         return res.status(400).json({
@@ -426,14 +426,14 @@ exports.resetPassword = async (
             // Admin cannot use this endpoint
             // to reset another admin's password.
 
-            const resettableRoles = ["accountant", "principal", "manager", "teacher"];
+            const resettableRoles = ["accountant", "principal", "manager", "teacher", "supporting_teacher"];
 
             if (!resettableRoles.includes(user.role)) {
 
                 return res.status(403).json({
                     success: false,
                     message:
-                        "Only accountant, principal, manager or teacher passwords can be reset here."
+                        "Only accountant, principal, manager, teacher or supporting teacher passwords can be reset here."
                 });
 
             }
@@ -647,17 +647,17 @@ exports.deleteUser = (
             }
 
 
-            // Only staff and teacher accounts
-            // can be deleted from Users page.
+            // All non-admin staff-style accounts can be deleted:
+            // teachers, supporting roles, and staff roles.
 
-            const deletableRoles = ["accountant", "principal", "manager", "teacher"];
+            const deletableRoles = ["accountant", "principal", "manager", "teacher", "supporting_teacher", "supporting_staff"];
 
             if (!deletableRoles.includes(user.role)) {
 
                 return res.status(403).json({
                     success: false,
                     message:
-                        "Only accountant, principal, manager or teacher accounts can be deleted."
+                        "Only accountant, principal, manager, teacher, supporting teacher or supporting staff accounts can be deleted."
                 });
 
             }
@@ -1259,11 +1259,12 @@ exports.getMyPages = async (req, res) => {
 
     try {
 
-        // Admin always sees everything.
+        // Admin always sees everything (plus the default self-service pages,
+        // which are intentionally kept out of the assignable registry).
         if (req.user.role === "admin") {
             return res.json({
                 success: true,
-                pageKeys: PAGES.map((page) => page.key)
+                pageKeys: [...PAGES.map((page) => page.key), "my_attendance"]
             });
         }
 
@@ -1274,10 +1275,11 @@ exports.getMyPages = async (req, res) => {
 
         const pageKeys = rows.map((row) => row.pageKey);
 
-        // Every teacher gets a read-only view of their own
-        // attendance, with no admin grant required. This page
-        // is intentionally kept out of the assignable registry.
-        if (req.user.role === "teacher" && !pageKeys.includes("my_attendance")) {
+        // EVERY user gets a read-only view of their own
+        // attendance (My Attendance), no admin grant required.
+        // Kept out of the assignable registry (like settings) —
+        // it is a default, not a permission decision.
+        if (!pageKeys.includes("my_attendance")) {
             pageKeys.push("my_attendance");
         }
 

@@ -161,7 +161,7 @@ export default function LoginPage() {
             // =================================================
 
             if (
-                user.role === "teacher"
+                user.role === "teacher" || user.role === "supporting_teacher"
             ) {
 
                 navigate(

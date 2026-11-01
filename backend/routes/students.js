@@ -37,6 +37,17 @@ router.post(
 );
 
 // =====================================================
+// COUNTS
+// Badge totals for the Students page (Active / Archived).
+// Declared before "/:id" so "counts" is never read as an ID.
+// =====================================================
+router.get(
+    "/counts",
+    requireRole("admin", "accountant", "principal", "manager"),
+    studentController.getStudentCounts
+);
+
+// =====================================================
 // SINGLE STUDENT
 // ADMIN + STAFF
 // =====================================================

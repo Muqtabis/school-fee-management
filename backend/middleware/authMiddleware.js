@@ -73,9 +73,12 @@ function authenticateToken(
 
         // =================================================
         // ONLY VALID APPLICATION ROLES
+        // supporting_teacher behaves like a teacher everywhere;
+        // supporting_staff is deliberately NOT minted access —
+        // it can never log in, so no token for it exists.
         // =================================================
 
-        const VALID_ROLES = ["admin", "accountant", "principal", "manager", "teacher"];
+        const VALID_ROLES = ["admin", "accountant", "principal", "manager", "teacher", "supporting_teacher"];
 
         if (!VALID_ROLES.includes(decoded.role)) {
 
@@ -342,14 +345,17 @@ const requireStaff =
 
 
 // =====================================================
-// TEACHER (also allow admin, so admin can see/manage
-// teacher-facing endpoints when needed)
+// TEACHER (also allow supporting_teacher — it works like a
+// teacher everywhere, scoped to the classes it is assigned
+// to — plus admin, so admin can see/manage teacher-facing
+// endpoints when needed)
 // =====================================================
 
 const requireTeacher =
     requireRole(
         "admin",
-        "teacher"
+        "teacher",
+        "supporting_teacher"
     );
 
 

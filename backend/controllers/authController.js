@@ -177,16 +177,20 @@ exports.login = (
                     user.role !== "accountant" &&
                     user.role !== "principal" &&
                     user.role !== "manager" &&
-                    user.role !== "teacher"
+                    user.role !== "teacher" &&
+                    user.role !== "supporting_teacher"
                 ) {
 
+                    if (user.role === "supporting_staff") {
+                        return res.status(403).json({
+                            success: false,
+                            message: "Supporting staff accounts are not permitted to log in."
+                        });
+                    }
+
                     return res.status(403).json({
-
                         success: false,
-
-                        message:
-                            "This account has an invalid role."
-
+                        message: "This account has an invalid role."
                     });
 
                 }

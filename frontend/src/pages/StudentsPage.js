@@ -32,6 +32,11 @@ function StudentsPage() {
     const [detailState, setDetailState] = useState(null);
     const [showArchived, setShowArchived] = useState(false);
 
+    // Tab badge totals (Active / Archived) — refreshed with the roster.
+    const [counts, setCounts] = useState({ active: 0, archived: 0 });
+    const [byClass, setByClass] = useState([]);   // [{ className, active, archived }]
+    const [countsLoaded, setCountsLoaded] = useState(false);
+
     // The student shown in the detail modal, derived live from the list —
     // after every refresh the modal re-renders with the latest data.
     const detailStudent = detailState
@@ -45,6 +50,7 @@ function StudentsPage() {
     useEffect(() => {
         fetchStudents();
         fetchClasses();
+        fetchCounts();
     }, [showArchived]);
 
     // Real-time refresh: refetch when the window regains focus and on a gentle
@@ -52,7 +58,10 @@ function StudentsPage() {
     // The filtered list re-applies itself (derived below), so the view never
     // jumps back to the unfiltered roster.
     useEffect(() => {
-        const refresh = () => fetchStudents();
+        const refresh = () => {
+            fetchStudents();
+            fetchCounts();
+        };
         window.addEventListener("focus", refresh);
         const timer = setInterval(refresh, 30000);
         return () => {
@@ -83,6 +92,38 @@ function StudentsPage() {
             setClasses([]);
         }
     };
+
+    // Tab badge totals — one cheap aggregate call, independent of
+    // the current tab / filters.
+    const fetchCounts = async () => {
+        try {
+            const res = await api.get("/students/counts");
+            if (res.data?.counts) setCounts(res.data.counts);
+            setByClass(Array.isArray(res.data?.byClass) ? res.data.byClass : []);
+            setCountsLoaded(true);
+        } catch (error) {
+            console.error("Unable to fetch student counts:", error);
+        }
+    };
+
+    // students.className -> per-class counts, for the class dropdown labels.
+    const byClassMap = useMemo(() => {
+        const map = {};
+        byClass.forEach((r) => {
+            if (r.className) map[r.className] = r;
+        });
+        return map;
+    }, [byClass]);
+
+    // Which per-class number to show depends on the selected tab —
+    // archived counts while viewing the archived tab.
+    const classCount = (displayClass) => {
+        const info = byClassMap[displayClass];
+        if (!info) return 0;
+        return showArchived ? (info.archived || 0) : (info.active || 0);
+    };
+
+    const allClassesCount = showArchived ? counts.archived : counts.active;
 
     // Sort a list of students by roll (numeric) or name.
     const sortStudents = (list, mode) => {
@@ -170,6 +211,7 @@ function StudentsPage() {
             setArchiveTarget(null);
             toast("Student archived successfully.");
             fetchStudents();
+            fetchCounts();
         } catch (error) {
             toast(error.response?.data?.message || "Unable to archive student.");
         } finally {
@@ -183,6 +225,7 @@ function StudentsPage() {
             await api.post(`/students/${student.id}/restore`);
             toast("Student restored successfully.");
             fetchStudents();
+            fetchCounts();
         } catch (error) {
             toast(error.response?.data?.message || "Unable to restore student.");
         }
@@ -212,6 +255,7 @@ function StudentsPage() {
             
             // AUTOMATICALLY REFRESH BOTH TABLES AFTER IMPORT
             fetchStudents(); 
+            fetchCounts(); 
             fetchClasses(); // <--- ADDED: This guarantees the dropdown populates immediately
             
         } catch (error) {
@@ -267,18 +311,24 @@ function StudentsPage() {
                     <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
                         <button
                             type="button"
-                            className={!showArchived ? "primary-btn" : "clear-btn"}
+                            className={`tab-toggle ${!showArchived ? "primary-btn" : "clear-btn"}`}
                             onClick={() => handleStatusToggle(false)}
                         >
                             Active Students
+                            <span className={`exam-badge ${!showArchived ? "on-primary" : ""}`} title="Total active students">
+                                {counts.active}
+                            </span>
                         </button>
 
                         <button
                             type="button"
-                            className={showArchived ? "primary-btn" : "clear-btn"}
+                            className={`tab-toggle ${showArchived ? "primary-btn" : "clear-btn"}`}
                             onClick={() => handleStatusToggle(true)}
                         >
                             Archived Students
+                            <span className={`exam-badge ${showArchived ? "on-primary" : ""}`} title="Total archived students">
+                                {counts.archived}
+                            </span>
                         </button>
                     </div>
 
@@ -288,10 +338,14 @@ function StudentsPage() {
                         </div>
 
                         <select className="filter-select" value={selectedClass} onChange={handleClassChange} style={{ minWidth: "150px" }}>
-                            <option value="All">All Classes</option>
+                            <option value="All">All Classes{countsLoaded ? ` (${allClassesCount})` : ""}</option>
                             {classes.map((c) => {
                                 const displayClass = formatClass(c);
-                                return <option key={c.id} value={displayClass}>{displayClass}</option>;
+                                return (
+                                    <option key={c.id} value={displayClass}>
+                                        {displayClass}{countsLoaded ? ` (${classCount(displayClass)})` : ""}
+                                    </option>
+                                );
                             })}
                         </select>
 
@@ -416,6 +470,7 @@ function StudentsPage() {
                         setShowForm(false);
                         setSelectedStudent(null);
                         fetchStudents();
+                        fetchCounts();
                     }}
                 />
             )}

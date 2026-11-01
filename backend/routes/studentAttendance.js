@@ -20,7 +20,14 @@ const {
 // ownership checks stay in the controller.
 // =====================================================
 
-router.use(requireRole("admin", "teacher", "principal", "manager"));
+// =====================================================
+// STUDENT ATTENDANCE
+// Admin + class teachers + assigned supporting teachers
+// (role check here; the class link is verified in the
+// controller on every call).
+// =====================================================
+
+router.use(requireRole("admin", "teacher", "supporting_teacher", "principal", "manager"));
 
 router.get("/my-classes", requirePage("student_attendance"), controller.getMyAttendanceClasses);
 // The report is shared with the Attendance Overview page,

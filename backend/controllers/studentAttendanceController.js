@@ -14,13 +14,15 @@ function todayIso() {
 }
 
 // Admin and principal/manager always may. A teacher may manage a class
-// only if they are the CLASS TEACHER of it (a teacher_assignments row
-// with role 'class_teacher').
+// only if they are the CLASS TEACHER of it, or an assigned SUPPORTING
+// TEACHER for it (teacher_assignments role 'class_teacher' or
+// 'supporting_teacher').
 async function canManageClass(user, className) {
     if (user.role === "admin" || user.role === "principal" || user.role === "manager") return true;
     const rows = await allQuery(
         `SELECT 1 FROM teacher_assignments
-         WHERE teacherId = ? AND className = ? AND role = 'class_teacher' LIMIT 1`,
+         WHERE teacherId = ? AND className = ?
+           AND role IN ('class_teacher', 'supporting_teacher') LIMIT 1`,
         [user.id, className]
     );
     return rows.length > 0;
@@ -30,8 +32,9 @@ async function canManageClass(user, className) {
 // =====================================================
 // CLASSES I CAN MARK
 //
-// Admin: every class. Teacher: only the classes where
-// they are the class teacher. Drives the class picker.
+// Admin/principal/manager: every class. Teachers (class
+// teacher) and supporting teachers (assigned): only their
+// classes. Drives the class picker.
 // =====================================================
 
 exports.getMyAttendanceClasses = async (req, res) => {
@@ -45,7 +48,8 @@ exports.getMyAttendanceClasses = async (req, res) => {
         } else {
             const rows = await allQuery(
                 `SELECT className FROM teacher_assignments
-                 WHERE teacherId = ? AND role = 'class_teacher'
+                 WHERE teacherId = ?
+                   AND role IN ('class_teacher', 'supporting_teacher')
                  ORDER BY className ASC`,
                 [req.user.id]
             );

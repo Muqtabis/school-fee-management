@@ -10,7 +10,7 @@ const logAudit = require("../utils/auditLogger");
 exports.getTeachers = async (req, res) => {
     try {
         const teachers = await allQuery(
-            `SELECT id, name, email, createdAt FROM users WHERE role = 'teacher' ORDER BY name ASC`
+            `SELECT id, name, email, role, createdAt FROM users WHERE role IN ('teacher', 'supporting_teacher') ORDER BY name ASC`
         );
 
         // Attach each teacher's assigned classes with their role on each.
@@ -19,7 +19,8 @@ exports.getTeachers = async (req, res) => {
                 `SELECT className, role FROM teacher_assignments WHERE teacherId = ? ORDER BY className ASC`,
                 [t.id]
             );
-            // { className, role } objects; role is 'subject_teacher' | 'class_teacher'.
+            // { className, role } objects; role is 'subject_teacher' |
+            // 'class_teacher' | 'supporting_teacher'.
             t.classes = rows.map((r) => ({ className: r.className, role: r.role || "subject_teacher" }));
 
             // Standing subject-teacher assignments (class + subject the teacher
@@ -51,9 +52,11 @@ exports.getTeachers = async (req, res) => {
 exports.assignClass = async (req, res) => {
     const teacherId = Number(req.params.teacherId);
     const className = String(req.body?.className || "").trim();
-    // 'subject_teacher' (default) or 'class_teacher'.
+    // 'class_teacher', 'supporting_teacher' or 'subject_teacher' (default).
     const requestedRole = String(req.body?.role || "subject_teacher").trim();
-    const role = requestedRole === "class_teacher" ? "class_teacher" : "subject_teacher";
+    const role = ["class_teacher", "supporting_teacher"].includes(requestedRole)
+        ? requestedRole
+        : "subject_teacher";
 
     if (!Number.isInteger(teacherId) || !className) {
         return res.status(400).json({
@@ -64,7 +67,7 @@ exports.assignClass = async (req, res) => {
 
     try {
         const teacher = await allQuery(
-            `SELECT id FROM users WHERE id = ? AND role = 'teacher'`,
+            `SELECT id FROM users WHERE id = ? AND role IN ('teacher', 'supporting_teacher')`,
             [teacherId]
         );
 

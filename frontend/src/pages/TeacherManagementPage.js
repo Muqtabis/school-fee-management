@@ -104,18 +104,18 @@ function TeacherManagementPage() {
             return;
         }
 
-        // Class Teacher: class-level assignment only (grants attendance access).
-        if (assignRole === "class_teacher") {
+        // Class Teacher and Supporting Teacher: class-level assignment only.
+        if (assignRole === "class_teacher" || assignRole === "supporting_teacher") {
             try {
                 await api.post(`/teachers/${assignTeacherId}/classes`, {
                     className: assignClassName,
-                    role: "class_teacher"
+                    role: assignRole
                 });
                 setAssignClassName("");
                 setAssignSubjectId("");
                 loadTeachers();
             } catch (error) {
-                toast(error.response?.data?.message || "Unable to assign class teacher.");
+                toast(error.response?.data?.message || "Unable to assign class.");
             }
             return;
         }
@@ -148,7 +148,7 @@ function TeacherManagementPage() {
     };
 
     const unassignClass = async (teacherId, className) => {
-        if (!(await confirmDialog({ message: `Remove class-teacher role for ${className}?`, confirmLabel: "Remove" }))) return;
+        if (!(await confirmDialog({ message: `Remove the class assignment for ${className}?`, confirmLabel: "Remove" }))) return;
         try {
             await api.delete(`/teachers/${teacherId}/classes`, { data: { className } });
             loadTeachers();
@@ -214,7 +214,7 @@ function TeacherManagementPage() {
                     <div className="page-header">
                         <div>
                             <h2>Teacher Management</h2>
-                            <p>Assign classes to teachers (as subject or class teacher) and review teacher attendance.</p>
+                            <p>Assign classes to teachers (subject, class or supporting teacher) and review teacher attendance.</p>
                         </div>
                     </div>
 
@@ -230,8 +230,10 @@ function TeacherManagementPage() {
                                 <p style={{ color: "#666", marginTop: "6px" }}>
                                     A <strong>Class Teacher</strong> owns a class and marks its student attendance
                                     (one class teacher per class). A <strong>Subject Teacher</strong> is assigned a
-                                    specific subject in a class and may only enter that subject's marks. Being a
-                                    class teacher does not grant subject marks access.
+                                    specific subject in a class and may only enter that subject's marks. A
+                                    <strong> Supporting Teacher</strong> is attached to a class to assist the class
+                                    teacher — they can mark attendance and enter marks for that class, without ever
+                                    taking the Class Teacher title away from anyone.
                                 </p>
 
                                 {teachers.length === 0 ? (
@@ -256,6 +258,7 @@ function TeacherManagementPage() {
                                         >
                                             <option value="subject_teacher">Subject Teacher</option>
                                             <option value="class_teacher">Class Teacher</option>
+                                            <option value="supporting_teacher">Supporting Teacher</option>
                                         </select>
 
                                         <select
@@ -301,7 +304,7 @@ function TeacherManagementPage() {
                                         <tr>
                                             <th>Teacher</th>
                                             <th>Email</th>
-                                            <th>Class Teacher Of</th>
+                                            <th>Class Assignments</th>
                                             <th>Subject Teacher Of</th>
                                         </tr>
                                     </thead>
@@ -310,43 +313,65 @@ function TeacherManagementPage() {
                                             <tr><td colSpan="4">No teachers found.</td></tr>
                                         ) : (
                                             teachers.map((t) => {
-                                                const classTeacherOf = (t.classes || []).filter((c) => c.role === "class_teacher");
+                                                const classAssignments = (t.classes || []).filter(
+                                                    (c) => c.role === "class_teacher" || c.role === "supporting_teacher"
+                                                );
                                                 return (
                                                     <tr key={t.id}>
-                                                        <td data-label="Teacher">{t.name}</td>
+                                                        <td data-label="Teacher">
+                                                            {t.name}
+                                                            {t.role === "supporting_teacher" && (
+                                                                <span
+                                                                    title="Supporting teacher account"
+                                                                    style={{
+                                                                        marginLeft: "6px",
+                                                                        fontSize: "11px",
+                                                                        fontWeight: 700,
+                                                                        color: "#b45309"
+                                                                    }}
+                                                                >
+                                                                    🤝 ST
+                                                                </span>
+                                                            )}
+                                                        </td>
                                                         <td data-label="Email">{t.email}</td>
-                                                        <td data-label="Class Teacher Of">
-                                                            {classTeacherOf.length === 0 ? (
+                                                        <td data-label="Class Assignments">
+                                                            {classAssignments.length === 0 ? (
                                                                 <span style={{ color: "#888" }}>None</span>
                                                             ) : (
                                                                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                                                                    {classTeacherOf.map((c) => (
-                                                                        <span
-                                                                            key={c.className}
-                                                                            title="Class Teacher"
-                                                                            style={{
-                                                                                display: "inline-flex",
-                                                                                alignItems: "center",
-                                                                                gap: "6px",
-                                                                                padding: "3px 8px",
-                                                                                background: "#dcfce7",
-                                                                                border: "1px solid #86efac",
-                                                                                borderRadius: "12px",
-                                                                                fontSize: "13px"
-                                                                            }}
-                                                                        >
-                                                                            {c.className}
-                                                                            <span style={{ fontSize: "11px", fontWeight: 700, color: "#15803d" }}>★ CT</span>
-                                                                            <button
-                                                                                type="button"
-                                                                                title="Remove"
-                                                                                onClick={() => unassignClass(t.id, c.className)}
-                                                                                style={{ border: "none", background: "transparent", cursor: "pointer", color: "#b91c1c", fontWeight: "bold" }}
+                                                                    {classAssignments.map((c) => {
+                                                                        const isCT = c.role === "class_teacher";
+                                                                        return (
+                                                                            <span
+                                                                                key={`${c.className} · ${c.role}`}
+                                                                                title={isCT ? "Class Teacher" : "Supporting Teacher"}
+                                                                                style={{
+                                                                                    display: "inline-flex",
+                                                                                    alignItems: "center",
+                                                                                    gap: "6px",
+                                                                                    padding: "3px 8px",
+                                                                                    background: isCT ? "#dcfce7" : "#fef3e2",
+                                                                                    border: isCT ? "1px solid #86efac" : "1px solid #fcd34d",
+                                                                                    borderRadius: "12px",
+                                                                                    fontSize: "13px"
+                                                                                }}
                                                                             >
-                                                                                ×
-                                                                            </button>
-                                                                        </span>
-                                                                    ))}
+                                                                                {c.className}
+                                                                                <span style={{ fontSize: "11px", fontWeight: 700, color: isCT ? "#15803d" : "#b45309" }}>
+                                                                                    {isCT ? "★ CT" : "🤝 ST"}
+                                                                                </span>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    title="Remove"
+                                                                                    onClick={() => unassignClass(t.id, c.className)}
+                                                                                    style={{ border: "none", background: "transparent", cursor: "pointer", color: "#b91c1c", fontWeight: "bold" }}
+                                                                                >
+                                                                                    ×
+                                                                                </button>
+                                                                            </span>
+                                                                        );
+                                                                    })}
                                                                 </div>
                                                             )}
                                                         </td>
@@ -392,8 +417,11 @@ function TeacherManagementPage() {
                                 </table>
                             </div>
                             <p style={{ color: "#888", fontSize: "13px", marginTop: "8px" }}>
-                                ★ CT = Class Teacher (attendance access). Subject teachers may enter marks only for
-                                their assigned subject. Subjects for each class are managed on the Class Management page.
+                                ★ CT = Class Teacher (owns the class — attendance + marks access).&nbsp;
+                                🤝 ST = Supporting Teacher (attached to the class — same attendance and marks
+                                access; the Class Teacher keeps ownership).&nbsp;
+                                Subject teachers may enter marks only for their assigned subject. Subjects for
+                                each class are managed on the Class Management page.
                             </p>
 
                             {/* ============================================

@@ -7,17 +7,22 @@ const { MARK_STATUSES } = require("../utils/grading");
 // HELPERS
 // =====================================================
 
-// Is this teacher the CLASS TEACHER of the class? (teacher_assignments.role =
-// 'class_teacher'; a class has at most one.) A class teacher owns the whole
-// class: they may enter/edit marks for ALL its subjects and are the sole
-// non-admin author of co-scholastic grades, attendance, physical stature and
-// the overall performance comment (dynamic progress card, Part 2). This is a
-// deliberate widening of the earlier "subject teacher only" marks rule.
+// Is this teacher assigned to the class as class teacher OR
+// assigned supporting teacher? (teacher_assignments.role in
+// ('class_teacher','supporting_teacher'); a class has ONE class
+// teacher but may have several supporting teachers.) A class
+// teacher owns the wholeclass: they may enter/edit marks for
+// ALL its subjects and are the sole non-admin author of
+// co-scholastic grades, attendance, physical stature and the
+// overall performance comment (dynamic progress card, Part 2).
+// A supporting teacher is explicitly given the same class-level
+// working power, without ever displacing the real class teacher.
 async function isClassTeacher(user, className) {
     if (!user || user.role === "admin") return false;
     const rows = await allQuery(
         `SELECT 1 FROM teacher_assignments
-         WHERE teacherId = ? AND className = ? AND role = 'class_teacher' LIMIT 1`,
+         WHERE teacherId = ? AND className = ?
+           AND role IN ('class_teacher', 'supporting_teacher') LIMIT 1`,
         [user.id, className]
     );
     return rows.length > 0;
@@ -277,7 +282,8 @@ exports.getExamDefinitions = async (req, res) => {
 
         // Attach child exams (per class). Filter only for TEACHERS: a
         // teacher sees a definition only if it includes a class where they
-        // are the standing subject teacher for at least one subject.
+        // are the standing subject teacher for at least one subject, or
+        // the class teacher / an assigned supporting teacher.
         // Principal/manager work like admin and see every definition.
         let allowedClasses = null;
         if (!isExamManager(req.user)) {
@@ -289,7 +295,7 @@ exports.getExamDefinitions = async (req, res) => {
                  UNION
                  SELECT DISTINCT className
                  FROM teacher_assignments
-                 WHERE teacherId = ? AND role = 'class_teacher'`,
+                 WHERE teacherId = ? AND role IN ('class_teacher', 'supporting_teacher')`,
                 [req.user.id, req.user.id]
             );
             allowedClasses = new Set(rows.map((r) => r.className));
@@ -549,7 +555,8 @@ exports.getExams = async (req, res) => {
             );
         } else {
             // A teacher sees exams for classes where they are the standing
-            // subject teacher for at least one subject, OR the class teacher.
+            // subject teacher for at least one subject, OR the class teacher
+            // OR an assigned supporting teacher.
             exams = await allQuery(
                 `SELECT e.id, e.examName, e.className, e.status, e.examDefinitionId,
                         e.createdAt, e.lockedAt, e.publishedAt, d.examType,
@@ -564,7 +571,7 @@ exports.getExams = async (req, res) => {
                      UNION
                      SELECT DISTINCT className
                      FROM teacher_assignments
-                     WHERE teacherId = ? AND role = 'class_teacher'
+                     WHERE teacherId = ? AND role IN ('class_teacher', 'supporting_teacher')
                  )
                  ORDER BY e.id DESC`,
                 [req.user.id, req.user.id]

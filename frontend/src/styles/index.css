@@ -41,6 +41,11 @@
     --radius-md: 8px;
     --radius-lg: 10px;
     --sidebar-width: 250px;
+
+    /* Typography: clean grotesque for UI text, classic serif
+       for titles, brand and big stat numbers. */
+    --font-display: "Playfair Display", Georgia, "Times New Roman", serif;
+    --font-body: "Inter", "Segoe UI", Arial, Helvetica, sans-serif;
 }
 
 * {
@@ -58,7 +63,7 @@ html, body, #root {
 }
 
 body {
-    font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+    font-family: var(--font-body);
     background: var(--background);
     color: var(--text);
     line-height: 1.5;
@@ -68,6 +73,23 @@ body {
 
 button, input, select, textarea {
     font-family: inherit;
+}
+
+/* =========================================================
+   DISPLAY TYPOGRAPHY
+   Titles, brand and headings carry the serif; tiny labels
+   stay in the body face because small serif caps are hard
+   to read.
+   ========================================================= */
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+}
+
+.user-info h4,
+.student-history h4,
+.stat-content h3 {
+    font-family: var(--font-body);
 }
 
 button {
@@ -159,6 +181,8 @@ img {
     color: var(--navy);
     font-size: 15px;
     font-weight: 700;
+    font-family: var(--font-display);
+    letter-spacing: 0.01em;
 }
 
 .sidebar-title span {
@@ -208,7 +232,7 @@ img {
 .menu-item.active {
     background: #eef1f4;
     color: var(--navy);
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .menu-icon {
@@ -289,7 +313,7 @@ img {
 .navbar-left h2 {
     color: var(--navy);
     font-size: 19px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .navbar-left p {
@@ -331,7 +355,7 @@ img {
 .user-info h4 {
     color: var(--navy);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .user-info span {
@@ -350,7 +374,7 @@ img {
 .page-header h2 {
     color: var(--navy);
     font-size: 22px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .page-header p {
@@ -507,8 +531,9 @@ img {
 
 .stat-value {
     margin: 0;
-    font-size: 24px;
+    font-size: 26px;
     font-weight: 600;
+    font-family: var(--font-display);
     color: var(--text);
 }
 
@@ -581,7 +606,7 @@ img {
     margin-bottom: 6px;
     color: var(--navy);
     font-size: 15px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .dashboard-table {
@@ -741,7 +766,7 @@ tbody tr:hover {
     padding: 4px 8px;
     border-radius: 20px;
     font-size: 10px;
-    font-weight: 650;
+    font-weight: 600;
     white-space: nowrap;
 }
 
@@ -805,7 +830,7 @@ tbody tr:hover {
 .modal-header h2 {
     color: var(--navy);
     font-size: 18px;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.3;
 }
 
@@ -1220,7 +1245,7 @@ tbody tr:hover {
     margin: 0;
     color: var(--navy);
     font-size: 15px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .report-panel-header p {
@@ -1331,7 +1356,7 @@ tbody tr:hover {
 
 .report-table td strong {
     color: var(--navy);
-    font-weight: 650;
+    font-weight: 600;
 }
 
 @media (max-width: 1100px) {
@@ -1427,8 +1452,9 @@ tbody tr:hover {
 
 .auth-header h1 {
     color: var(--navy);
-    font-size: 22px;
+    font-size: 27px;
     font-weight: 700;
+    letter-spacing: 0.01em;
 }
 
 .auth-header p {
@@ -1799,7 +1825,7 @@ tbody tr:hover {
     margin: 22px 0 12px;
     color: var(--navy);
     font-size: 15px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .financial-chart-panel {
@@ -2052,6 +2078,28 @@ tbody tr:hover {
 .exam-tab-active {
     color: var(--navy);
     border-bottom-color: var(--navy);
+}
+
+/* Strength pill inside attendance tabs (students in the selected class). */
+.exam-tab .exam-badge {
+    margin-left: 8px;
+    vertical-align: 1px;
+}
+
+.exam-tab-active .exam-badge {
+    background: var(--navy);
+    color: #fff;
+}
+
+/* Student-page toggle tabs use the same strength pill.
+   "on-primary" = badge sits on the navy filled button. */
+.tab-toggle .exam-badge {
+    margin-left: 8px;
+}
+
+.tab-toggle .exam-badge.on-primary {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
 }
 
 .exam-tabpanel { margin-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }

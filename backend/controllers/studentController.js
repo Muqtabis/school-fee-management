@@ -102,6 +102,45 @@ async function setEnrollmentStatus(studentId, status) {
 }
 
 // =====================================================
+// STUDENT COUNTS
+// Cheap two-number aggregate powering the Students-page
+// tab badges (Active / Archived totals). Reloaded with the
+// roster so archive/restore/import stay in sync. Legacy
+// rows may have status NULL — those count as active.
+// =====================================================
+exports.getStudentCounts = async (req, res) => {
+    try {
+        const [rows, byClassRows] = await Promise.all([
+            allQuery(`SELECT status, COUNT(*) AS total FROM students GROUP BY status`),
+            allQuery(
+                `SELECT className,
+                        SUM(CASE WHEN status IS NULL OR status = 'active' THEN 1 ELSE 0 END) AS active,
+                        SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) AS archived
+                 FROM students
+                 WHERE className IS NOT NULL AND TRIM(className) <> ''
+                 GROUP BY className`
+            )
+        ]);
+        const counts = { active: 0, archived: 0 };
+        rows.forEach((row) => {
+            if (row.status === "archived") {
+                counts.archived = row.total;
+            } else {
+                counts.active += row.total;   // 'active' or legacy NULL
+            }
+        });
+        const byClass = byClassRows.map((row) => ({
+            className: row.className,
+            active: row.active || 0,
+            archived: row.archived || 0
+        }));
+        res.json({ success: true, counts, byClass });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Unable to load student counts." });
+    }
+};
+
+// =====================================================
 // GET ALL STUDENTS
 // =====================================================
 exports.getStudents = (req, res) => {

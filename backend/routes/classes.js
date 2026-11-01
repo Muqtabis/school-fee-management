@@ -19,6 +19,12 @@ router.use(requireStaff);
 // standalone. Mutations stay gated below.
 // -----------------------------------------------------
 router.get("/", classController.getClasses);
+
+// SUBJECT MASTER — read part of the catalogue. Declared
+// BEFORE the "/:id" route so "subjects-master" is never
+// mistaken for a class id.
+router.get("/subjects-master", classController.getMasterSubjects);
+
 router.get("/:id", classController.getClass);
 
 // =====================================================
@@ -46,5 +52,19 @@ router.post("/:id/unlock", requireRole("admin", "principal", "manager"), classCo
 // DELETE CLASS — destructive cascade; principal/manager with
 // the page grant may manage this too (like admin).
 router.delete("/:id", requireRole("admin", "principal", "manager"), classController.deleteClass);
+
+// =====================================================
+// SUBJECTS
+// =====================================================
+
+// MASTER SUBJECTS CRUD (catalogue) — like Master Fee
+// Components: create first, then pick per class.
+router.post("/subjects-master", classController.createMasterSubject);
+router.put("/subjects-master/:id", classController.updateMasterSubject);
+router.delete("/subjects-master/:id", classController.deleteMasterSubject);
+
+// PER-CLASS SELECTION — the checkbox modal endpoints.
+router.get("/:id/subjects", classController.getClassSubjects);
+router.put("/:id/subjects", classController.saveClassSubjects);
 
 module.exports = router;

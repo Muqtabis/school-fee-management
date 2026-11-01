@@ -174,7 +174,9 @@ const ROLE_PAGE_KEYS = {
     accountant: STAFF_ROLE_PAGES,
     principal: PAGE_KEYS.filter((key) => !ADMIN_ONLY_PAGES.includes(key)),
     manager: PAGE_KEYS.filter((key) => !ADMIN_ONLY_PAGES.includes(key)),
-    teacher: TEACHER_ROLE_PAGES
+    teacher: TEACHER_ROLE_PAGES,
+    supporting_teacher: TEACHER_ROLE_PAGES,
+    supporting_staff: []
 };
 
 // Admin can hold every page; other roles are limited to the

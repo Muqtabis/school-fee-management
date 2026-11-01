@@ -34,6 +34,7 @@ export const APP_PAGES = [
     { key: "teacher_attendance", label: "Staff Attendance", path: "/teacher-attendance", icon: "🗓️", group: "Attendance", description: "Mark and review attendance for all staff (teachers, accountant, manager, etc.) and generate reports." },
     { key: "student_attendance", label: "Student Attendance", path: "/student-attendance", icon: "📋", group: "Attendance", description: "Mark and track student attendance by class and date." },
     { key: "attendance_overview", label: "Attendance Overview", path: "/attendance-overview", icon: "📈", group: "Attendance", description: "Monitor overall attendance patterns and generate attendance reports." },
+    { key: "my_attendance", label: "My Attendance", path: "/my-attendance", icon: "🙋", group: "Attendance", description: "Your own attendance record, read-only (default for every user)." },
     { key: "class_management", label: "Class Management", path: "/class-management", icon: "🏫", group: "Staff & Admin", description: "Create classes, assign sections, and manage class-related settings." },
     { key: "teacher_management", label: "Teacher Management", path: "/teacher-management", icon: "🧑‍🏫", group: "Staff & Admin", description: "Manage teacher profiles, class assignments, and subject linkages." },
     { key: "users", label: "Users", path: "/users", icon: "👥", group: "Staff & Admin", description: "Manage staff accounts, roles, and page access permissions." },

@@ -13,14 +13,16 @@ const {
 // =====================================================
 // TEACHER / STAFF SELF-VIEW (read-only)
 //
-// Any logged-in staff user (teacher, accountant, principal,
-// manager, ...) may read their OWN attendance. Declared
-// BEFORE the marker page gate below.
+// "My Attendance" — a default page for every logged-in
+// user (teacher, supporting_teacher, accountant,
+// principal, manager, admin). supporting_staff is not
+// listed because those accounts cannot log in at all.
+// Declared BEFORE the marker page gate below.
 // =====================================================
 
 router.get(
     "/mine",
-    requireRole("admin", "teacher", "accountant", "principal", "manager"),
+    requireRole("admin", "teacher", "supporting_teacher", "accountant", "principal", "manager"),
     attendanceController.getMyAttendance
 );
 
@@ -44,6 +46,24 @@ router.put(
     "/",
     requirePage("teacher_attendance"),
     attendanceController.saveAttendance
+);
+
+// =====================================================
+// LOCK — any marker (admin, or a user granted the
+// "teacher_attendance" page) may freeze a finished day.
+// UNLOCK — admin & principal only.
+// =====================================================
+
+router.post(
+    "/lock",
+    requirePage("teacher_attendance"),
+    attendanceController.setAttendanceLock
+);
+
+router.post(
+    "/unlock",
+    requireRole("admin", "principal"),
+    attendanceController.setAttendanceUnlock
 );
 
 router.get(

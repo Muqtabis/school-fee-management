@@ -36,7 +36,7 @@ exports.getAttendanceForDate = async (req, res) => {
     try {
         const rows = await allQuery(
             `SELECT u.id AS teacherId, u.name, u.email, u.role,
-                    ta.status, ta.remark
+                    ta.status, ta.remark, COALESCE(ta.isLocked, 0) AS isLocked
              FROM users u
              LEFT JOIN teacher_attendance ta
                ON ta.teacherId = u.id AND ta.attendanceDate = ?
@@ -44,7 +44,11 @@ exports.getAttendanceForDate = async (req, res) => {
             [date]
         );
 
-        res.json({ success: true, date, records: rows });
+        // The day is considered locked as soon as ANY saved record for it is
+        // locked (locks are applied to a whole date at once).
+        const locked = rows.some((r) => r.isLocked === 1);
+
+        res.json({ success: true, date, locked, records: rows });
     } catch (error) {
         console.error("Get Attendance Error:", error);
         res.status(500).json({ success: false, message: "Unable to load attendance." });
@@ -76,6 +80,20 @@ exports.saveAttendance = async (req, res) => {
         // manager, ...) — attendance is now taken for all staff.
         const staff = await allQuery(`SELECT id FROM users`);
         const staffIds = new Set(staff.map((t) => t.id));
+
+        // LOCK RULE: a locked day cannot be changed by ANYONE (not even the
+        // admin) until an admin/principal unlocks it — same pattern as the
+        // page-access and class locks.
+        const lockedRows = await allQuery(
+            `SELECT id FROM teacher_attendance WHERE attendanceDate = ? AND isLocked = 1 LIMIT 1`,
+            [date]
+        );
+        if (lockedRows.length > 0) {
+            return res.status(423).json({
+                success: false,
+                message: `Attendance for ${date} is locked. Unlock the day before saving changes.`
+            });
+        }
 
         let saved = 0;
         for (const r of records) {
@@ -117,6 +135,79 @@ exports.saveAttendance = async (req, res) => {
 
 
 // =====================================================
+// LOCK / UNLOCK A DAY'S ATTENDANCE
+//
+// ADMIN and PRINCIPAL only — same pattern as the page-access
+// and class locks. A locked day cannot be changed by any
+// marker; unlocking hands the day back to the assigned staff
+// for editing until it is locked again.
+// =====================================================
+
+async function changeDayLock(date, locked, actorId) {
+    const result = await runQuery(
+        `UPDATE teacher_attendance SET isLocked = ? WHERE attendanceDate = ?`,
+        [locked ? 1 : 0, date]
+    );
+
+    const affected = result.changes || 0;
+
+    await logAudit({
+        userId: actorId,
+        action: locked ? "TEACHER_ATTENDANCE_LOCKED" : "TEACHER_ATTENDANCE_UNLOCKED",
+        entityType: "teacher_attendance",
+        entityId: null,
+        details: { date, affected }
+    }).catch((e) => console.error("Audit Error:", e));
+
+    return affected;
+}
+
+exports.setAttendanceLock = async (req, res) => {
+    const date = String(req.body?.date || "").trim();
+
+    if (!isValidDate(date)) {
+        return res.status(400).json({ success: false, message: "A valid date (YYYY-MM-DD) is required." });
+    }
+
+    try {
+        const affected = await changeDayLock(date, true, req.user.id);
+        res.json({
+            success: true,
+            message: affected > 0
+                ? `Attendance locked for ${date} (${affected} record(s)).`
+                : `Attendance locked for ${date} — nothing was saved yet.`,
+            locked: true,
+            affected
+        });
+    } catch (error) {
+        console.error("Attendance Lock Error:", error);
+        res.status(500).json({ success: false, message: "Unable to lock attendance." });
+    }
+};
+
+exports.setAttendanceUnlock = async (req, res) => {
+    const date = String(req.body?.date || "").trim();
+
+    if (!isValidDate(date)) {
+        return res.status(400).json({ success: false, message: "A valid date (YYYY-MM-DD) is required." });
+    }
+
+    try {
+        const affected = await changeDayLock(date, false, req.user.id);
+        res.json({
+            success: true,
+            message: `Attendance unlocked for ${date} — the assigned staff can edit it again.`,
+            locked: false,
+            affected
+        });
+    } catch (error) {
+        console.error("Attendance Unlock Error:", error);
+        res.status(500).json({ success: false, message: "Unable to unlock attendance." });
+    }
+};
+
+
+// =====================================================
 // ATTENDANCE REPORT (history)
 //
 // Query: ?from=&to=&teacherId=  (all optional)
@@ -148,7 +239,7 @@ exports.getAttendanceReport = async (req, res) => {
         const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
 
         const rows = await allQuery(
-            `SELECT ta.id, ta.teacherId, u.name AS teacherName, u.email,
+            `SELECT ta.id, ta.teacherId, u.name AS teacherName, u.email, u.role,
                     ta.attendanceDate, ta.status, ta.remark, ta.updatedAt
              FROM teacher_attendance ta
              JOIN users u ON u.id = ta.teacherId
