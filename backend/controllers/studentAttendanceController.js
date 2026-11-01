@@ -28,6 +28,18 @@ async function canManageClass(user, className) {
     return rows.length > 0;
 }
 
+// Is this class-day frozen? One row in student_attendance_locks
+// means the WHOLE class-day is locked: saves are refused for
+// everyone (even admin) until admin/principal unlocks it.
+async function isClassDayLocked(className, date) {
+    const rows = await allQuery(
+        `SELECT id FROM student_attendance_locks
+         WHERE className = ? AND attendanceDate = ? LIMIT 1`,
+        [className, date]
+    );
+    return rows.length > 0;
+}
+
 
 // =====================================================
 // CLASSES I CAN MARK
@@ -97,7 +109,9 @@ exports.getClassAttendance = async (req, res) => {
             [date, className]
         );
 
-        res.json({ success: true, className, date, records: rows });
+        const locked = await isClassDayLocked(className, date);
+
+        res.json({ success: true, className, date, locked, records: rows });
     } catch (error) {
         console.error("Get Class Attendance Error:", error);
         res.status(500).json({ success: false, message: "Unable to load attendance." });
@@ -129,6 +143,16 @@ exports.saveClassAttendance = async (req, res) => {
     try {
         if (!(await canManageClass(req.user, className))) {
             return res.status(403).json({ success: false, message: "You are not the class teacher for this class." });
+        }
+
+        // LOCK RULE: a locked class-day cannot be changed by ANYONE (not
+        // even the admin) until an admin/principal unlocks it — same
+        // pattern as the staff attendance, page-access and class locks.
+        if (await isClassDayLocked(className, date)) {
+            return res.status(423).json({
+                success: false,
+                message: `Attendance for ${className} on ${date} is locked. Unlock the day before saving changes.`
+            });
         }
 
         // Only accept students that actually belong to this class and are active.
@@ -174,6 +198,102 @@ exports.saveClassAttendance = async (req, res) => {
     } catch (error) {
         console.error("Save Class Attendance Error:", error);
         res.status(500).json({ success: false, message: "Unable to save attendance." });
+    }
+};
+
+
+// =====================================================
+// LOCK / UNLOCK ONE CLASS-DAY
+//
+// Mirrors the teacher attendance lock. Any user who manages
+// the class (class teacher, assigned supporting teacher,
+// admin/principal/manager) may FREEZE a finished day; only
+// ADMIN and PRINCIPAL may unlock it. A locked day refuses
+// saves for EVERYONE — backend is the final authority.
+//
+// The lock row lives in student_attendance_locks; absence
+// of a row = unlocked, so unlock simply deletes it.
+// =====================================================
+
+exports.setClassAttendanceLock = async (req, res) => {
+    const className = String(req.body?.className || "").trim();
+    const date = String(req.body?.date || "").trim();
+
+    if (!className) {
+        return res.status(400).json({ success: false, message: "A class is required." });
+    }
+    if (!isValidDate(date)) {
+        return res.status(400).json({ success: false, message: "A valid date (YYYY-MM-DD) is required." });
+    }
+
+    try {
+        if (!(await canManageClass(req.user, className))) {
+            return res.status(403).json({ success: false, message: "You are not the class teacher for this class." });
+        }
+
+        await runQuery(
+            `INSERT INTO student_attendance_locks (className, attendanceDate, lockedBy)
+             VALUES (?, ?, ?)
+             ON CONFLICT(className, attendanceDate)
+             DO UPDATE SET lockedBy = excluded.lockedBy,
+                           lockedAt = CURRENT_TIMESTAMP`,
+            [className, date, req.user.id]
+        );
+
+        await logAudit({
+            userId: req.user.id,
+            action: "STUDENT_ATTENDANCE_LOCKED",
+            entityType: "student_attendance",
+            entityId: null,
+            details: { className, date }
+        }).catch((e) => console.error("Audit Error:", e));
+
+        res.json({
+            success: true,
+            locked: true,
+            message: `Attendance locked for ${className} on ${date} — no one can change it until an admin or the principal unlocks it.`
+        });
+    } catch (error) {
+        console.error("Class Attendance Lock Error:", error);
+        res.status(500).json({ success: false, message: "Unable to lock attendance." });
+    }
+};
+
+exports.setClassAttendanceUnlock = async (req, res) => {
+    const className = String(req.body?.className || "").trim();
+    const date = String(req.body?.date || "").trim();
+
+    if (!className) {
+        return res.status(400).json({ success: false, message: "A class is required." });
+    }
+    if (!isValidDate(date)) {
+        return res.status(400).json({ success: false, message: "A valid date (YYYY-MM-DD) is required." });
+    }
+
+    try {
+        const result = await runQuery(
+            `DELETE FROM student_attendance_locks WHERE className = ? AND attendanceDate = ?`,
+            [className, date]
+        );
+
+        await logAudit({
+            userId: req.user.id,
+            action: "STUDENT_ATTENDANCE_UNLOCKED",
+            entityType: "student_attendance",
+            entityId: null,
+            details: { className, date, removed: result.changes || 0 }
+        }).catch((e) => console.error("Audit Error:", e));
+
+        res.json({
+            success: true,
+            locked: false,
+            message: result.changes > 0
+                ? `Attendance for ${className} on ${date} unlocked — the class can be edited again.`
+                : `Attendance for ${className} on ${date} was not locked.`
+        });
+    } catch (error) {
+        console.error("Class Attendance Unlock Error:", error);
+        res.status(500).json({ success: false, message: "Unable to unlock attendance." });
     }
 };
 

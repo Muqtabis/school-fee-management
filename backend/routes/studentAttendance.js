@@ -30,6 +30,18 @@ const {
 router.use(requireRole("admin", "teacher", "supporting_teacher", "principal", "manager"));
 
 router.get("/my-classes", requirePage("student_attendance"), controller.getMyAttendanceClasses);
+
+// =====================================================
+// CLASS-DAY LOCK / UNLOCK
+//
+// Mirrors the staff attendance lock: any user who manages
+// the class may LOCK a finished day (the class link is
+// verified in the controller); only admin/principal may
+// UNLOCK. A locked day refuses saves for everyone.
+// =====================================================
+
+router.post("/lock", requirePage("student_attendance"), controller.setClassAttendanceLock);
+router.post("/unlock", requireRole("admin", "principal"), controller.setClassAttendanceUnlock);
 // The report is shared with the Attendance Overview page,
 // which carries its own page key.
 router.get("/report", requireAnyPage("student_attendance", "attendance_overview"), controller.getClassAttendanceReport);

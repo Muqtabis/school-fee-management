@@ -531,6 +531,23 @@ async function initializeDatabase() {
             )
         `);
 
+        // STUDENT ATTENDANCE LOCKS — one row per (class, day) while that
+        // class-day is locked. Mirrors the teacher attendance lock: a
+        // locked day cannot be saved by ANYONE (not even admin) until
+        // admin/principal unlocks it. The row simply disappears on
+        // unlock (absence = unlocked), so the table stays clean.
+        await run(`
+            CREATE TABLE IF NOT EXISTS student_attendance_locks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                className TEXT NOT NULL,
+                attendanceDate TEXT NOT NULL,
+                lockedBy INTEGER,
+                lockedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(className, attendanceDate),
+                FOREIGN KEY(lockedBy) REFERENCES users(id)
+            )
+        `);
+
         // GRADING SCALES — admin-configurable grade bands. A default scale is
         // seeded on first boot; exam definitions may reference a specific scale
         // or fall back to the default. Grade lookup uses minPercent (highest

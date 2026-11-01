@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
+import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 
 
@@ -46,6 +47,12 @@ function monthStart() {
 
 function StudentAttendancePage() {
 
+    const { user } = useAuth();
+
+    // Same rule as the staff attendance page: admin and principal may
+    // unlock a locked class-day; marking staff may only lock.
+    const canManageLock = user?.role === "admin" || user?.role === "principal";
+
     const [activeTab, setActiveTab] = useState("mark");
 
     const [classes, setClasses] = useState([]);
@@ -56,6 +63,8 @@ function StudentAttendancePage() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [classesLoaded, setClassesLoaded] = useState(false);
+    const [dateLocked, setDateLocked] = useState(false);
+    const [lockBusy, setLockBusy] = useState(false);
 
     // History filters.
     const [from, setFrom] = useState(monthStart());
@@ -101,9 +110,13 @@ function StudentAttendancePage() {
                 remark: r.remark || ""
             }));
             setRows(seeded);
+            setDateLocked(Boolean(res.data.locked));
         } catch (error) {
             toast(error.response?.data?.message || "Unable to load attendance.");
             setRows([]);
+            // Reset the lock state too — a failed load must never leave a
+            // stale banner/save-gate from the previously viewed class-day.
+            setDateLocked(false);
         } finally {
             setLoading(false);
         }
@@ -149,6 +162,25 @@ function StudentAttendancePage() {
             toast(error.response?.data?.message || "Unable to save attendance.");
         } finally {
             setSaving(false);
+        }
+    };
+
+    // Lock (or unlock) this class-day — same pattern as the staff
+    // attendance lock: pointing staff may lock; admin/principal unlock.
+    const toggleLock = async (locked) => {
+        if (!selectedClass) return;
+        try {
+            setLockBusy(true);
+            const res = await api.post(
+                locked ? "/student-attendance/lock" : "/student-attendance/unlock",
+                { className: selectedClass, date }
+            );
+            await loadRoster(selectedClass, date);
+            toast(res.data.message || (locked ? "Attendance locked." : "Attendance unlocked."));
+        } catch (error) {
+            toast(error.response?.data?.message || "Unable to change the attendance lock.");
+        } finally {
+            setLockBusy(false);
         }
     };
 
@@ -261,13 +293,22 @@ function StudentAttendancePage() {
                                         <label style={{ fontWeight: 600 }}>Date</label>
                                         <input type="date" value={date} max={today()} onChange={(e) => setDate(e.target.value)} />
 
-                                        {rows.length > 0 && (
+                                        {rows.length > 0 && !dateLocked && (
                                             <div style={{ display: "flex", gap: "8px", marginLeft: "auto", flexWrap: "wrap" }}>
                                                 <button type="button" onClick={() => markAll("present")}>All Present</button>
                                                 <button type="button" onClick={() => markAll("absent")}>All Absent</button>
                                             </div>
                                         )}
                                     </div>
+
+                                    {dateLocked && (
+                                        <p style={{ color: "#b45309", marginTop: "12px" }}>
+                                            🔒 Attendance for {selectedClass} on {date} is locked.
+                                            {canManageLock
+                                                ? " Unlock to make changes."
+                                                : " Only an admin or the principal can unlock it."}
+                                        </p>
+                                    )}
 
                                     <div className="table-container" style={{ marginTop: "18px" }}>
                                         <table className="compact-table stack-sm">
@@ -290,7 +331,11 @@ function StudentAttendancePage() {
                                                             <td data-label="Roll No.">{r.rollNumber || "-"}</td>
                                                             <td data-label="Student">{r.studentName}</td>
                                                             <td data-label="Status">
-                                                                <select value={r.status} onChange={(e) => setField(r.studentId, "status", e.target.value)}>
+                                                                <select
+                                                                    value={r.status}
+                                                                    disabled={dateLocked}
+                                                                    onChange={(e) => setField(r.studentId, "status", e.target.value)}
+                                                                >
                                                                     {STATUS_OPTIONS.map((o) => (
                                                                         <option key={o.value} value={o.value}>{o.label}</option>
                                                                     ))}
@@ -301,6 +346,7 @@ function StudentAttendancePage() {
                                                                     type="text"
                                                                     value={r.remark}
                                                                     placeholder="Optional"
+                                                                    disabled={dateLocked}
                                                                     onChange={(e) => setField(r.studentId, "remark", e.target.value)}
                                                                 />
                                                             </td>
@@ -312,10 +358,28 @@ function StudentAttendancePage() {
                                     </div>
 
                                     {rows.length > 0 && (
-                                        <div style={{ marginTop: "18px" }}>
-                                            <button type="button" className="primary-btn" onClick={save} disabled={saving}>
+                                        <div style={{ marginTop: "18px", display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                                            <button type="button" className="primary-btn" onClick={save} disabled={saving || dateLocked}>
                                                 {saving ? "Saving..." : "Save Attendance"}
                                             </button>
+                                            {!dateLocked && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleLock(true)}
+                                                    disabled={lockBusy || saving}
+                                                >
+                                                    {lockBusy ? "Please wait..." : "Lock"}
+                                                </button>
+                                            )}
+                                            {dateLocked && canManageLock && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleLock(false)}
+                                                    disabled={lockBusy || saving}
+                                                >
+                                                    {lockBusy ? "Please wait..." : "Unlock"}
+                                                </button>
+                                            )}
                                         </div>
                                     )}
                                 </div>
