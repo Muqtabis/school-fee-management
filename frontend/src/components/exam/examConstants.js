@@ -45,18 +45,23 @@ export function termLabel(value) {
 }
 
 // A single "assessment slot" picker for exam creation. It speaks the CCE card's
-// own language (FA1/FA2 + SA per term, or Final) and maps each choice onto the
+// own language (FA1/FA2 + SA per term) and maps each choice onto the
 // stored examCategory + term + legacy examType, so what the admin picks matches
 // exactly what prints on the progress card. (FA numbering within a term still
 // follows creation order, so create FA1 before FA2.)
+//
+// There is no separate "Final" slot: the year-end Final IS the Term II
+// Summative Assessment (SA2). The create form gets a checkbox that treats
+// the SA2 exam as the Final, and its card then combines Term I + Term II.
+// Each slot also carries the default exam name (still editable) so the two
+// terms can't accidentally end up with the same name.
 export const ASSESSMENT_SLOTS = [
-    { value: "t1_fa1", label: "Term I — Formative Assessment 1 (FA1)", examCategory: "unit_test", term: "term_1", examType: "unit_test" },
-    { value: "t1_fa2", label: "Term I — Formative Assessment 2 (FA2)", examCategory: "unit_test", term: "term_1", examType: "unit_test" },
-    { value: "t1_sa", label: "Term I — Summative Assessment (SA1)", examCategory: "term", term: "term_1", examType: "term_1" },
-    { value: "t2_fa3", label: "Term II — Formative Assessment 3 (FA3)", examCategory: "unit_test", term: "term_2", examType: "unit_test" },
-    { value: "t2_fa4", label: "Term II — Formative Assessment 4 (FA4)", examCategory: "unit_test", term: "term_2", examType: "unit_test" },
-    { value: "t2_sa", label: "Term II — Summative Assessment (SA2)", examCategory: "term", term: "term_2", examType: "term_2" },
-    { value: "final", label: "Final (whole year — Term I + II)", examCategory: "final", term: null, examType: "final" }
+    { value: "t1_fa1", label: "Term I — Formative Assessment 1 (FA1)", examCategory: "unit_test", term: "term_1", examType: "unit_test", defaultName: "Formative Assessment 1 (FA1)" },
+    { value: "t1_fa2", label: "Term I — Formative Assessment 2 (FA2)", examCategory: "unit_test", term: "term_1", examType: "unit_test", defaultName: "Formative Assessment 2 (FA2)" },
+    { value: "t1_sa", label: "Term I — Summative Assessment (SA1)", examCategory: "term", term: "term_1", examType: "term_1", defaultName: "Summative Assessment 1 (SA1)" },
+    { value: "t2_fa3", label: "Term II — Formative Assessment 3 (FA3)", examCategory: "unit_test", term: "term_2", examType: "unit_test", defaultName: "Formative Assessment 3 (FA3)" },
+    { value: "t2_fa4", label: "Term II — Formative Assessment 4 (FA4)", examCategory: "unit_test", term: "term_2", examType: "unit_test", defaultName: "Formative Assessment 4 (FA4)" },
+    { value: "t2_sa", label: "Term II — Summative Assessment (SA2)", examCategory: "term", term: "term_2", examType: "term_2", defaultName: "Summative Assessment 2 (SA2)" }
 ];
 
 export function assessmentSlot(value) {

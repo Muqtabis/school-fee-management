@@ -241,16 +241,25 @@ function asmtCells(m, asmt) {
 // Portrait scholastic-table columns (all pages are vertical A4).
 const SW = 108, MW = 56, GW = 34, AW50 = 72, AWG = 61;
 
+// The term's summative column: an SA2 treated as the year's Final
+// (category 'final' that kept its term) outranks the plain term exam, so the
+// printed SA column shows the checked SA2 rather than an older manual entry.
+function saAssessment(term) {
+    const A = term.assessments || [];
+    return A.find((a) => a.category === "final") ||
+        A.find((a) => a.category === "term") || null;
+}
+
 function termScholastic(doc, term, labels, y) {
     const faA = (term.assessments || []).filter((a) => a.category === "unit_test");
-    const saA = (term.assessments || []).find((a) => a.category === "term") || null;
+    const saA = saAssessment(term);
     const fa1 = faA[0] || null, fa2 = faA[1] || null;
     const grpW = MW + GW;
     const x0 = L, xFA1 = x0 + SW, xFA2 = xFA1 + grpW, xSA = xFA2 + grpW, xAGG = xSA + grpW;
     hcell(doc, x0, y, SW, 44, "SCHOLASTIC\nSUBJECTS", 8);
-    hcell(doc, xFA1, y, grpW, 22, "FORMATIVE\nASSESSMENT - 1", 6.5);
-    hcell(doc, xFA2, y, grpW, 22, "FORMATIVE\nASSESSMENT - 2", 6.5);
-    hcell(doc, xSA, y, grpW, 22, "SUMMATIVE\nASSESSMENT - 1", 6.5);
+    hcell(doc, xFA1, y, grpW, 22, labels.faHeaders[0], 6.5);
+    hcell(doc, xFA2, y, grpW, 22, labels.faHeaders[1], 6.5);
+    hcell(doc, xSA, y, grpW, 22, labels.saHeader, 6.5);
     hcell(doc, xAGG, y, AW50 + AWG, 22, labels.aggTitle, 7);
     const sy = y + 22;
     [xFA1, xFA2, xSA].forEach((bx) => {
@@ -302,7 +311,7 @@ function termScholasticFooter(doc, term, y) {
 
 function termCoScholastic(doc, term, labels, y) {
     const faA = (term.assessments || []).filter((a) => a.category === "unit_test");
-    const saA = (term.assessments || []).find((a) => a.category === "term") || null;
+    const saA = saAssessment(term);
     const ids = [faA[0], faA[1], saA].map((a) => (a ? a.examId : null));
     const subW = 200, gw = 104, gw2 = 104, gw3 = W - subW - gw - gw2;
     const xCo = L, xA = xCo + subW, xB = xA + gw, xC = xB + gw2;
@@ -437,14 +446,32 @@ function gradingTable(doc, y) {
     return y;
 }
 
+// Per-term-page labels. Numbering follows the TERM BLOCK itself
+// (term_1 -> 1/FA1/FA2/SA1, term_2 -> FA3/FA4/SA2), NOT its position in
+// the model — a standalone Term II card must print "ASSESSMENT - 2"
+// banners, which is what mislabeled both pages before.
+function termLabels(term) {
+    const n = (term && term.term === "term_2") ? 2 : 1;
+    const roman = n === 2 ? "II" : "I";
+    return {
+        scholTitle: `${roman} TERM - SCHOLASTIC AREA`,
+        coTitle: `${roman} TERM - CO SCHOLASTIC AREA`,
+        aggTitle: `${roman} TERM AGGREGATE RESULT`,
+        fa: n === 2 ? ["FA3", "FA4"] : ["FA1", "FA2"],
+        sa: n === 2 ? "SA2" : "SA1",
+        faHeaders: n === 2
+            ? ["FORMATIVE\nASSESSMENT - 3", "FORMATIVE\nASSESSMENT - 4"]
+            : ["FORMATIVE\nASSESSMENT - 1", "FORMATIVE\nASSESSMENT - 2"],
+        saHeader: n === 2 ? "SUMMATIVE\nASSESSMENT - 2" : "SUMMATIVE\nASSESSMENT - 1"
+    };
+}
+
 function renderProgressCard(doc, data) {
     const model = data.model || {};
     coverPage(doc, data);
     const terms = model.terms || [];
-    const L1 = { scholTitle: "I TERM - SCHOLASTIC AREA", coTitle: "I TERM - CO SCHOLASTIC AREA", aggTitle: "I TERM AGGREGATE RESULT", fa: ["FA1", "FA2"], sa: "SA1" };
-    const L2 = { scholTitle: "II TERM - SCHOLASTIC AREA", coTitle: "II TERM - CO SCHOLASTIC AREA", aggTitle: "II TERM AGGREGATE RESULT", fa: ["FA3", "FA4"], sa: "SA2" };
-    if (terms[0]) termPage(doc, terms[0], L1);
-    if (terms[1]) termPage(doc, terms[1], L2);
+    if (terms[0]) termPage(doc, terms[0], termLabels(terms[0]));
+    if (terms[1]) termPage(doc, terms[1], termLabels(terms[1]));
     if (model.final) {
         averagePage(doc, model);
     } else {

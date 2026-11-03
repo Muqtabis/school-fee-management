@@ -31,10 +31,14 @@ function ExamResultsPage() {
 
     // Create-exam form. A single "slot" captures assessment type + term in the
     // card's own FA/SA language; it maps to examCategory/term/examType on submit.
+    // The exam name auto-fills from the slot's default so Term II reads
+    // "Summative Assessment 2" (not another SA1) — still freely editable.
     const [form, setForm] = useState({
         examName: "", slot: "t1_sa",
         weightage: "", academicYearId: "", startDate: "", endDate: "", gradingScaleId: ""
     });
+    const [nameTouched, setNameTouched] = useState(false);
+    const [treatAsFinal, setTreatAsFinal] = useState(false);
     const [selectedClasses, setSelectedClasses] = useState([]);
     const [creating, setCreating] = useState(false);
 
@@ -79,6 +83,23 @@ function ExamResultsPage() {
         );
     };
 
+    // Switching assessments auto-enters that slot's default exam name
+    // (until the admin types their own), so the Term II SA never ends
+    // up carrying the Term I name.
+    const changeSlot = (slotValue) => {
+        setForm((prev) => ({
+            ...prev,
+            slot: slotValue,
+            examName: nameTouched ? prev.examName : assessmentSlot(slotValue).defaultName
+        }));
+        setTreatAsFinal(false);
+    };
+
+    const changeExamName = (value) => {
+        setNameTouched(true);
+        setForm({ ...form, examName: value });
+    };
+
     const createExam = async (e) => {
         e.preventDefault();
         if (!form.examName.trim() || selectedClasses.length === 0) {
@@ -88,10 +109,15 @@ function ExamResultsPage() {
         try {
             setCreating(true);
             const slot = assessmentSlot(form.slot);
+            // "Treat as Final" only makes sense for the Term II Summative
+            // Assessment: that exam then produces the year's combined
+            // Term I + Term II progress card. It keeps term_2 so the
+            // Term II aggregation still includes its marks.
+            const isFinalExam = treatAsFinal && slot.value === "t2_sa";
             const res = await api.post("/exams", {
                 examName: form.examName.trim(),
-                examType: slot.examType,
-                examCategory: slot.examCategory,
+                examType: isFinalExam ? "final" : slot.examType,
+                examCategory: isFinalExam ? "final" : slot.examCategory,
                 term: slot.term,
                 weightage: form.weightage === "" ? null : Number(form.weightage),
                 academicYearId: form.academicYearId || null,
@@ -108,6 +134,8 @@ function ExamResultsPage() {
                 examName: "", slot: "t1_sa",
                 weightage: "", academicYearId: "", startDate: "", endDate: "", gradingScaleId: ""
             });
+            setNameTouched(false);
+            setTreatAsFinal(false);
             setSelectedClasses([]);
             loadDefinitions();
         } catch (error) {
@@ -168,13 +196,13 @@ function ExamResultsPage() {
                                 <label>Exam name
                                     <input
                                         value={form.examName}
-                                        onChange={(e) => setForm({ ...form, examName: e.target.value })}
-                                        placeholder="e.g. Term 1, 2026"
+                                        onChange={(e) => changeExamName(e.target.value)}
+                                        placeholder="e.g. Summative Assessment 1, 2026"
                                         required
                                     />
                                 </label>
                                 <label>Assessment
-                                    <select value={form.slot} onChange={(e) => setForm({ ...form, slot: e.target.value })}>
+                                    <select value={form.slot} onChange={(e) => changeSlot(e.target.value)}>
                                         {ASSESSMENT_SLOTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                                     </select>
                                 </label>
@@ -183,8 +211,8 @@ function ExamResultsPage() {
                                         type="number" min="0" step="1"
                                         value={form.weightage}
                                         onChange={(e) => setForm({ ...form, weightage: e.target.value })}
-                                        placeholder={assessmentSlot(form.slot).examCategory === "unit_test" ? "default 15" : assessmentSlot(form.slot).examCategory === "term" ? "default 20" : "n/a"}
-                                        disabled={assessmentSlot(form.slot).examCategory === "final"}
+                                        placeholder={assessmentSlot(form.slot).examCategory === "unit_test" ? "default 15" : "default 20"}
+                                        disabled={treatAsFinal}
                                     />
                                 </label>
                                 <label>Academic year
@@ -207,11 +235,37 @@ function ExamResultsPage() {
                                 </label>
                             </div>
 
-                            <p style={{ fontSize: "12px", color: "#777", margin: "4px 0 0" }}>
-                                The <strong>Assessment</strong> you pick is exactly how it appears on the progress card.
-                                Formative (FA) exams feed a term; the term's <strong>Summative (SA)</strong> card aggregates its FAs + SA,
-                                and <strong>Final</strong> combines Term I + II. Create FA1 before FA2 (numbering follows creation order).
-                                Weightage is optional — defaults 15 (FA) / 20 (SA) apply.
+                            {assessmentSlot(form.slot).value === "t2_sa" && (
+                                <label
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "8px",
+                                        margin: "12px 0 0",
+                                        fontSize: "13px",
+                                        color: "#333",
+                                        cursor: "pointer",
+                                        userSelect: "none"
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={treatAsFinal}
+                                        onChange={(e) => setTreatAsFinal(e.target.checked)}
+                                        style={{ width: "16px", height: "16px", accentColor: "var(--navy, #1e3a5f)" }}
+                                    />
+                                    <span>
+                                        Treat this SA2 as the year's <strong>Final exam</strong> — its card will combine
+                                        <strong> Term I + Term II</strong> instead of only Term II.
+                                    </span>
+                                </label>
+                            )}
+
+                            <p style={{ fontSize: "12px", color: "#777", margin: "10px 0 0" }}>
+                                The <strong>Assessment</strong> you pick sets the exam name automatically (still editable) and is exactly how it appears on the progress card.
+                                Formative (FA) exams feed a term; a term's <strong>Summative (SA)</strong> card aggregates its FAs + SA.
+                                At year end, tick <strong>Treat SA2 as Final</strong> so the Term II SA cards combine Term I + Term II — no separate Final exam needed.
+                                Create FA1 before FA2 (numbering follows creation order).
                             </p>
 
                             <div style={{ margin: "14px 0" }}>

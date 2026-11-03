@@ -42,7 +42,13 @@ const DEFAULT_WEIGHTAGE = { unit_test: 15, term: 20, final: 0 };
 function resolveWeightage(def) {
     const w = Number(def && def.weightage);
     if (Number.isFinite(w) && w > 0) return w;
-    return DEFAULT_WEIGHTAGE[def && def.examCategory] || 10;
+    const cat = def && def.examCategory;
+    // An SA2 treated as the year's Final (category 'final' but term='term_2')
+    // aggregates inside Term II like any summative — give it the SA default.
+    // A legacy whole-year Final (no term) never appears in a term aggregation,
+    // so 0 keeps it inert there.
+    if (cat === "final") return def.term ? DEFAULT_WEIGHTAGE.term : 0;
+    return DEFAULT_WEIGHTAGE[cat] || 10;
 }
 
 function round2(n) {
@@ -101,15 +107,22 @@ async function examCellsForStudent(examId, className, studentId, bands) {
 }
 
 // The exams that make up a term for a class + academic year, ordered
-// unit-tests-first then the term exam. category IN (unit_test, term).
-// Only finalized assessments count — an exam still 'open' (marks editable)
-// is excluded so a card never shows a half-entered column.
+// unit-tests-first then the term exam. Only finalized assessments count —
+// an exam still 'open' (marks editable) is excluded so a card never shows
+// a half-entered column.
+//
+// An exam treated as the year's Final (the SA2 checkbox) is stored
+// with examCategory 'final' but carries term='term_2'. Term II's aggregation
+// must still see it — otherwise the Final card's Term II section would lose
+// the summative marks. Legacy finals (created from the old menu, term NULL)
+// never roll up into a term.
 async function termAssessments(className, academicYearId, term) {
     const params = [className];
     let sql =
         `SELECT e.id AS examId, e.examName, d.examCategory, d.term, d.weightage
          FROM exams e JOIN exam_definitions d ON d.id = e.examDefinitionId
-         WHERE e.className = ? AND d.examCategory IN ('unit_test','term')
+         WHERE e.className = ?
+           AND (d.examCategory IN ('unit_test','term') OR (d.examCategory = 'final' AND d.term IS NOT NULL))
            AND e.status <> 'open'`;
     // Term match is NULL-aware: an untermed card (term === null) aggregates the
     // class's untermed assessments instead of defaulting to a 'term_1' that can
@@ -130,8 +143,21 @@ async function termAssessments(className, academicYearId, term) {
 //   subjects:[{ subjectName, cells:{examId:cell}, aggregatePercent, aggregateGrade }],
 //   coScholastic:[{ area, cells:{examId:grade}, aggregateGrade }], meta }.
 async function buildTerm(className, academicYearId, term, studentId, bands, labelOverride) {
-    const assessments = await termAssessments(className, academicYearId, term);
-    const termExam = assessments.find((a) => a.examCategory === "term") || null;
+    let assessments = await termAssessments(className, academicYearId, term);
+
+    // A checked SA2-as-Final (category 'final' that kept its term) IS the
+    // term's summative. When it exists, any plain term exam in the SAME term
+    // is the school's older manual attempt at that slot — drop it, so a term
+    // never carries (or double-counts) two summatives.
+    if (assessments.some((a) => a.examCategory === "final")) {
+        assessments = assessments.filter((a) => a.examCategory !== "term");
+    }
+
+    // The term's summative exam: the SA2-as-Final outranks a plain term exam
+    // (it is where the year-end remark / promotion are maintained), falling
+    // back to the plain term exam for normal cards.
+    const termExam = assessments.find((a) => a.examCategory === "final") ||
+        assessments.find((a) => a.examCategory === "term") || null;
 
     // Gather each assessment's cells + weightage.
     const perExam = [];
