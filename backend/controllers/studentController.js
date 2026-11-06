@@ -242,7 +242,7 @@ exports.getStudent = (req, res) => {
 exports.addStudent = (req, res) => {
     const {
         studentName, rollNumber, className, fatherName, contact1, contact2, previousDues, tuitionFee,
-        admissionNumber, satsNumber, motherName, gender, dob, address, remark, concessionAmount, concessionReason, studentCategory
+        admissionNumber, satsNumber, penNumber, motherName, gender, dob, address, remark, concessionAmount, concessionReason, studentCategory
     } = req.body;
 
     if (!studentName || !rollNumber || !className) {
@@ -276,9 +276,9 @@ exports.addStudent = (req, res) => {
                 `
                 INSERT INTO students (
                     studentName, rollNumber, className, fatherName, contact1, contact2,
-                    previousDues, tuitionFee, status, admissionNumber, satsNumber,
+                    previousDues, tuitionFee, status, admissionNumber, satsNumber, penNumber,
                     motherName, gender, dob, address, remark, concessionAmount, concessionReason, studentCategory
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `,
                 [
                     cleanStudentName, cleanRollNumber, className,
@@ -288,6 +288,7 @@ exports.addStudent = (req, res) => {
                     numericPreviousDues, numericTuitionFee,
                     admissionNumber ? String(admissionNumber).trim() : "",
                     satsNumber ? String(satsNumber).trim() : "",
+                    penNumber ? String(penNumber).trim() : "",
                     motherName ? String(motherName).trim() : "",
                     gender ? String(gender).trim() : "",
                     dob ? String(dob).trim() : "",
@@ -338,7 +339,7 @@ exports.addStudent = (req, res) => {
 exports.updateStudent = (req, res) => {
     const {
         studentName, rollNumber, className, fatherName, contact1, contact2, previousDues, tuitionFee,
-        admissionNumber, satsNumber, motherName, gender, dob, address, remark, concessionAmount, concessionReason, studentCategory
+        admissionNumber, satsNumber, penNumber, motherName, gender, dob, address, remark, concessionAmount, concessionReason, studentCategory
     } = req.body;
 
     if (!studentName || !rollNumber || !className) {
@@ -385,7 +386,7 @@ exports.updateStudent = (req, res) => {
                         `
                         UPDATE students SET
                             studentName = ?, rollNumber = ?, className = ?, fatherName = ?, contact1 = ?, contact2 = ?,
-                            previousDues = ?, tuitionFee = ?, admissionNumber = ?, satsNumber = ?,
+                            previousDues = ?, tuitionFee = ?, admissionNumber = ?, satsNumber = ?, penNumber = ?,
                             motherName = ?, gender = ?, dob = ?, address = ?, remark = ?,
                             concessionAmount = ?, concessionReason = ?, studentCategory = ?
                         WHERE id = ?
@@ -398,6 +399,7 @@ exports.updateStudent = (req, res) => {
                             numericPreviousDues, numericTuitionFee,
                             admissionNumber ? String(admissionNumber).trim() : "",
                             satsNumber ? String(satsNumber).trim() : "",
+                    penNumber ? String(penNumber).trim() : "",
                             motherName ? String(motherName).trim() : "",
                             gender ? String(gender).trim() : "",
                             dob ? String(dob).trim() : "",

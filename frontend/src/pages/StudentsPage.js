@@ -366,10 +366,15 @@ function StudentsPage() {
                     </div>
 
                     <div className="table-container">
-                        <table className="stack-sm">
+                        <table className="stack-sm" style={{ tableLayout: "fixed", width: "100%" }}>
+                            {/* Equal column widths — fixed layout so columns are evenly spaced */}
+                            <colgroup>
+                                <col span="9" style={{ width: `${(100 / 9).toFixed(2)}%` }} />
+                            </colgroup>
                             <thead>
                                 <tr>
                                     <th>Adm No.</th>
+                                    <th>SATS No.</th>
                                     <th>Roll No.</th>
                                     <th>Student Name</th>
                                     <th>Class</th>
@@ -382,7 +387,7 @@ function StudentsPage() {
                             <tbody>
                                 {filteredStudents.length === 0 ? (
                                     <tr>
-                                        <td colSpan="8" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
+                                        <td colSpan="9" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
                                             {showArchived ? "No archived students found." : "No active students found."}
                                         </td>
                                     </tr>
@@ -390,6 +395,7 @@ function StudentsPage() {
                                     filteredStudents.map((student) => (
                                         <tr key={student.id} style={student.status === "archived" ? { opacity: 0.65 } : {}}>
                                             <td data-label="Adm No." style={{ color: "#64748B", fontSize: "13px" }}>{student.admissionNumber || "-"}</td>
+                                            <td data-label="SATS No." style={{ color: "#64748B", fontSize: "13px" }}>{student.satsNumber || "-"}</td>
                                             <td data-label="Roll No."><strong>{student.rollNumber || "-"}</strong></td>
                                             <td data-label="Student"><strong>{student.studentName}</strong></td>
                                             <td data-label="Class">{student.className || "-"}</td>
@@ -425,10 +431,7 @@ function StudentsPage() {
                                                     {student.status === "archived" ? (
                                                         <button className="edit-btn" onClick={() => handleRestore(student)}>Restore</button>
                                                     ) : (
-                                                        <>
-                                                            <button className="edit-btn" onClick={() => handleEdit(student)}>Edit</button>
-                                                            <button className="delete-btn" onClick={() => handleArchive(student)}>Archive</button>
-                                                        </>
+                                                        <button className="delete-btn" onClick={() => handleArchive(student)}>Archive</button>
                                                     )}
                                                 </div>
                                             </td>
@@ -658,6 +661,7 @@ function StudentDetailModal({ student, initialTab = "overview", onClose, onEdit 
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
                                 <div><Label>Admission No.</Label><Value>{student.admissionNumber}</Value></div>
                                 <div><Label>SATS No.</Label><Value>{student.satsNumber}</Value></div>
+                                <div><Label>PEN No.</Label><Value>{student.penNumber}</Value></div>
                                 <div><Label>Student Category</Label><Value>
                                     <span className={student.studentCategory === "rte" ? "payment-badge mode-upi" : "payment-badge mode-default"}>
                                         {student.studentCategory === "rte" ? "RTE" :

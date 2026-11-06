@@ -10,6 +10,7 @@ function StudentForm({ student, onClose }) {
         className: "",
         admissionNumber: "",
         satsNumber: "",
+        penNumber: "",
         gender: "",
         dob: "",
         fatherName: "",
@@ -68,6 +69,7 @@ function StudentForm({ student, onClose }) {
                 className: student.className || "",
                 admissionNumber: student.admissionNumber || "",
                 satsNumber: student.satsNumber || "",
+                penNumber: student.penNumber || "",
                 gender: student.gender || "",
                 dob: student.dob || "",
                 fatherName: student.fatherName || "",
@@ -181,6 +183,10 @@ function StudentForm({ student, onClose }) {
                         <div className="form-group">
                             <label>SATS No.</label>
                             <input type="text" name="satsNumber" value={formData.satsNumber} onChange={handleChange} placeholder="e.g. 123456" />
+                        </div>
+                        <div className="form-group">
+                            <label>PEN No.</label>
+                            <input type="text" name="penNumber" value={formData.penNumber} onChange={handleChange} placeholder="e.g. 1234567890" />
                         </div>
                         <div className="form-group">
                             <label>Student Category</label>

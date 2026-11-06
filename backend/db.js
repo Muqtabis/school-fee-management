@@ -794,6 +794,8 @@ async function migrateDatabase() {
     // NEW PROFILE & FEE MIGRATIONS
     await addColumnIfMissing("students", "admissionNumber", "TEXT");
     await addColumnIfMissing("students", "satsNumber", "TEXT");
+    // PEN = Permanent Education Number (govt education ID, stored like SATS).
+    await addColumnIfMissing("students", "penNumber", "TEXT");
     await addColumnIfMissing("students", "motherName", "TEXT");
     await addColumnIfMissing("students", "gender", "TEXT");
     await addColumnIfMissing("students", "dob", "TEXT");
