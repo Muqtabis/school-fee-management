@@ -2875,3 +2875,18 @@ html {
         flex-wrap: wrap;
     }
 }
+
+/* =====================================================
+   EVEN COLUMNS FOR THE STUDENTS ROSTER (desktop only)
+   table-layout: fixed with no width hints shares the
+   table width equally across all columns. Gated to
+   >=641px because below that table.stack-sm re-flows
+   rows into mobile cards and must keep its own layout.
+   Scoped via .p-even-table so no other table is affected.
+   ===================================================== */
+@media (min-width: 641px) {
+    table.p-even-table {
+        table-layout: fixed;
+        width: 100%;
+    }
+}

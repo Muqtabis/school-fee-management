@@ -366,11 +366,7 @@ function StudentsPage() {
                     </div>
 
                     <div className="table-container">
-                        <table className="stack-sm" style={{ tableLayout: "fixed", width: "100%" }}>
-                            {/* Equal column widths — fixed layout so columns are evenly spaced */}
-                            <colgroup>
-                                <col span="9" style={{ width: `${(100 / 9).toFixed(2)}%` }} />
-                            </colgroup>
+                        <table className="stack-sm p-even-table">
                             <thead>
                                 <tr>
                                     <th>Adm No.</th>
