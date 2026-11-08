@@ -1,0 +1,32 @@
+# =====================================================
+# NEVER COMMIT: secrets, real data, runtime output.
+# NOTE: frontend/build IS intentionally tracked in this
+# repo (deployment artifact) — it is NOT ignored here.
+# =====================================================
+
+# Environment / secrets (matches any folder depth)
+.env
+.env.*
+*.pem
+*.key
+
+# Real database (students, fees, users, sidecars)
+backend/data/
+*.db-shm
+*.db-wal
+
+# Runtime output (PDFs, uploads, logs)
+backend/reports/
+backend/uploads/
+backend/logs/
+*.log
+
+# Dependencies
+node_modules/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+~$*
+.vscode/
