@@ -20,8 +20,9 @@ function Sidebar() {
     const isAdmin = user?.role === "admin";
 
     // Pages every logged-in user gets without a grant:
-    // Settings (profile) and My Attendance (own record, read-only).
-    const DEFAULT_PAGES = ["settings", "my_attendance"];
+    // Settings (profile), My Attendance (own record, read-only)
+    // and My Schedule (own class timings, read-only).
+    const DEFAULT_PAGES = ["settings", "my_attendance", "my_schedule"];
 
     const menuItems = APP_PAGES.filter(
         (page) =>

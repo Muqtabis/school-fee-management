@@ -26,6 +26,9 @@ import PaymentsPage
 import ExpensesPage
     from "./pages/ExpensesPage";
 
+import IncomesPage
+    from "./pages/IncomesPage";
+
 import ReportsPage
     from "./pages/ReportsPage";
 
@@ -70,6 +73,12 @@ import TeacherAttendancePage
 
 import MyAttendancePage
     from "./pages/MyAttendancePage";
+
+import MySchedulePage
+    from "./pages/MySchedulePage";
+
+import TimetablePage
+    from "./pages/TimetablePage";
 
 import ProtectedRoute
     from "./components/ProtectedRoute";
@@ -269,6 +278,25 @@ function App() {
 
 
             {/* =================================================
+                INCOMES
+                ADMIN + STAFF
+            ================================================= */}
+
+            <Route
+                path="/incomes"
+                element={
+
+                    <ProtectedRoute pageKey="incomes">
+
+                        <IncomesPage />
+
+                    </ProtectedRoute>
+
+                }
+            />
+
+
+            {/* =================================================
                 REPORTS
                 ADMIN
             ================================================= */}
@@ -312,6 +340,21 @@ function App() {
                 element={
                     <ProtectedRoute pageKey="teacher_management">
                         <TeacherManagementPage />
+                    </ProtectedRoute>
+                }
+            />
+
+
+            {/* =================================================
+                TIMETABLE MANAGER
+                ADMIN (+ "timetable" page grant)
+            ================================================= */}
+
+            <Route
+                path="/timetable"
+                element={
+                    <ProtectedRoute pageKey="timetable">
+                        <TimetablePage />
                     </ProtectedRoute>
                 }
             />
@@ -417,6 +460,21 @@ function App() {
                 element={
                     <ProtectedRoute pageKey="my_attendance">
                         <MyAttendancePage />
+                    </ProtectedRoute>
+                }
+            />
+
+
+            {/* =================================================
+                MY SCHEDULE
+                EVERY STAFF USER (own timings + own class grids)
+            ================================================= */}
+
+            <Route
+                path="/my-schedule"
+                element={
+                    <ProtectedRoute pageKey="my_schedule">
+                        <MySchedulePage />
                     </ProtectedRoute>
                 }
             />

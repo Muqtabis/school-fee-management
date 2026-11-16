@@ -162,6 +162,7 @@ export default function AuthProvider({ children }) {
             if (user?.role === "admin") return true;
             if (pageKey === "settings") return true;
             if (pageKey === "my_attendance") return true;
+            if (pageKey === "my_schedule") return true;
             return allowedPages.includes(pageKey);
         },
         [user, allowedPages]

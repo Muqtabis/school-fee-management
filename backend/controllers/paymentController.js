@@ -455,14 +455,60 @@ exports.reportSummary = async (req, res) => {
         });
         const modeCollection = Object.entries(modeMap).map(([mode, amount]) => ({ mode, amount }));
 
+        // Per-class assessed fee + active student counts (for the Reports
+        // page "Remaining Balance" figures). Mirrors the ZIP bundle's
+        // per-student ledger: standard fee components − concession +
+        // previous dues, per active enrollment.
+        const classFeeRows = await new Promise((resolve, reject) => {
+            db.all(`
+                SELECT
+                    se.className AS className,
+                    COUNT(DISTINCT se.studentId) AS students,
+                    COALESCE(SUM(
+                        CASE WHEN sfa.id IS NULL THEN 0
+                             ELSE COALESCE(s.previousDues, 0)
+                                  + MAX(COALESCE(demand.standardNet, 0) - COALESCE(s.concessionAmount, 0), 0)
+                        END
+                    ), 0) AS assessed
+                FROM student_enrollments se
+                INNER JOIN students s ON s.id = se.studentId
+                LEFT JOIN student_fee_accounts sfa ON sfa.enrollmentId = se.id
+                LEFT JOIN (
+                    SELECT sfi.feeAccountId,
+                           COALESCE(SUM(CASE WHEN sfi.itemType = 'carry_forward'
+                                              OR LOWER(COALESCE(fc.componentName, '')) LIKE '%previous%'
+                                              THEN 0 ELSE sfi.amount END), 0) AS standardNet
+                    FROM student_fee_items sfi
+                    INNER JOIN fee_components fc ON fc.id = sfi.componentId
+                    GROUP BY sfi.feeAccountId
+                ) demand ON demand.feeAccountId = sfa.id
+                WHERE se.academicYearId = ? AND se.status = 'active'
+                GROUP BY se.className
+            `, [year.id], (err, rows) => err ? reject(err) : resolve(rows || []));
+        });
+
+        // Every class with active enrollments becomes a row (even with zero
+        // payments), then live collections are merged on top.
         const classMap = {};
+        classFeeRows.forEach((row) => {
+            classMap[row.className] = {
+                className: row.className,
+                students: Number(row.students || 0),
+                totalFee: Number(row.assessed || 0),
+                payments: 0,
+                collection: 0
+            };
+        });
         activePayments.forEach(payment => {
             const className = payment.className || "Unknown";
-            if (!classMap[className]) classMap[className] = { className, payments: 0, collection: 0 };
+            if (!classMap[className]) classMap[className] = { className, students: 0, totalFee: 0, payments: 0, collection: 0 };
             classMap[className].payments += 1;
             classMap[className].collection += Number(payment.amount || 0);
         });
-        const classCollection = Object.values(classMap);
+        const classCollection = Object.values(classMap).map((c) => ({
+            ...c,
+            pending: Math.max(0, c.totalFee - c.collection)
+        }));
 
         res.json({
             period: req.query.period || "all",
@@ -520,11 +566,19 @@ exports.exportBundle = async (req, res) => {
             ORDER BY CAST(NULLIF(className,'') AS INTEGER) ASC, className ASC, section ASC
         `);
 
+        // PEN is a migrated column (db.js adds it at server start); older
+        // databases may not have it yet, so detect and include it only if present.
+        const studentCols = (await allQ(`PRAGMA table_info(students)`)).map((c) => c.name);
+        const penSelect = studentCols.includes("penNumber") ? "s.penNumber," : "";
+
         // --- per-student demand / paid / balance for the active year ---
         const studentRows = await allQ(`
             SELECT
                 s.id AS studentId, s.studentName, s.rollNumber, s.className,
-                s.fatherName, s.contact1, s.contact2,
+                s.admissionNumber, s.satsNumber, ${penSelect}
+                s.gender, s.dob, s.fatherName, s.motherName,
+                s.contact1, s.contact2, s.studentCategory, s.remark,
+                s.tuitionFee,
                 s.previousDues, s.concessionAmount,
                 sfa.id AS feeAccountId
             FROM student_enrollments se
@@ -635,7 +689,7 @@ exports.exportBundle = async (req, res) => {
 
         // --- expenses (period-filtered) ---
         const expenseRows = (await allQ(
-            `SELECT id, expenseName, category, amount, expenseDate, paymentMode, paidTo, status FROM expenses`
+            `SELECT id, expenseName, category, amount, expenseDate, paymentMode, paidTo, description, status FROM expenses`
         )).filter((e) => e.status !== "reversed" && inPeriod(e.expenseDate));
 
         // =====================================================
@@ -676,10 +730,19 @@ exports.exportBundle = async (req, res) => {
                 "Sl No": i + 1,
                 "Class": s.className || "-",
                 "Roll No": s.rollNumber || "-",
+                "Admission No": s.admissionNumber || "-",
+                "SATS No": s.satsNumber || "-",
+                "PEN": s.penNumber || "-",
                 "Student Name": s.studentName || "-",
-                "Guardian": s.fatherName || "-",
+                "Father": s.fatherName || "-",
+                "Mother": s.motherName || "-",
+                "Gender": s.gender || "-",
+                "Date of Birth": s.dob || "-",
                 "Phone": s.contact1 || "-",
                 "Alt Phone": s.contact2 || "-",
+                "Category": s.studentCategory || "-",
+                "Remarks": s.remark || "-",
+                "Tuition Fee (Rs.)": money(s.tuitionFee),
                 "Total Fee (Rs.)": money(L.totalDemand),
                 "Paid (Rs.)": money(L.totalPaid),
                 "Balance (Rs.)": money(L.balance),
@@ -702,6 +765,10 @@ exports.exportBundle = async (req, res) => {
                 "Student": p.studentName || "-",
                 "Amount Paid (Rs.)": money(p.amount),
                 "Mode": (p.paymentMode || "Cash"),
+                "Fee Components": (p.lineItems || [])
+                    .map((li) => `${li.componentName}=Rs.${Number(li.amount || 0)}`)
+                    .join("; ") || "-",
+                "Remarks": p.remarks || "-",
                 "Balance After (Rs.)": money(R?.balanceAfter),
                 "Receipt PDF": "Open receipt"
             };
@@ -770,7 +837,8 @@ exports.exportBundle = async (req, res) => {
             "Category": e.category || "-",
             "Paid To": e.paidTo || "-",
             "Amount (Rs.)": money(e.amount),
-            "Mode": (e.paymentMode || "Cash")
+            "Mode": (e.paymentMode || "Cash"),
+            "Description": e.description || "-"
         }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
             expenseLedger.length ? expenseLedger : [{ "Sl No": "", "Voucher": "No expenses in scope" }]

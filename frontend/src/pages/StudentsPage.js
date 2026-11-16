@@ -1,5 +1,5 @@
 import { toast, confirmDialog } from "../services/notify";
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef, Fragment } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import StudentForm from "../components/StudentForm";
@@ -710,7 +710,16 @@ function StudentDetailModal({ student, initialTab = "overview", onClose, onEdit 
                                     <div style={{ fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Transaction Receipts Log</div>
                                     <div style={{ border: "1px solid #E2E8F0", borderRadius: "8px", overflow: "hidden", backgroundColor: "#FFFFFF" }}>
                                         <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1.2fr", padding: "8px 14px", backgroundColor: "#F8FAFC", borderBottom: "1px solid #E2E8F0", fontSize: "12px", fontWeight: "600", color: "#475569" }}><span>Date</span><span>Mode</span><span style={{ textAlign: "center" }}>Status</span><span style={{ textAlign: "right" }}>Amount Paid</span></div>
-                                        {history.payments?.length === 0 ? <div style={{ padding: "14px", textAlign: "center", color: "#64748B", fontSize: "13px" }}>No receipts recorded for this session.</div> : history.payments?.map((payment) => <div key={payment.id} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1.2fr", alignItems: "center", padding: "9px 14px", borderBottom: "1px solid #F1F5F9", fontSize: "13px", opacity: payment.status === "reversed" ? 0.6 : 1 }}><span style={{ color: "#334155" }}>{payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString("en-IN") : "-"}</span><span style={{ color: "#334155", fontWeight: "500" }}>{payment.paymentMode || "Cash"}</span><span style={{ textAlign: "center" }}><span style={{ fontSize: "10px", fontWeight: "700", padding: "2px 7px", borderRadius: "4px", backgroundColor: payment.status === "reversed" ? "#F1F5F9" : "#DCFCE7", color: payment.status === "reversed" ? "#64748B" : "#15803D" }}>{payment.status === "reversed" ? "Reversed" : "Completed"}</span></span><strong style={{ textAlign: "right", color: "#0F172A" }}>{money(payment.amount)}</strong></div>)}
+                                        {history.payments?.length === 0 ? <div style={{ padding: "14px", textAlign: "center", color: "#64748B", fontSize: "13px" }}>No receipts recorded for this session.</div> : history.payments?.map((payment) => (
+                                            <Fragment key={payment.id}>
+                                                <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1.2fr", alignItems: "center", padding: "9px 14px", borderBottom: "1px solid #F1F5F9", fontSize: "13px", opacity: payment.status === "reversed" ? 0.6 : 1 }}><span style={{ color: "#334155" }}>{payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString("en-IN") : "-"}</span><span style={{ color: "#334155", fontWeight: "500" }}>{payment.paymentMode || "Cash"}</span><span style={{ textAlign: "center" }}><span style={{ fontSize: "10px", fontWeight: "700", padding: "2px 7px", borderRadius: "4px", backgroundColor: payment.status === "reversed" ? "#F1F5F9" : "#DCFCE7", color: payment.status === "reversed" ? "#64748B" : "#15803D" }}>{payment.status === "reversed" ? "Reversed" : "Completed"}</span></span><strong style={{ textAlign: "right", color: "#0F172A" }}>{money(payment.amount)}</strong></div>
+                                                {payment.status === "reversed" && (
+                                                    <div style={{ background: "var(--danger-bg)", color: "var(--danger)", fontSize: "12px", fontWeight: 600, padding: "6px 14px 8px", borderBottom: "1px solid #F1F5F9" }}>
+                                                        Reversed{payment.voidedAt ? ` on ${new Date(payment.voidedAt).toLocaleDateString("en-IN")}` : ""} — Reason: {payment.voidReason || "Not recorded"}
+                                                    </div>
+                                                )}
+                                            </Fragment>
+                                        ))}
                                     </div>
                                 </div>
                             </>

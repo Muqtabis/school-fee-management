@@ -426,6 +426,12 @@ a:focus-visible {
     background-color: var(--surface);
 }
 
+/* index.css hard-codes a light pill for the active menu item */
+[data-theme="dark"] .menu-item.active {
+    background: var(--surface-soft);
+    color: var(--gold);
+}
+
 [data-theme="dark"] input,
 [data-theme="dark"] select,
 [data-theme="dark"] textarea {
@@ -632,7 +638,7 @@ a:focus-visible {
     border-radius: var(--p-radius-pill, 999px);
     background: transparent;
     color: var(--text-secondary);
-    font-size: 16px;
+    font-size: 18px;
     line-height: 1;
     cursor: pointer;
 }

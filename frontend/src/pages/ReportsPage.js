@@ -203,6 +203,23 @@ function ReportsPage() {
             });
     }, [reportData.classCollection, filteredPayments, selectedClass]);
 
+    // =====================================================
+    // OVERALL TOTALS ACROSS THE VISIBLE CLASSES
+    // Respects the selected class scope; feeds the summary
+    // card, the table TOTAL row, and the Excel tabs.
+    // =====================================================
+    const classTotals = useMemo(() => ({
+        enrolled: classSummaryMatrix.reduce((s, c) => s + Number(c.enrolled || 0), 0),
+        assessed: classSummaryMatrix.reduce((s, c) => s + Number(c.totalAssessed || 0), 0),
+        collected: classSummaryMatrix.reduce((s, c) => s + Number(c.collected || 0), 0),
+        balance: classSummaryMatrix.reduce((s, c) => s + Number(c.balance || 0), 0),
+        receipts: classSummaryMatrix.reduce((s, c) => s + Number(c.receipts || 0), 0)
+    }), [classSummaryMatrix]);
+
+    const overallRecovery = classTotals.assessed > 0
+        ? ((classTotals.collected / classTotals.assessed) * 100).toFixed(1)
+        : "0.0";
+
     // Mode Collection Map
     const modeSummary = useMemo(() => {
         const map = {};
@@ -278,10 +295,10 @@ function ReportsPage() {
             { "Financial Metric / Parameter": "Class Filter Applied", "Value": selectedClass === "all" ? "Whole School (All Classes)" : `Class ${selectedClass}` },
             { "Financial Metric / Parameter": "Backup Generated Date", "Value": exportDate },
             { "Financial Metric / Parameter": "----------------------------------------", "Value": "----------------------------------------" },
-            { "Financial Metric / Parameter": "Total Enrolled Students", "Value": rawStudents.length || reportData.totalStudents },
-            { "Financial Metric / Parameter": "Total Assessed School Fees (₹)", "Value": reportData.totalFee },
+            { "Financial Metric / Parameter": "Total Enrolled Students", "Value": classTotals.enrolled || rawStudents.length },
+            { "Financial Metric / Parameter": "Total Assessed School Fees (₹)", "Value": classTotals.assessed },
             { "Financial Metric / Parameter": "Total Fee Collections Received (₹)", "Value": totalCollection },
-            { "Financial Metric / Parameter": "Total Outstanding Fees Due (₹)", "Value": Math.max(0, reportData.totalFee - totalCollection) },
+            { "Financial Metric / Parameter": "Total Outstanding Fees Due (₹)", "Value": classTotals.balance },
             { "Financial Metric / Parameter": "----------------------------------------", "Value": "----------------------------------------" },
             { "Financial Metric / Parameter": "Total Operational Expenses (₹)", "Value": totalExpenseAmount },
             { "Financial Metric / Parameter": "Net Operational Balance (₹)", "Value": netBalance },
@@ -369,7 +386,7 @@ function ReportsPage() {
         wsExpenses["!cols"] = autoFitColumns(expenseRegisterData);
         XLSX.utils.book_append_sheet(workbook, wsExpenses, "Expense Ledger");
 
-        // TAB 5: CLASS RECOVERY MATRIX
+        // TAB 5: CLASS RECOVERY MATRIX (per class + overall TOTAL row)
         const classMatrixData = classSummaryMatrix.map((c, idx) => ({
             "Sl No": idx + 1,
             "Class": c.className,
@@ -380,6 +397,18 @@ function ReportsPage() {
             "Recovery Rate": `${c.recoveryRate}%`,
             "Receipts Issued": c.receipts
         }));
+        if (classSummaryMatrix.length > 0) {
+            classMatrixData.push({
+                "Sl No": "",
+                "Class": "TOTAL (All Classes)",
+                "Enrolled Students": classTotals.enrolled,
+                "Total Assessed Fee (₹)": classTotals.assessed,
+                "Total Collected (₹)": classTotals.collected,
+                "Pending Dues (₹)": classTotals.balance,
+                "Recovery Rate": `${overallRecovery}%`,
+                "Receipts Issued": classTotals.receipts
+            });
+        }
         const wsClass = XLSX.utils.json_to_sheet(classMatrixData);
         wsClass["!cols"] = autoFitColumns(classMatrixData);
         XLSX.utils.book_append_sheet(workbook, wsClass, "Class Matrix");
@@ -391,6 +420,51 @@ function ReportsPage() {
     // SERVER-SIDE ZIP EXPORT (Excel + receipt PDFs)
     // =====================================================
     const [exporting, setExporting] = useState(false);
+
+    // =====================================================
+    // DATA EXPORT CENTER (server-built COMPLETE .xlsx files)
+    // =====================================================
+    const [dataExport, setDataExport] = useState("");
+    const [dataExporting, setDataExporting] = useState(false);
+
+    const DATA_EXPORT_LABELS = {
+        "students": "Students",
+        "attendance-staff": "Staff_Attendance",
+        "attendance-students": "Student_Attendance",
+        "exams": "Exams_Results",
+        "payments": "Payments",
+        "expenses": "Expenses"
+    };
+
+    const downloadDataExport = async (key) => {
+        try {
+            setDataExporting(true);
+            const res = await api.get(`/exports/${key}`, { responseType: "blob" });
+
+            const blob = new Blob([res.data], {
+                type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+
+            const disposition = res.headers?.["content-disposition"] || "";
+            const match = disposition.match(/filename="?([^"]+)"?/);
+            link.download = match ? match[1] : `School_${DATA_EXPORT_LABELS[key] || "Data"}_${new Date().toISOString().split("T")[0]}.xlsx`;
+
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            toast("Excel file downloaded.");
+        } catch (error) {
+            console.error("Data export error:", error);
+            toast("Unable to export this data. Please try again.");
+        } finally {
+            setDataExporting(false);
+            setDataExport("");
+        }
+    };
 
     const downloadBundle = async () => {
         try {
@@ -480,6 +554,34 @@ function ReportsPage() {
                                 <option value="today">📅 Today</option>
                             </select>
 
+                            {/* DATA EXPORT DROPDOWN — complete .xlsx download center */}
+                            <select
+                                value={dataExport}
+                                disabled={dataExporting}
+                                onChange={(e) => {
+                                    const key = e.target.value;
+                                    setDataExport(key);
+                                    if (key) downloadDataExport(key);
+                                }}
+                                style={{
+                                    padding: "8px 12px",
+                                    borderRadius: "6px",
+                                    border: "1px solid #d1d5db",
+                                    fontWeight: "600",
+                                    backgroundColor: dataExporting ? "#f3f4f6" : "#fff"
+                                }}
+                            >
+                                <option value="">
+                                    {dataExporting ? "⏳ Preparing Excel..." : "⬇️ Download Data (Excel)"}
+                                </option>
+                                <option value="students">🎓 Students — All Fields</option>
+                                <option value="attendance-staff">🧑‍🏫 Staff Attendance — All Records</option>
+                                <option value="attendance-students">🧒 Student Attendance — All Records</option>
+                                <option value="exams">📝 Exams &amp; Results — All Data</option>
+                                <option value="payments">💰 Payments — All Fields</option>
+                                <option value="expenses">💸 Expenses — All Fields</option>
+                            </select>
+
                             {/* Monthly Export Button */}
                             <button
                                 onClick={() => generateExcelReport("MONTHLY")}
@@ -554,6 +656,14 @@ function ReportsPage() {
                             <span>Total Fee Collected</span>
                             <strong>{loading ? "..." : money(totalCollection)}</strong>
                             <small>Net cash/digital inflow</small>
+                        </div>
+
+                        <div className="report-summary-card">
+                            <span>Remaining Fee Balance</span>
+                            <strong className={classTotals.balance > 0 ? "negative-balance" : "positive-balance"}>
+                                {loading ? "..." : money(classTotals.balance)}
+                            </strong>
+                            <small>{selectedClass === "all" ? "Outstanding across all classes" : `Outstanding for Class ${selectedClass}`}</small>
                         </div>
 
                         <div className="report-summary-card">
@@ -641,7 +751,7 @@ function ReportsPage() {
                                             <th>Enrolled</th>
                                             <th>Assessed Fee</th>
                                             <th>Collected</th>
-                                            <th>Balance</th>
+                                            <th>Remaining Balance</th>
                                             <th>Recovery Rate</th>
                                             <th>Receipts</th>
                                         </tr>
@@ -653,7 +763,7 @@ function ReportsPage() {
                                                 <td data-label="Enrolled">{item.enrolled}</td>
                                                 <td data-label="Assessed Fee">{money(item.totalAssessed)}</td>
                                                 <td data-label="Collected"><strong>{money(item.collected)}</strong></td>
-                                                <td data-label="Balance" style={{ color: item.balance > 0 ? "#DC2626" : "#16A34A", fontWeight: "700" }}>
+                                                <td data-label="Remaining Balance" style={{ color: item.balance > 0 ? "#DC2626" : "#16A34A", fontWeight: "700" }}>
                                                     {money(item.balance)}
                                                 </td>
                                                 <td data-label="Recovery Rate">
@@ -665,6 +775,19 @@ function ReportsPage() {
                                             </tr>
                                         ))}
                                     </tbody>
+                                    <tfoot>
+                                        <tr style={{ backgroundColor: "#F8FAFC", borderTop: "2px solid #E2E8F0" }}>
+                                            <td data-label="Class"><strong>TOTAL</strong></td>
+                                            <td data-label="Enrolled"><strong>{classTotals.enrolled}</strong></td>
+                                            <td data-label="Assessed Fee"><strong>{money(classTotals.assessed)}</strong></td>
+                                            <td data-label="Collected"><strong>{money(classTotals.collected)}</strong></td>
+                                            <td data-label="Remaining Balance" style={{ color: classTotals.balance > 0 ? "#DC2626" : "#16A34A" }}>
+                                                <strong>{money(classTotals.balance)}</strong>
+                                            </td>
+                                            <td data-label="Recovery Rate"><strong>{overallRecovery}%</strong></td>
+                                            <td data-label="Receipts"><strong>{classTotals.receipts}</strong></td>
+                                        </tr>
+                                    </tfoot>
                                 </table>
                             </div>
                         )}

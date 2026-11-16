@@ -58,7 +58,8 @@ exports.summary = async (req, res) => {
             feeRow,
             concessionRow,
             paymentRow,
-            expenseRow
+            expenseRow,
+            incomeRow
         ] = await Promise.all([
             one(
                 `SELECT COUNT(*) AS total
@@ -100,6 +101,12 @@ exports.summary = async (req, res) => {
                         COALESCE(SUM(amount), 0) AS totalExpenseAmount
                  FROM expenses
                  WHERE status IS NULL OR status != 'reversed'`
+            ),
+            one(
+                `SELECT COUNT(*) AS totalIncomes,
+                        COALESCE(SUM(amount), 0) AS totalIncomeAmount
+                 FROM incomes
+                 WHERE status IS NULL OR status != 'reversed'`
             )
         ]);
 
@@ -109,6 +116,7 @@ exports.summary = async (req, res) => {
         const netFee = Math.max(0, totalFee - totalConcessions);
         const pendingFees = Math.max(0, netFee - totalCollection);
         const totalExpenseAmount = Number(expenseRow.totalExpenseAmount || 0);
+        const totalIncomeAmount = Number(incomeRow.totalIncomeAmount || 0);
 
         res.json({
             success: true,
@@ -125,7 +133,9 @@ exports.summary = async (req, res) => {
             pendingFees: restricted ? 0 : pendingFees,
             totalExpenses: restricted ? 0 : Number(expenseRow.totalExpenses || 0),
             totalExpenseAmount: restricted ? 0 : totalExpenseAmount,
-            netBalance: restricted ? 0 : totalCollection - totalExpenseAmount
+            totalIncomes: restricted ? 0 : Number(incomeRow.totalIncomes || 0),
+            totalIncomeAmount: restricted ? 0 : totalIncomeAmount,
+            netBalance: restricted ? 0 : totalCollection + totalIncomeAmount - totalExpenseAmount
         });
     } catch (error) {
         console.error("Dashboard Summary Error:", error);

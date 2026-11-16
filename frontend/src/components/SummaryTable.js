@@ -1,5 +1,5 @@
 import { toast } from "../services/notify";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import api from "../services/api";
 
 const formatMoney = (val) =>
@@ -437,23 +437,32 @@ function SummaryTable({ payments = [], onReverse }) {
                         </tr>
                     ) : (
                         payments.map((payment, index) => (
-                            <tr key={payment.id} style={payment.status === "reversed" ? { opacity: 0.6 } : {}}>
-                                <td data-label="#">{index + 1}</td>
-                                <td data-label="Student">{payment.studentName || "-"}</td>
-                                <td data-label="Roll No.">{payment.rollNumber || "-"}</td>
-                                <td data-label="Class">{payment.className || "-"}</td>
-                                <td data-label="Academic Year">{payment.academicYearName || "-"}</td>
-                                <td data-label="Amount"><strong>₹ {Number(payment.amount || 0).toLocaleString("en-IN")}</strong></td>
-                                <td data-label="Date">{formatDate(payment.paymentDate)}</td>
-                                <td data-label="Mode"><span className={`payment-badge ${getModeClass(payment.paymentMode)}`}>{payment.paymentMode}</span></td>
-                                <td data-label="Status">{payment.status === "reversed" ? <span className="payment-badge mode-default">Reversed</span> : <span className="payment-badge mode-upi">Completed</span>}</td>
-                                <td data-label="">
-                                    <div className="action-buttons">
-                                        {payment.status !== "reversed" && <button className="receipt-btn" onClick={() => printReceipt(payment.id)}>Receipt</button>}
-                                        {payment.status !== "reversed" && <button className="delete-btn" onClick={() => onReverse(payment)}>Reverse</button>}
-                                    </div>
-                                </td>
-                            </tr>
+                            <Fragment key={payment.id}>
+                                <tr style={payment.status === "reversed" ? { opacity: 0.6 } : {}}>
+                                    <td data-label="#">{index + 1}</td>
+                                    <td data-label="Student">{payment.studentName || "-"}</td>
+                                    <td data-label="Roll No.">{payment.rollNumber || "-"}</td>
+                                    <td data-label="Class">{payment.className || "-"}</td>
+                                    <td data-label="Academic Year">{payment.academicYearName || "-"}</td>
+                                    <td data-label="Amount"><strong>₹ {Number(payment.amount || 0).toLocaleString("en-IN")}</strong></td>
+                                    <td data-label="Date">{formatDate(payment.paymentDate)}</td>
+                                    <td data-label="Mode"><span className={`payment-badge ${getModeClass(payment.paymentMode)}`}>{payment.paymentMode}</span></td>
+                                    <td data-label="Status">{payment.status === "reversed" ? <span className="payment-badge mode-default">Reversed</span> : <span className="payment-badge mode-upi">Completed</span>}</td>
+                                    <td data-label="">
+                                        <div className="action-buttons">
+                                            {payment.status !== "reversed" && <button className="receipt-btn" onClick={() => printReceipt(payment.id)}>Receipt</button>}
+                                            {payment.status !== "reversed" && <button className="delete-btn" onClick={() => onReverse(payment)}>Reverse</button>}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {payment.status === "reversed" && (
+                                    <tr>
+                                        <td colSpan="10" style={{ background: "var(--danger-bg)", padding: "7px 14px", fontSize: "12px", fontWeight: 600, color: "var(--danger)" }}>
+                                            Reversed{payment.voidedAt ? ` on ${formatDate(payment.voidedAt)}` : ""} — Reason: {payment.voidReason || "Not recorded"}
+                                        </td>
+                                    </tr>
+                                )}
+                            </Fragment>
                         ))
                     )}
                 </tbody>

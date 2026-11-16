@@ -54,6 +54,12 @@ const PAGES = [
         description: "Log school expenses, track budgets, and manage vendor payments."
     },
     {
+        key: "incomes",
+        label: "Incomes",
+        path: "/incomes",
+        description: "Record non-fee school income (donations, grants, events) with admin-managed categories."
+    },
+    {
         key: "reports",
         label: "Reports",
         path: "/reports",
@@ -88,6 +94,18 @@ const PAGES = [
         label: "Teacher Management",
         path: "/teacher-management",
         description: "Manage teacher profiles, class assignments, and subject linkages."
+    },
+    {
+        key: "timetable",
+        label: "Timetable",
+        path: "/timetable",
+        description: "Set the weekly class timetable: periods, times, subjects, and teachers."
+    },
+    {
+        key: "my_schedule",
+        label: "My Schedule",
+        path: "/my-schedule",
+        description: "Your own weekly class timings and the timetables of classes you lead."
     },
     {
         key: "student_attendance",
@@ -157,6 +175,7 @@ const STAFF_ROLE_PAGES = [
     "fees",
     "payments",
     "expenses",
+    "incomes",
     "teacher_attendance"
 ];
 

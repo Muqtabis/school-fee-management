@@ -336,6 +336,40 @@ async function initializeDatabase() {
             }
         }
 
+        // INCOMES — non-fee money coming into the school (donations,
+        // grants, event collections ...). Mirrors the expenses table.
+        // Active (non-reversed) incomes are added to the dashboard's
+        // Net Balance.
+        await run(`
+            CREATE TABLE IF NOT EXISTS incomes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                incomeName TEXT NOT NULL,
+                category TEXT NOT NULL,
+                amount REAL NOT NULL,
+                incomeDate TEXT NOT NULL,
+                paymentMode TEXT NOT NULL,
+                receivedFrom TEXT,
+                description TEXT,
+                status TEXT NOT NULL DEFAULT 'completed',
+                voidedAt TEXT,
+                voidedBy INTEGER,
+                voidReason TEXT,
+                createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // INCOME CATEGORIES (dynamic, admin-managed)
+        // Deliberately NOT seeded — the admin creates every income
+        // category manually, exactly as they want it.
+        await run(`
+            CREATE TABLE IF NOT EXISTS income_categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                categoryName TEXT UNIQUE NOT NULL,
+                sortOrder INTEGER DEFAULT 0,
+                createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
         // AUDIT LOGS
         await run(`
             CREATE TABLE IF NOT EXISTS audit_logs (
@@ -693,6 +727,34 @@ async function initializeDatabase() {
                 FOREIGN KEY(subjectId) REFERENCES subjects(id) ON DELETE CASCADE
             )
         `);
+
+        // TIMETABLE SLOTS — the weekly class timetable. One row per
+        // (class, day, period) cell; a cell may be a free period
+        // (no subject/teacher). Times live on the period row so each
+        // class can run its own timing. A class's grid is replaced
+        // wholesale (in one transaction) when the Timetable page saves.
+        // FKs are SET NULL so deleting a subject or user keeps the
+        // slot (it just becomes free) instead of dropping timetable cells.
+        await run(`
+            CREATE TABLE IF NOT EXISTS timetable_slots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                className TEXT NOT NULL,
+                dayOfWeek TEXT NOT NULL,
+                periodNumber INTEGER NOT NULL,
+                startTime TEXT,
+                endTime TEXT,
+                subjectId INTEGER,
+                teacherId INTEGER,
+                createdBy INTEGER,
+                createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(className, dayOfWeek, periodNumber),
+                FOREIGN KEY(subjectId) REFERENCES subjects(id) ON DELETE SET NULL,
+                FOREIGN KEY(teacherId) REFERENCES users(id) ON DELETE SET NULL
+            )
+        `);
+        await run(`CREATE INDEX IF NOT EXISTS idx_timetable_slots_class ON timetable_slots(className)`);
+        await run(`CREATE INDEX IF NOT EXISTS idx_timetable_slots_teacher ON timetable_slots(teacherId)`);
 
         // CO-SCHOLASTIC MARKS — one row per (exam, student, co-scholastic area).
         // Areas are a fixed list (see utils/progressCard.CO_SCHOLASTIC_AREAS):

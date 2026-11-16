@@ -16,6 +16,7 @@ const CARD_ROUTES = {
     "Pending Fees": "/payments",
     "Fee Concessions": "/fee-concessions",
     "School Expenses": "/expenses",
+    "School Incomes": "/incomes",
     "Net Balance": "/reports",
     "Total Payments": "/payments",
     "Expense Transactions": "/expenses"
@@ -45,6 +46,8 @@ function DashboardPage() {
         pendingFees: 0,
         totalExpenses: 0,
         totalExpenseAmount: 0,
+        totalIncomes: 0,
+        totalIncomeAmount: 0,
         netBalance: 0
     });
 
@@ -88,6 +91,8 @@ function DashboardPage() {
                 pendingFees: Number(paymentSummary.data.pendingFees || 0),
                 totalExpenses: Number(paymentSummary.data.totalExpenses || 0),
                 totalExpenseAmount: Number(paymentSummary.data.totalExpenseAmount || 0),
+                totalIncomes: Number(paymentSummary.data.totalIncomes || 0),
+                totalIncomeAmount: Number(paymentSummary.data.totalIncomeAmount || 0),
                 netBalance: Number(paymentSummary.data.netBalance || 0)
             });
 
@@ -184,6 +189,7 @@ function DashboardPage() {
                     {canSeeFinancial && (
                         <div className="cards" style={{ marginTop: "20px" }}>
                             <DashboardCard title="School Expenses" value={money(summary.totalExpenseAmount)} icon="💸" color="var(--p-slate)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["School Expenses"])} />
+                            <DashboardCard title="School Incomes" value={money(summary.totalIncomeAmount)} icon="📈" color="var(--p-slate)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["School Incomes"])} />
                             <DashboardCard title="Net Balance" value={money(summary.netBalance)} icon="💵" color="var(--p-slate)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Net Balance"])} />
                             <DashboardCard title="Total Payments" value={summary.totalPayments} icon="🧾" color="var(--p-slate)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Total Payments"])} />
                             <DashboardCard title="Expense Transactions" value={summary.totalExpenses} icon="📋" color="var(--p-slate)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Expense Transactions"])} />

@@ -112,6 +112,13 @@ app.use(
     require("./routes/expenses")
 );
 
+// Non-fee school income (donations, grants ...) — feeds the
+// dashboard Net Balance.
+app.use(
+    "/incomes",
+    require("./routes/incomes")
+);
+
 app.use(
     "/notifications",
     require("./routes/notifications")
@@ -136,6 +143,29 @@ app.use(
 app.use(
     "/student-attendance",
     require("./routes/studentAttendance")
+);
+
+// =====================================================
+// DATA EXPORT CENTER
+// Complete .xlsx downloads behind the Reports page
+// dropdown ("reports" page grant; admin bypasses).
+// =====================================================
+
+app.use(
+    "/exports",
+    require("./routes/exports")
+);
+
+// =====================================================
+// TIMETABLE
+// Weekly class timetable: admin sets it here, teachers see
+// their own schedule / class grids. Reads open to staff,
+// writes behind the "timetable" page grant.
+// =====================================================
+
+app.use(
+    "/timetable",
+    require("./routes/timetable")
 );
 
 // =====================================================

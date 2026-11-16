@@ -27,6 +27,7 @@ export const APP_PAGES = [
     { key: "fees", label: "Fee Management", path: "/fees", icon: "📚", group: "Finance", description: "Define fee structures, manage academic years, and configure class-wise fees." },
     { key: "payments", label: "Payments", path: "/payments", icon: "💰", group: "Finance", description: "Record fee payments, view receipts, and track payment history." },
     { key: "expenses", label: "Expenses", path: "/expenses", icon: "💸", group: "Finance", description: "Log school expenses, track budgets, and manage vendor payments." },
+    { key: "incomes", label: "Incomes", path: "/incomes", icon: "📈", group: "Finance", description: "Record non-fee school income (donations, grants, events) with admin-managed categories." },
     { key: "reports", label: "Reports", path: "/reports", icon: "📊", group: "Finance", description: "Generate comprehensive financial and student attendance reports." },
     { key: "exam_results", label: "Exam & Results", path: "/exam-results", icon: "📝", group: "Exams", description: "Create exams, publish results, and manage report cards." },
     { key: "marks_entry", label: "Marks Entry", path: "/marks-entry", icon: "✏️", group: "Exams", description: "Enter exam marks, manage co-scholastic grades, and lock submissions." },
@@ -35,8 +36,10 @@ export const APP_PAGES = [
     { key: "student_attendance", label: "Student Attendance", path: "/student-attendance", icon: "📋", group: "Attendance", description: "Mark and track student attendance by class and date." },
     { key: "attendance_overview", label: "Attendance Overview", path: "/attendance-overview", icon: "📈", group: "Attendance", description: "Monitor overall attendance patterns and generate attendance reports." },
     { key: "my_attendance", label: "My Attendance", path: "/my-attendance", icon: "🙋", group: "Attendance", description: "Your own attendance record, read-only (default for every user)." },
+    { key: "my_schedule", label: "My Schedule", path: "/my-schedule", icon: "🕒", group: "Attendance", description: "Your weekly class timings and the timetables of classes you lead (default for every user)." },
     { key: "class_management", label: "Class Management", path: "/class-management", icon: "🏫", group: "Staff & Admin", description: "Create classes, assign sections, and manage class-related settings." },
     { key: "teacher_management", label: "Teacher Management", path: "/teacher-management", icon: "🧑‍🏫", group: "Staff & Admin", description: "Manage teacher profiles, class assignments, and subject linkages." },
+    { key: "timetable", label: "Timetable", path: "/timetable", icon: "🗓️", group: "Staff & Admin", description: "Set the weekly class timetable: periods, times, subjects, and teachers." },
     { key: "users", label: "Users", path: "/users", icon: "👥", group: "Staff & Admin", description: "Manage staff accounts, roles, and page access permissions." },
     { key: "notifications", label: "Notifications", path: "/notifications", icon: "🔔", group: "Staff & Admin", description: "Send announcements, reminders, and alerts to staff and parents." },
     { key: "settings", label: "Settings", path: "/settings", icon: "⚙️", group: "Staff & Admin", description: "Update your profile information and change your password." }

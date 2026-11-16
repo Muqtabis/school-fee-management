@@ -325,6 +325,7 @@ img {
 .navbar-right {
     display: flex;
     align-items: center;
+    gap: 12px;
 }
 
 .user-profile {
