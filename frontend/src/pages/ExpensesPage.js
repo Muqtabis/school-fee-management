@@ -1,7 +1,8 @@
 import { toast, confirmDialog } from "../services/notify";
 import {
     useEffect,
-    useState
+    useState,
+    useMemo
 } from "react";
 
 import Sidebar
@@ -31,6 +32,7 @@ function ExpensesPage() {
     const { user } = useAuth();
     // Finance actions (reverse, categories) stay admin-only.
     const isAdmin = user?.role === "admin";
+    const isApprover = user?.role === "admin" || user?.role === "principal";
 
     const [
         expenses,
@@ -163,6 +165,7 @@ function ExpensesPage() {
 
             fetchExpenses();
             fetchCategories();
+            fetchReverseRequests();
 
         },
         []
@@ -352,6 +355,27 @@ function ExpensesPage() {
 
     const [reverseTarget, setReverseTarget] = useState(null);
     const [reversing, setReversing] = useState(false);
+    const [reverseRequests, setReverseRequests] = useState([]);
+    const [tab, setTab] = useState("completed");
+
+    const fetchReverseRequests = async () => {
+        if (!isApprover) return;
+        try {
+            const res = await api.get("/expenses/reverse-requests");
+            setReverseRequests(Array.isArray(res.data) ? res.data : []);
+        } catch (e) { console.error("Reverse requests error:", e); }
+    };
+
+    const reviewRequest = async (id, action) => {
+        try {
+            const res = await api.post(`/expenses/reverse-requests/${id}/${action}`, {});
+            toast(res.data?.message || "Request updated.");
+            fetchExpenses();
+            fetchReverseRequests();
+        } catch (e) {
+            toast(e.response?.data?.message || "Unable to review request.");
+        }
+    };
 
     const handleReverse = (expense) => {
         if (expense.status === "reversed") return;
@@ -364,9 +388,11 @@ function ExpensesPage() {
         if (!reverseTarget) return;
         setReversing(true);
         try {
-            await api.post(`/expenses/${reverseTarget.id}/reverse`, { reason });
+            const res = await api.post(`/expenses/${reverseTarget.id}/reverse`, { reason });
+            toast(res.data?.message || (isApprover ? "Expense reversed successfully." : "Reverse request submitted for admin approval."));
             setReverseTarget(null);
             fetchExpenses();
+            fetchReverseRequests();
         } catch (error) {
             toast(error.response?.data?.message || "Unable to reverse expense.");
         } finally {
@@ -374,6 +400,16 @@ function ExpensesPage() {
         }
     };
 
+
+    const completedExpenses = useMemo(
+        () => filteredExpenses.filter((e) => e.status !== "reversed"),
+        [filteredExpenses]
+    );
+    const reversedExpenses = useMemo(
+        () => filteredExpenses.filter((e) => e.status === "reversed"),
+        [filteredExpenses]
+    );
+    const visibleExpenses = tab === "reversed" ? reversedExpenses : completedExpenses;
 
     return (
 
@@ -572,8 +608,53 @@ function ExpensesPage() {
                     </div>
 
 
-                    {/* TABLE */}
+                    {/* TABS */}
+                    <div className="exam-tabbar" style={{ marginBottom: "18px" }}>
+                        <button type="button" className={`exam-tab ${tab === "completed" ? "exam-tab-active" : ""}`} onClick={() => setTab("completed")}>
+                            Completed <span className="exam-badge">{completedExpenses.length}</span>
+                        </button>
+                        {isApprover && (
+                            <>
+                                <button type="button" className={`exam-tab ${tab === "reversed" ? "exam-tab-active" : ""}`} onClick={() => setTab("reversed")}>
+                                    Reversed <span className="exam-badge">{reversedExpenses.length}</span>
+                                </button>
+                                <button type="button" className={`exam-tab ${tab === "requests" ? "exam-tab-active" : ""}`} onClick={() => { setTab("requests"); fetchReverseRequests(); }}>
+                                    Reverse Requests <span className="exam-badge">{reverseRequests.length}</span>
+                                </button>
+                            </>
+                        )}
+                    </div>
 
+                    {tab === "requests" && isApprover && (
+                        <div className="settings-card" style={{ marginBottom: "18px" }}>
+                            <h3 style={{ margin: "0 0 12px 0" }}>Pending Reverse Requests ({reverseRequests.length})</h3>
+                            {reverseRequests.length === 0 ? (
+                                <p style={{ color: "#64748B", fontSize: "13px" }}>No pending reverse requests.</p>
+                            ) : (
+                                <div className="table-container">
+                                    <table className="compact-table stack-sm">
+                                        <thead><tr><th>Expense</th><th>Amount</th><th>Requested by</th><th>Reason</th><th>Action</th></tr></thead>
+                                        <tbody>
+                                            {reverseRequests.map((r) => (
+                                                <tr key={r.id}>
+                                                    <td data-label="Expense">{r.expenseName || "-"}</td>
+                                                    <td data-label="Amount">{money(r.amount)}</td>
+                                                    <td data-label="Requested by">{r.requestedByName || "-"}</td>
+                                                    <td data-label="Reason">{r.reason || "-"}</td>
+                                                    <td data-label="Action">
+                                                        <button className="save-btn" onClick={() => reviewRequest(r.id, "approve")}>Approve</button>
+                                                        <button className="cancel-btn" onClick={() => reviewRequest(r.id, "reject")}>Reject</button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {tab !== "requests" && (
                     <div
                         className="table-container"
                     >
@@ -624,7 +705,7 @@ function ExpensesPage() {
                             <tbody>
 
                                 {
-                                    filteredExpenses.length ===
+                                    visibleExpenses.length ===
                                     0 ? (
 
                                         <tr>
@@ -645,7 +726,7 @@ function ExpensesPage() {
 
                                     ) : (
 
-                                        filteredExpenses.map(
+                                        visibleExpenses.map(
                                             expense => (
 
                                                 <tr
@@ -758,6 +839,7 @@ function ExpensesPage() {
 
                                                                     <>
 
+                                                                        {Number(expense.editCount || 0) < 1 && (
                                                                         <button
                                                                             className="edit-btn"
                                                                             onClick={() =>
@@ -768,6 +850,7 @@ function ExpensesPage() {
                                                                         >
                                                                             Edit
                                                                         </button>
+                                                                        )}
 
 
                                                                         <button
@@ -803,6 +886,7 @@ function ExpensesPage() {
                         </table>
 
                     </div>
+                    )}
 
                 </div>
 
@@ -866,8 +950,8 @@ function ExpensesPage() {
                 }
                 multiline
                 requireValue
-                placeholder="Reason for reversing (required)"
-                confirmLabel="Reverse"
+                placeholder={isApprover ? "Reason for reversing (required)" : "Reason for requesting reversal (required)"}
+                confirmLabel={isApprover ? "Reverse" : "Send Request"}
                 busy={reversing}
             />
 

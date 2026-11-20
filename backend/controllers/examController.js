@@ -260,6 +260,119 @@ exports.createExam = async (req, res) => {
 
 
 // =====================================================
+// UPDATE EXAM DEFINITION (admin / principal only)
+// Mirrors createExam: same fields (assessment slot → type /
+// category / term, weightage, year, grading scale, dates)
+// PLUS class reconciliation — child exams are added/removed
+// so the exam can be edited just like it was created.
+// Child exams keep their name in sync; classes with marks
+// entered are never dropped (reported as skipped instead).
+// =====================================================
+exports.updateExamDefinition = async (req, res) => {
+    const definitionId = Number(req.params.definitionId);
+    if (!Number.isInteger(definitionId) || definitionId <= 0) {
+        return res.status(400).json({ success: false, message: "Invalid exam ID." });
+    }
+
+    const CATEGORIES = ["unit_test", "term", "final"];
+    try {
+        const existing = await allQuery(`SELECT id FROM exam_definitions WHERE id = ?`, [definitionId]);
+        if (existing.length === 0) return res.status(404).json({ success: false, message: "Exam not found." });
+
+        const body = req.body || {};
+        const examName = String(body.examName || body.name || "").trim();
+        const examType = String(body.examType || "other").trim() || "other";
+        let examCategory = String(body.examCategory || "").trim();
+        if (!CATEGORIES.includes(examCategory)) {
+            if (examType === "final" || ["pre_board"].includes(examType)) examCategory = "final";
+            else if (["mid_term", "term_1", "term_2"].includes(examType)) examCategory = "term";
+            else examCategory = "unit_test";
+        }
+        let term = String(body.term || "").trim();
+        if (!["term_1", "term_2"].includes(term)) term = null;
+        const weightage = body.weightage === "" || body.weightage === null || body.weightage === undefined
+            ? null
+            : (Number.isFinite(Number(body.weightage)) ? Number(body.weightage) : null);
+        const academicYearId = Number(body.academicYearId) || null;
+        const gradingScaleId = Number(body.gradingScaleId) || null;
+        const startDate = body.startDate ? String(body.startDate) : null;
+        const endDate = body.endDate ? String(body.endDate) : null;
+
+        if (!examName) return res.status(400).json({ success: false, message: "Exam name is required." });
+
+        let classNames = [];
+        if (Array.isArray(body.classNames)) {
+            classNames = body.classNames.map((c) => String(c || "").trim()).filter(Boolean);
+        } else if (body.className) {
+            classNames = [String(body.className).trim()].filter(Boolean);
+        }
+        classNames = [...new Set(classNames)];
+        // If the caller didn't send a class list, keep the current classes.
+        const reconcileClasses = classNames.length > 0;
+
+        await runQuery(
+            `UPDATE exam_definitions
+             SET name = ?, examType = ?, examCategory = ?, term = ?, weightage = ?,
+                 academicYearId = ?, gradingScaleId = ?, startDate = ?, endDate = ?
+             WHERE id = ?`,
+            [examName, examType, examCategory, term, weightage, academicYearId, gradingScaleId, startDate, endDate, definitionId]
+        );
+
+        const skipped = [];
+        if (reconcileClasses) {
+            const children = await allQuery(
+                `SELECT id, className FROM exams WHERE examDefinitionId = ?`, [definitionId]
+            );
+            const currentByClass = new Map(children.map((c) => [c.className, c.id]));
+
+            // Remove deselected classes — but never drop one that has marks.
+            for (const c of children) {
+                if (classNames.includes(c.className)) continue;
+                const marks = await allQuery(`SELECT 1 FROM exam_marks WHERE examId = ? LIMIT 1`, [c.id]);
+                if (marks.length > 0) {
+                    skipped.push({ className: c.className, reason: "Marks already entered — class kept." });
+                    continue;
+                }
+                await runQuery(`DELETE FROM exam_subjects WHERE examId = ?`, [c.id]);
+                await runQuery(`DELETE FROM exam_marks WHERE examId = ?`, [c.id]);
+                await runQuery(`DELETE FROM exams WHERE id = ?`, [c.id]);
+            }
+
+            // Add newly selected classes (with their subjects), keep existing ones.
+            for (const className of classNames) {
+                if (currentByClass.has(className)) continue;
+                const cls = await allQuery(`SELECT id FROM classes WHERE className = ? LIMIT 1`, [className]);
+                if (cls.length === 0) { skipped.push({ className, reason: "Class not found." }); continue; }
+                const subjects = await allQuery(`SELECT id FROM subjects WHERE className = ?`, [className]);
+                if (subjects.length === 0) { skipped.push({ className, reason: "No subjects defined for this class." }); continue; }
+                const created = await runQuery(
+                    `INSERT INTO exams (examName, className, status, createdBy, examDefinitionId)
+                     VALUES (?, ?, 'open', ?, ?)`,
+                    [examName, className, req.user.id, definitionId]
+                );
+                await seedExamSubjects(created.lastID, className);
+            }
+
+            // Keep every child exam's name in sync with the definition.
+            await runQuery(`UPDATE exams SET examName = ? WHERE examDefinitionId = ?`, [examName, definitionId]);
+        } else {
+            await runQuery(`UPDATE exams SET examName = ? WHERE examDefinitionId = ?`, [examName, definitionId]);
+        }
+
+        await logAudit({
+            userId: req.user.id, action: "EXAM_UPDATED", entityType: "exam_definition", entityId: definitionId,
+            details: { examName, examType, examCategory, term, weightage, classes: classNames, skipped }
+        }).catch((e) => console.error("Audit Error:", e));
+
+        res.json({ success: true, message: "Exam updated successfully.", definitionId, skipped });
+    } catch (error) {
+        console.error("Update Exam Error:", error);
+        res.status(500).json({ success: false, message: "Unable to update exam." });
+    }
+};
+
+
+// =====================================================
 // LIST EXAM DEFINITIONS (grouped)
 //
 // The new Exam page lists exams as definitions (one row

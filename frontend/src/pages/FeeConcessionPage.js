@@ -42,6 +42,16 @@ function FeeConcessionPage() {
     const [selectedClass, setSelectedClass] = useState("All");
     const [selectedCategory, setSelectedCategory] = useState("All");
     const [concessionsOnly, setConcessionsOnly] = useState(false);
+    const [activeTab, setActiveTab] = useState("concessions");
+    // Read-only TC concession records (remaining amounts at TC time).
+    const [tcRecords, setTcRecords] = useState([]);
+    const [tcYear, setTcYear] = useState("All");
+    const [tcYears, setTcYears] = useState([]);
+    useEffect(() => {
+        api.get("/concessions/tc-records", { params: tcYear === "All" ? {} : { academicYear: tcYear } })
+            .then((r) => { setTcRecords(r.data.records || []); setTcYears(r.data.academicYears || []); })
+            .catch(() => {});
+    }, [tcYear]);
     const [searchKeyword, setSearchKeyword] = useState("");
     const [sortBy, setSortBy] = useState("roll");
 
@@ -262,12 +272,49 @@ function FeeConcessionPage() {
                             <h2>Fee Concessions</h2>
                             <p>Categorise students (RTE, Management, etc.) and manage fee concessions &amp; free education.</p>
                         </div>
+
                         <button className="primary-btn" onClick={openAdd}>
                             + Add Concession
                         </button>
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginBottom: "20px" }}>
+                    <div className="exam-tabbar" style={{ marginTop: 20 }}>
+                        <button type="button" className={"exam-tab " + (activeTab === "concessions" ? "exam-tab-active" : "")} onClick={() => setActiveTab("concessions")}>Fee Concessions</button>
+                        <button type="button" className={"exam-tab " + (activeTab === "tc" ? "exam-tab-active" : "")} onClick={() => { setActiveTab("tc"); api.get("/concessions/tc-records", { params: tcYear === "All" ? {} : { academicYear: tcYear } }).then((r) => { setTcRecords(r.data.records || []); setTcYears(r.data.academicYears || []); }).catch(() => {}); }}>TC Concession</button>
+                    </div>
+
+                    {/* PINNED READ-ONLY TC Concession panel */}
+                    <div className={"settings-card tc-concession-panel" + (activeTab === "tc" ? "" : " hidden-section")}>
+                        <div className="payment-filters">
+                            <strong style={{ marginRight: "auto" }}>TC Concession (read-only)</strong>
+                            <select className="filter-select" value={tcYear} onChange={(e) => setTcYear(e.target.value)}>
+                                <option value="All">All Academic Years</option>
+                                {tcYears.map((y) => <option key={y} value={y}>{y}</option>)}
+                            </select>
+                        </div>
+                        <p className="tc-concession-note">Remaining amounts recorded when transfer certificates were issued. This section cannot be edited.</p>
+                        <div className="table-container">
+                            <table className="stack-sm">
+                                <thead><tr><th>Student</th><th>Class</th><th>Academic Year</th><th>Collected</th><th>Remaining</th><th>Issued</th></tr></thead>
+                                <tbody>
+                                    {tcRecords.length === 0 ? (
+                                        <tr><td colSpan="6"><div className="empty-state"><strong>No TC concessions</strong><span>Records appear here when a TC is issued with a remaining amount.</span></div></td></tr>
+                                    ) : tcRecords.map((r, i) => (
+                                        <tr key={i}>
+                                            <td data-label="Student">{r.studentName || "-"}</td>
+                                            <td data-label="Class">{r.className || "-"}</td>
+                                            <td data-label="Academic Year">{r.academicYear || "-"}</td>
+                                            <td data-label="Collected">₹{Number(r.amountCollected || 0).toLocaleString("en-IN")}</td>
+                                            <td data-label="Remaining"><strong className="negative-balance">₹{Number(r.remainingAmount || 0).toLocaleString("en-IN")}</strong></td>
+                                            <td data-label="Issued">{r.issuedAt ? new Date(r.issuedAt).toLocaleDateString("en-IN") : "-"}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div className={activeTab === "concessions" ? "" : "hidden-section"} style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginBottom: "20px" }}>
                         <div style={{ backgroundColor: "#FEF3C7", border: "1px solid #FDE68A", padding: "12px", borderRadius: "8px" }}>
                             <span style={{ fontSize: "11px", color: "#92400E", fontWeight: "600" }}>STUDENTS WITH CONCESSION</span>
                             <div style={{ fontSize: "18px", fontWeight: "700", color: "#92400E", marginTop: "2px" }}>{summary.concessionCount}</div>
@@ -282,6 +329,7 @@ function FeeConcessionPage() {
                         </div>
                     </div>
 
+                    <div className={activeTab === "concessions" ? "" : "hidden-section"}>
                     <div className="student-filters" style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
                         <div style={{ flex: 1, minWidth: "200px" }}>
                             <StudentSearch onSearch={(value) => setSearchKeyword(value)} />
@@ -389,6 +437,7 @@ function FeeConcessionPage() {
                                 )}
                             </tbody>
                         </table>
+                    </div>
                     </div>
                 </div>
             </div>

@@ -487,6 +487,22 @@ exports.updateIncome = (
             }
 
 
+            if (
+                Number(income.editCount || 0) >= 1
+            ) {
+
+                return res.status(409).json({
+
+                    success: false,
+
+                    message:
+                        "This income has already been edited once."
+
+                });
+
+            }
+
+
             db.run(
                 `
                 UPDATE incomes
@@ -498,7 +514,8 @@ exports.updateIncome = (
                     incomeDate = ?,
                     paymentMode = ?,
                     receivedFrom = ?,
-                    description = ?
+                    description = ?,
+                    editCount = COALESCE(editCount, 0) + 1
 
                 WHERE id = ?
                 `,

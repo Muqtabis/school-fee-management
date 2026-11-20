@@ -1,9 +1,10 @@
 import { toast } from "../services/notify";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import api from "../services/api";
 import useModalBehavior from "./useModalBehavior";
 
-function PaymentForm({ onClose }) {
+function PaymentForm({ onClose, editPayment }) {
+    const [editLineItems, setEditLineItems] = useState([]);
     const [students, setStudents] = useState([]);
     const [classes, setClasses] = useState([]);
     const [filteredStudents, setFilteredStudents] = useState([]);
@@ -26,9 +27,67 @@ function PaymentForm({ onClose }) {
     // Per-component mode/date/ref for multi-mode payments
     const [componentDetails, setComponentDetails] = useState({});
 
+    // "Multiple Payments" mode: collect several payments for this student
+    // in one go, each entry with its own component/amount/mode/date/ref.
+    // Entries on different dates are submitted as separate payments so
+    // each date gets its own receipt.
+    const [multiMode, setMultiMode] = useState(false);
+    const [multiEntries, setMultiEntries] = useState([]);
+    const entrySeq = useRef(0);
+
     useEffect(() => {
         loadData();
     }, []);
+
+    // EDIT MODE: prefill the FULL form from the payment being edited,
+    // including its saved fee components (so the receipt components and
+    // the total can be corrected together).
+    useEffect(() => {
+        if (!editPayment) return;
+        (async () => {
+            let items = [];
+            try {
+                const res = await api.get(`/payments/receipt/${editPayment.id}`);
+                items = Array.isArray(res.data?.lineItems) ? res.data.lineItems : [];
+            } catch (e) {
+                console.error("Unable to load payment components:", e);
+            }
+            setEditLineItems(items);
+            const selected = {};
+            const details = {};
+            items.forEach((li) => {
+                const name = li.componentName || "Fee";
+                selected[name] = Number(li.amount || 0);
+                details[name] = {
+                    mode: li.mode || "Cash",
+                    paidOn: li.paidOn ? String(li.paidOn).slice(0, 10) : (editPayment.paymentDate || "").slice(0, 10),
+                    reference: li.reference || "",
+                    remark: li.remark || ""
+                };
+            });
+            setSelectedComponents(selected);
+            setComponentDetails(details);
+            const total = items.reduce((s, li) => s + Number(li.amount || 0), 0);
+            setFormData({
+                className: editPayment.className || "",
+                studentId: String(editPayment.studentId || ""),
+                paymentDate: editPayment.paymentDate ? String(editPayment.paymentDate).slice(0, 10) : new Date().toISOString().split("T")[0],
+                amount: String(total || editPayment.amount || ""),
+                paymentMode: editPayment.paymentMode || "Cash",
+                remarks: editPayment.remarks || ""
+            });
+            setFilteredStudents(students.filter(
+                (s) => String(s.className).toUpperCase() === String(editPayment.className).toUpperCase()
+            ));
+            // Load the fee ledger so the full component list is available
+            try {
+                const hist = await api.get(`/payments/history/student/${editPayment.studentId}`);
+                setFeeSummary(hist.data);
+            } catch (e) {
+                console.error("Fee account error:", e);
+            }
+        })();
+    }, [editPayment, students]);
 
     const loadData = async () => {
         try {
@@ -54,6 +113,7 @@ function PaymentForm({ onClose }) {
         setFormData({ ...formData, className: selectedClass, studentId: "", amount: "" });
         setFeeSummary(null);
         setSelectedComponents({});
+        setMultiEntries([]);
 
         if (!selectedClass) {
             setFilteredStudents([]);
@@ -70,6 +130,7 @@ function PaymentForm({ onClose }) {
         const studentId = e.target.value;
         setFormData({ ...formData, studentId, amount: "" });
         setSelectedComponents({});
+        setMultiEntries([]);
 
         if (studentId) {
             await fetchFeeSummary(studentId);
@@ -183,6 +244,27 @@ function PaymentForm({ onClose }) {
     // BUILD CLEAN COMPONENT LIST (VANISHES IF PAID 100%)
     // =====================================================
     const componentBreakdown = useMemo(() => {
+        // EDIT MODE: build the component list from this payment's saved line
+        // items so every original component stays editable (even when fully
+        // paid), with the ORIGINAL per-component amounts as the max.
+        if (editPayment) {
+            let prev = 0;
+            let tuition = null;
+            const additional = [];
+            editLineItems.forEach((li) => {
+                const name = li.componentName || "Fee";
+                const amt = Number(li.amount || 0);
+                const lower = name.toLowerCase();
+                if (lower.includes("previous")) {
+                    prev += amt;
+                } else if (lower.includes("tuition") || lower.includes("tution") || lower.includes("term")) {
+                    tuition = { name, total: amt, paid: 0, amount: amt };
+                } else {
+                    additional.push({ name, total: amt, amount: amt });
+                }
+            });
+            return { previousDues: prev, tuition, additionalItems: additional };
+        }
         if (!parsedLedger) return { tuition: null, additionalItems: [], previousDues: 0 };
         const { studentPrevDues, netTuition, rawAdditionalItems, paidMap } = parsedLedger;
 
@@ -200,7 +282,17 @@ function PaymentForm({ onClose }) {
         }).filter(i => i.amount > 0);
 
         return { previousDues: prevDuesBal, tuition, additionalItems };
-    }, [parsedLedger]);
+    }, [parsedLedger, editPayment, editLineItems]);
+
+    // Collectible components with their current due amounts (used by the
+    // Multiple-Payments entry editor).
+    const duesMap = useMemo(() => {
+        const map = {};
+        if (componentBreakdown.previousDues > 0) map["Previous Dues"] = componentBreakdown.previousDues;
+        if (componentBreakdown.tuition) map["Tuition Fee"] = componentBreakdown.tuition.amount;
+        componentBreakdown.additionalItems.forEach((i) => { map[i.name] = i.amount; });
+        return map;
+    }, [componentBreakdown]);
 
     // =====================================================
     // SETTLEMENT TRACKER CALCULATIONS
@@ -289,6 +381,66 @@ function PaymentForm({ onClose }) {
         });
     };
 
+    // =====================================================
+    // MULTIPLE-PAYMENTS ENTRIES
+    // Each entry is one payment: component + amount + mode +
+    // date + reference. Same component can be added several
+    // times (e.g. tuition split over weeks).
+    // =====================================================
+    const remainingFor = (componentName) => {
+        const due = duesMap[componentName] || 0;
+        const used = multiEntries
+            .filter((e) => e.component === componentName)
+            .reduce((s, e) => s + Number(e.amount || 0), 0);
+        return Math.max(0, due - used);
+    };
+
+    const commitEntries = (next) => {
+        setMultiEntries(next);
+        const total = next.reduce((s, e) => s + Number(e.amount || 0), 0);
+        setFormData((f) => ({ ...f, amount: total > 0 ? String(total) : "" }));
+    };
+
+    const addEntry = (componentName) => {
+        if (!componentName) return;
+        const remaining = remainingFor(componentName);
+        if (remaining <= 0) return toast(`${componentName} is already fully covered by the entries below.`);
+        commitEntries([
+            ...multiEntries,
+            {
+                id: ++entrySeq.current,
+                component: componentName,
+                amount: String(remaining),
+                mode: "Cash",
+                date: formData.paymentDate,
+                ref: ""
+            }
+        ]);
+    };
+
+    const updateEntry = (id, field, val) => {
+        commitEntries(multiEntries.map((e) => {
+            if (e.id !== id) return e;
+            const next = { ...e, [field]: val };
+            if (field === "amount") {
+                let parsed = Number(val);
+                if (!Number.isFinite(parsed) || parsed < 0) parsed = 0;
+                const due = duesMap[e.component] || 0;
+                const others = multiEntries
+                    .filter((x) => x.id !== id && x.component === e.component)
+                    .reduce((s, x) => s + Number(x.amount || 0), 0);
+                const cap = Math.max(0, due - others);
+                if (parsed > cap) parsed = cap;
+                next.amount = String(parsed);
+            }
+            return next;
+        }));
+    };
+
+    const removeEntry = (id) => {
+        commitEntries(multiEntries.filter((e) => e.id !== id));
+    };
+
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
@@ -298,37 +450,120 @@ function PaymentForm({ onClose }) {
 
         if (!activeYear) return toast("There is no active academic year.");
         if (!formData.className || !formData.studentId) return toast("Please select a class and a student.");
-        if (!formData.amount || Number(formData.amount) <= 0) return toast("Please check and specify amounts to collect.");
+        if (!formData.amount || Number(formData.amount) <= 0) return toast("Please specify an amount.");
 
-        const lineItems = Object.entries(selectedComponents)
-            .filter(([_, amt]) => Number(amt) > 0)
-            .map(([componentName, amount]) => {
-                const details = componentDetails[componentName] || {};
-                return {
-                    componentName,
-                    amount: Number(amount),
-                    mode: details.mode || "Cash", // Default to Cash if not changed
-                    paidOn: details.paidOn || formData.paymentDate,
-                    reference: details.reference || "",
-                    remark: details.remark || ""
-                };
-            });
+        // Build the fee entries (multi-entry mode uses the entries list;
+        // normal + edit modes use the per-component checkboxes).
+        const lineItems = multiMode && !editPayment
+            ? multiEntries
+                .filter((en) => en.component && Number(en.amount) > 0)
+                .map((en) => ({
+                    componentName: en.component,
+                    amount: Number(en.amount),
+                    mode: en.mode || "Cash",
+                    paidOn: en.date || formData.paymentDate,
+                    reference: en.ref || "",
+                    remark: ""
+                }))
+            : Object.entries(selectedComponents)
+                .filter(([_, amt]) => Number(amt) > 0)
+                .map(([componentName, amount]) => {
+                    const details = componentDetails[componentName] || {};
+                    return {
+                        componentName,
+                        amount: Number(amount),
+                        mode: details.mode || "Cash", // Default to Cash if not changed
+                        paidOn: details.paidOn || formData.paymentDate,
+                        reference: details.reference || "",
+                        remark: details.remark || ""
+                    };
+                });
 
-        // Compute overall payment mode for the header (audit trail)
-        const uniqueModes = Array.from(new Set(lineItems.map(item => item.mode).filter(Boolean)));
-        const computedPaymentMode = uniqueModes.length > 0 ? uniqueModes.join(", ") : "Cash";
+        // EDIT MODE: send the full form — including the edited fee components
+        // — so the receipt rows and the total are corrected together.
+        if (editPayment) {
+            if (lineItems.length === 0) return toast("Please keep at least one fee component.");
+            try {
+                setLoading(true);
+                await api.post(`/payments/${editPayment.id}/edit`, {
+                    amount: Number(formData.amount),
+                    paymentMode: formData.paymentMode,
+                    paymentDate: formData.paymentDate,
+                    remarks: formData.remarks,
+                    lineItems
+                });
+                toast("Payment edited successfully.");
+                onClose();
+            } catch (error) {
+                toast(error.response?.data?.message || "Unable to edit payment.");
+            } finally {
+                setLoading(false);
+            }
+            return;
+        }
+
+        if (lineItems.length === 0) return toast("Please select at least one fee component to collect.");
+
+        // Multi-entry validation: every entry needs a date, and the entries
+        // for each component must not exceed what is still due.
+        if (multiMode) {
+            for (const li of lineItems) {
+                if (!li.paidOn) return toast(`Enter a date for the ${li.componentName} entry.`);
+            }
+            const sums = {};
+            lineItems.forEach((li) => { sums[li.componentName] = (sums[li.componentName] || 0) + li.amount; });
+            for (const [comp, sum] of Object.entries(sums)) {
+                const due = duesMap[comp] || 0;
+                if (sum > due + 0.01) return toast(`${comp}: entries total ${money(sum)} but only ${money(due)} is due.`);
+            }
+        }
+
+        // Group entries by date. Entries sharing a date become ONE payment
+        // (one receipt); each different date becomes its own payment with
+        // its own receipt.
+        const groups = {};
+        lineItems.forEach((li) => {
+            (groups[li.paidOn] = groups[li.paidOn] || []).push(li);
+        });
+        const dates = Object.keys(groups).sort();
 
         try {
             setLoading(true);
-            await api.post("/payments", {
-                studentId: formData.studentId,
-                paymentDate: formData.paymentDate,
-                amount: Number(formData.amount),
-                paymentMode: computedPaymentMode,
-                remarks: formData.remarks,
-                lineItems: lineItems.length > 0 ? lineItems : undefined 
-            });
-            onClose();
+            let recorded = 0;
+            let lastError = null;
+            const failedDates = [];
+            for (const date of dates) {
+                const items = groups[date];
+                const amount = items.reduce((s, li) => s + Number(li.amount || 0), 0);
+                const modes = Array.from(new Set(items.map((i) => i.mode).filter(Boolean)));
+                try {
+                    await api.post("/payments", {
+                        studentId: formData.studentId,
+                        paymentDate: date,
+                        amount: Number(amount.toFixed(2)),
+                        paymentMode: modes.length > 0 ? modes.join(", ") : "Cash",
+                        remarks: formData.remarks,
+                        lineItems: items
+                    });
+                    recorded++;
+                } catch (err) {
+                    lastError = err;
+                    failedDates.push(date);
+                }
+            }
+
+            if (recorded === 0) {
+                toast(lastError?.response?.data?.message || "Unable to save payment.");
+            } else if (failedDates.length > 0) {
+                toast(`${recorded} receipt(s) recorded. Could not record: ${failedDates.join(", ")} — please retry those.`);
+                fetchFeeSummary(formData.studentId);
+                setMultiEntries([]);
+                setSelectedComponents({});
+                setFormData((f) => ({ ...f, amount: "" }));
+            } else {
+                toast(`${recorded} receipt${recorded > 1 ? "s" : ""} recorded successfully.`);
+                onClose();
+            }
         } catch (error) {
             console.error("Payment error:", error);
             toast(error.response?.data?.message || "Unable to save payment.");
@@ -348,8 +583,8 @@ function PaymentForm({ onClose }) {
             <div ref={contentRef} className="payment-modal" role="dialog" aria-modal="true" style={{ maxWidth: "650px", maxHeight: "90vh", overflowY: "auto" }}>
                 <div className="modal-header" style={{ position: "sticky", top: 0, backgroundColor: "#fff", zIndex: 10 }}>
                     <div>
-                        <h2>Collect Fee</h2>
-                        <p>Record itemized partial or full fee collections</p>
+                        <h2>{editPayment ? "Edit Payment" : "Collect Fee"}</h2>
+                        <p>{editPayment ? `Correcting payment #${editPayment.id} (editable once)` : "Record itemized partial or full fee collections"}</p>
                     </div>
                     <button type="button" className="close-btn" onClick={onClose}>✕</button>
                 </div>
@@ -362,7 +597,7 @@ function PaymentForm({ onClose }) {
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                         <div className="form-group">
                             <label>Class *</label>
-                            <select value={formData.className} onChange={handleClassChange} required>
+                            <select value={formData.className} onChange={handleClassChange} required disabled={!!editPayment}>
                                 <option value="">Select Class</option>
                                 {classes.map((c) => (
                                     <option key={c.id} value={c.name}>{c.name.includes("LKG") || c.name.includes("UKG") ? c.name : `${c.name} Standard`}</option>
@@ -371,7 +606,7 @@ function PaymentForm({ onClose }) {
                         </div>
                         <div className="form-group">
                             <label>Student *</label>
-                            <select value={formData.studentId} onChange={handleStudentChange} required disabled={!formData.className}>
+                            <select value={formData.studentId} onChange={handleStudentChange} required disabled={!formData.className || !!editPayment}>
                                 <option value="">{!formData.className ? "Select Class First" : filteredStudents.length === 0 ? "No Students" : "Select Student"}</option>
                                 {filteredStudents.map((student) => (
                                     <option key={student.id} value={student.id}>{student.rollNumber ? `Roll ${student.rollNumber} - ` : ""}{student.studentName}</option>
@@ -379,6 +614,13 @@ function PaymentForm({ onClose }) {
                             </select>
                         </div>
                     </div>
+
+                    {selectedStudent && (
+                        <div style={{ marginTop: "10px", padding: "8px 12px", borderRadius: "6px", background: "#f8fafc", border: "1px solid #e2e8f0", fontSize: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                            <span style={{ fontWeight: "600", color: "#0F172A" }}>{selectedStudent.studentName}</span>
+                            <span style={{ color: "#475569" }}>Father: <strong style={{ color: "#0F172A" }}>{selectedStudent.fatherName || "—"}</strong></span>
+                        </div>
+                    )}
 
                     {formData.studentId && (
                         <div className="fee-summary" style={{ marginTop: "10px" }}>
@@ -442,9 +684,22 @@ function PaymentForm({ onClose }) {
 
                                     {/* CHECKBOXES WITH CUSTOM PARTIAL PAYMENT INPUTS */}
                                     <div style={{ marginTop: "16px", borderTop: "1px solid #e2e8f0", paddingTop: "12px" }}>
-                                        <span style={{ fontSize: "12px", fontWeight: "700", color: "#475569", textTransform: "uppercase" }}>Select Fees To Collect (Customizable)</span>
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                                            <span style={{ fontSize: "12px", fontWeight: "700", color: "#475569", textTransform: "uppercase" }}>{editPayment ? "Fee Components (edit amounts, dates & modes)" : "Select Fees To Collect"}</span>
+                                            {!editPayment && (
+                                                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: "700", color: "#475569", cursor: "pointer", whiteSpace: "nowrap" }}>
+                                                    <input type="checkbox" checked={multiMode} onChange={(e) => { setMultiMode(e.target.checked); if (!e.target.checked) setMultiEntries([]); }} />
+                                                    Multiple Payments
+                                                </label>
+                                            )}
+                                        </div>
+                                        {multiMode && (
+                                            <div style={{ marginTop: "6px", fontSize: "11px", color: "#64748b" }}>
+                                                Collect several payments in one go — each entry has its own date and mode. Entries on different dates are saved as separate payments, each with its own receipt.
+                                            </div>
+                                        )}
 
-                                        {componentBreakdown.previousDues > 0 && (
+                                        {!multiMode && componentBreakdown.previousDues > 0 && (
                                             <div style={{ marginTop: "8px", background: "#fef2f2", padding: "8px 12px", borderRadius: "6px", border: "1px solid #fecaca", display: "flex", flexDirection: "column", gap: "6px" }}>
                                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                                     <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
@@ -478,7 +733,49 @@ function PaymentForm({ onClose }) {
                                             </div>
                                         )}
 
-                                        {componentBreakdown.tuition && (
+                                        {multiMode && (
+                                            <div style={{ marginTop: "10px" }}>
+                                                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
+                                                    {Object.entries(duesMap).map(([name, due]) => {
+                                                        const remaining = remainingFor(name);
+                                                        return (
+                                                            <button key={name} type="button" onClick={() => addEntry(name)} disabled={remaining <= 0}
+                                                                style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid #e2e8f0", background: remaining > 0 ? "#f8fafc" : "#f1f5f9", cursor: remaining > 0 ? "pointer" : "not-allowed", fontSize: "11px", fontWeight: "600", color: remaining > 0 ? "#0F172A" : "#94a3b8" }}>
+                                                                ＋ {name} — {money(remaining)} due
+                                                            </button>
+                                                        );
+                                                    })}
+                                                    {Object.keys(duesMap).length === 0 && (
+                                                        <span style={{ fontSize: "11px", color: "#94a3b8" }}>Nothing pending to collect.</span>
+                                                    )}
+                                                </div>
+
+                                                {multiEntries.map((entry) => (
+                                                    <div key={entry.id} style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #e2e8f0", background: "#ffffff", marginBottom: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "6px" }}>
+                                                            <select value={entry.component} onChange={(e) => updateEntry(entry.id, "component", e.target.value)} style={{ fontSize: "12px", fontWeight: "600", padding: "2px 4px", flex: 1 }}>
+                                                                {Object.keys(duesMap).map((name) => <option key={name} value={name}>{name}</option>)}
+                                                            </select>
+                                                            <input type="number" value={entry.amount} onChange={(e) => updateEntry(entry.id, "amount", e.target.value)} style={{ width: "85px", padding: "2px 4px", fontSize: "12px", textAlign: "right" }} />
+                                                            <button type="button" onClick={() => removeEntry(entry.id)} style={{ border: "none", background: "transparent", color: "#DC2626", cursor: "pointer", fontSize: "14px", padding: "0 4px" }} title="Remove entry">✕</button>
+                                                        </div>
+                                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px", fontSize: "11px" }}>
+                                                            <select value={entry.mode} onChange={(e) => updateEntry(entry.id, "mode", e.target.value)} style={{ padding: "2px 4px" }}>
+                                                                <option>Cash</option><option>UPI</option><option>Card</option><option>Bank Transfer</option><option>Cheque</option>
+                                                            </select>
+                                                            <input type="date" value={entry.date} onChange={(e) => updateEntry(entry.id, "date", e.target.value)} style={{ padding: "2px 4px" }} />
+                                                            <input type="text" placeholder="Ref/Remarks" value={entry.ref} onChange={(e) => updateEntry(entry.id, "ref", e.target.value)} style={{ padding: "2px 4px" }} />
+                                                        </div>
+                                                    </div>
+                                                ))}
+
+                                                {multiEntries.length === 0 && (
+                                                    <div style={{ fontSize: "11px", color: "#94a3b8" }}>No entries yet — tap a fee above to add one. Tap the same fee again to add another payment for it.</div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {!multiMode && componentBreakdown.tuition && (
                                             <div style={{ marginTop: "10px", background: selectedComponents["Tuition Fee"] !== undefined ? "#f0fdf4" : "#f8fafc", padding: "8px 12px", borderRadius: "6px", border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: "6px" }}>
                                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                                     <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
@@ -503,7 +800,7 @@ function PaymentForm({ onClose }) {
                                             </div>
                                         )}
 
-                                        {componentBreakdown.additionalItems.length > 0 && (
+                                        {!multiMode && componentBreakdown.additionalItems.length > 0 && (
                                             <div style={{ marginTop: "12px" }}>
                                                 <div style={{ fontSize: "11px", fontWeight: "700", color: "#64748b", marginBottom: "6px" }}>ADDITIONAL COMPONENTS</div>
                                                 <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "8px" }}>
@@ -540,15 +837,9 @@ function PaymentForm({ onClose }) {
                         </div>
                     )}
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "14px" }}>
-                        <div className="form-group">
-                            <label>Receipt Date *</label>
-                            <input type="date" name="paymentDate" value={formData.paymentDate} onChange={handleChange} required />
-                        </div>
-                        <div className="form-group">
-                            <label>Total Amount (₹) *</label>
-                            <input type="number" name="amount" value={formData.amount} readOnly style={{ backgroundColor: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold" }} placeholder="Auto-calculated" required />
-                        </div>
+                    <div className="form-group" style={{ marginTop: "14px" }}>
+                        <label>Total Amount (₹) *</label>
+                        <input type="number" name="amount" value={formData.amount} readOnly style={{ backgroundColor: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold" }} placeholder="Auto-calculated" required />
                     </div>
 
                     <div className="form-group">
@@ -558,8 +849,8 @@ function PaymentForm({ onClose }) {
 
                     <div className="modal-actions" style={{ marginTop: "18px" }}>
                         <button type="button" className="cancel-btn" onClick={onClose}>Cancel</button>
-                        <button type="submit" className="save-btn" disabled={loading || !activeYear || loadingSummary || Number(formData.amount) <= 0}>
-                            {loading ? "Recording..." : "Collect Fee"}
+                        <button type="submit" className="save-btn" disabled={loading || !activeYear || (!editPayment && (loadingSummary || Number(formData.amount) <= 0))}>
+                            {loading ? (editPayment ? "Saving..." : "Recording...") : (editPayment ? "Save Changes" : "Collect Fee")}
                         </button>
                     </div>
                 </form>

@@ -116,6 +116,36 @@ router.get(
 
 
 // =====================================================
+router.get(
+    "/defaulters",
+    paymentController.getDefaulters
+);
+
+
+// REVERSE REQUESTS (admin / principal only)
+// Declared before "/:id" routes to avoid route collisions.
+// =====================================================
+
+router.get(
+    "/reverse-requests",
+    requireRole("admin", "principal"),
+    paymentController.getReverseRequests
+);
+
+router.post(
+    "/reverse-requests/:id/approve",
+    requireRole("admin", "principal"),
+    paymentController.approveReverseRequest
+);
+
+router.post(
+    "/reverse-requests/:id/reject",
+    requireRole("admin", "principal"),
+    paymentController.rejectReverseRequest
+);
+
+
+// =====================================================
 // SINGLE PAYMENT
 // ADMIN + STAFF
 // =====================================================
@@ -138,8 +168,19 @@ router.post(
 
 
 // =====================================================
-// REVERSE PAYMENT
+// EDIT PAYMENT (once-only)
 // ADMIN + STAFF
+// =====================================================
+
+router.post(
+    "/:id/edit",
+    paymentController.editPayment
+);
+
+
+// =====================================================
+// REVERSE PAYMENT
+// ADMIN + STAFF (staff submit a request for approval)
 // =====================================================
 
 router.post(

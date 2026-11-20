@@ -183,7 +183,12 @@ exports.addPayment = async (req, res) => {
 
 // =====================================================
 // REVERSE PAYMENT
+// Admin / principal reverse directly. Every other role
+// submits a REQUEST with a reason; an admin/principal
+// must approve it before the payment is reversed.
 // =====================================================
+const APPROVER_ROLES = ["admin", "principal"];
+
 exports.reversePayment = (req, res) => {
     const paymentId = Number(req.params.id);
     const reason = String(req.body?.reason || "").trim();
@@ -193,6 +198,25 @@ exports.reversePayment = (req, res) => {
         if (err || !payment) return res.status(404).json({ success: false, message: "Payment not found." });
         if (payment.status === "reversed") return res.status(409).json({ success: false, message: "Already reversed." });
 
+        // Non-approvers create a pending request instead of reversing.
+        if (!APPROVER_ROLES.includes(req.user.role)) {
+            db.run(
+                `INSERT INTO payment_reverse_requests (paymentId, requestedBy, requestedByName, reason, status, createdAt)
+                 VALUES (?, ?, ?, ?, 'pending', ?)`,
+                [paymentId, req.user.id, req.user.name || "", reason, new Date().toISOString()],
+                (insErr) => {
+                    if (insErr) return res.status(500).json({ success: false, message: "Unable to submit reverse request." });
+                    logAudit({
+                        userId: req.user.id, action: "PAYMENT_REVERSE_REQUESTED", entityType: "payment", entityId: paymentId,
+                        details: { reason }
+                    }).catch((auditErr) => console.error("Audit log (reverse request) failed:", auditErr));
+                    res.json({ success: true, requested: true, message: "Reverse request submitted for admin approval." });
+                }
+            );
+            return;
+        }
+
+        // Admin / principal: reverse immediately.
         const reversedAt = new Date().toISOString();
         db.run(`UPDATE payments SET status = 'reversed', voidedAt = ?, voidedBy = ?, voidReason = ? WHERE id = ? AND (status IS NULL OR status != 'reversed')`,
             [reversedAt, req.user.id, reason, paymentId], (updateErr) => {
@@ -203,6 +227,165 @@ exports.reversePayment = (req, res) => {
             })
                 .catch((auditErr) => console.error("Audit log (PAYMENT_REVERSED) failed:", auditErr))
                 .finally(() => res.json({ success: true, message: "Payment reversed successfully." }));
+        });
+    });
+};
+
+// Pending reverse requests (admin / principal only).
+exports.getReverseRequests = (req, res) => {
+    db.all(
+        `SELECT r.*, p.amount, p.paymentDate, p.paymentMode,
+                s.studentName, s.rollNumber, s.className
+         FROM payment_reverse_requests r
+         JOIN payments p ON p.id = r.paymentId
+         LEFT JOIN students s ON p.studentId = s.id
+         WHERE r.status = 'pending'
+         ORDER BY r.createdAt DESC`,
+        [],
+        (err, rows) => {
+            if (err) return res.status(500).json({ success: false, message: "Unable to load reverse requests." });
+            res.json(rows);
+        }
+    );
+};
+
+// Approve a reverse request: reverses the payment automatically.
+exports.approveReverseRequest = (req, res) => {
+    const requestId = Number(req.params.id);
+    if (!requestId) return res.status(400).json({ success: false, message: "Invalid request ID." });
+
+    db.get(`SELECT * FROM payment_reverse_requests WHERE id = ?`, [requestId], (err, request) => {
+        if (err) return res.status(500).json({ success: false, message: "Database error." });
+        if (!request) return res.status(404).json({ success: false, message: "Request not found." });
+        if (request.status !== "pending") return res.status(409).json({ success: false, message: "This request was already reviewed." });
+
+        db.get(`SELECT * FROM payments WHERE id = ?`, [request.paymentId], (pErr, payment) => {
+            if (pErr || !payment) return res.status(404).json({ success: false, message: "Payment not found." });
+
+            const reversedAt = new Date().toISOString();
+            db.run(`UPDATE payments SET status = 'reversed', voidedAt = ?, voidedBy = ?, voidReason = ? WHERE id = ? AND (status IS NULL OR status != 'reversed')`,
+                [reversedAt, req.user.id, request.reason, payment.id], (revErr) => {
+                    if (revErr) return res.status(500).json({ success: false, message: "Unable to reverse payment." });
+                    db.run(`UPDATE payment_reverse_requests SET status = 'approved', reviewedBy = ?, reviewedAt = ? WHERE id = ?`,
+                        [req.user.id, reversedAt, requestId], (updErr) => {
+                            if (updErr) return res.status(500).json({ success: false, message: "Unable to update request." });
+                            logAudit({
+                                userId: req.user.id, action: "PAYMENT_REVERSE_APPROVED", entityType: "payment", entityId: payment.id,
+                                details: { reason: request.reason, requestedBy: request.requestedBy, reversedAt }
+                            }).catch((auditErr) => console.error("Audit log (reverse approved) failed:", auditErr));
+                            res.json({ success: true, message: "Request approved — payment reversed successfully." });
+                        }
+                    );
+                }
+            );
+        });
+    });
+};
+
+// Reject a reverse request without touching the payment.
+exports.rejectReverseRequest = (req, res) => {
+    const requestId = Number(req.params.id);
+    if (!requestId) return res.status(400).json({ success: false, message: "Invalid request ID." });
+
+    db.get(`SELECT * FROM payment_reverse_requests WHERE id = ?`, [requestId], (err, request) => {
+        if (err) return res.status(500).json({ success: false, message: "Database error." });
+        if (!request) return res.status(404).json({ success: false, message: "Request not found." });
+        if (request.status !== "pending") return res.status(409).json({ success: false, message: "This request was already reviewed." });
+
+        db.run(`UPDATE payment_reverse_requests SET status = 'rejected', reviewedBy = ?, reviewedAt = ? WHERE id = ?`,
+            [req.user.id, new Date().toISOString(), requestId], (updErr) => {
+                if (updErr) return res.status(500).json({ success: false, message: "Unable to reject request." });
+                res.json({ success: true, message: "Reverse request rejected." });
+            }
+        );
+    });
+};
+
+// =====================================================
+// EDIT PAYMENT (once‑only)
+// A payment may be edited a single time to correct mistakes
+// (e.g. wrong amount or mode). The editCount field records how
+// many edits have been applied; the UI disables the button after
+// the first successful edit.
+// =====================================================
+exports.editPayment = (req, res) => {
+    const paymentId = Number(req.params.id);
+    const { amount, paymentMode, paymentDate, remarks, lineItems } = req.body || {};
+
+    if (!paymentId) return res.status(400).json({ success: false, message: "Invalid payment ID." });
+
+    db.get(`SELECT * FROM payments WHERE id = ?`, [paymentId], (err, payment) => {
+        if (err) return res.status(500).json({ success: false, message: "Database error." });
+        if (!payment) return res.status(404).json({ success: false, message: "Payment not found." });
+        if (payment.editCount >= 1) return res.status(409).json({ success: false, message: "This payment has already been edited once." });
+        if (payment.status === "reversed") return res.status(409).json({ success: false, message: "A reversed payment cannot be edited." });
+
+        // If full line items were provided, they are the source of truth:
+        // the receipt's component rows AND the total must agree.
+        const hasLineItems = Array.isArray(lineItems) && lineItems.length > 0;
+        const newAmount = hasLineItems
+            ? lineItems.reduce((s, li) => s + Number(li.amount || 0), 0)
+            : Number(amount);
+
+        if (!Number.isFinite(newAmount) || newAmount <= 0) {
+            return res.status(400).json({ success: false, message: "Payment amount must be greater than zero." });
+        }
+        if (hasLineItems && newAmount <= 0) {
+            return res.status(400).json({ success: false, message: "Fee components must add up to a positive amount." });
+        }
+
+        const updateFields = ["amount = ?", "editCount = ?"];
+        const updateVals = [newAmount, payment.editCount + 1];
+        if (typeof paymentMode !== "undefined") { updateFields.push("paymentMode = ?"); updateVals.push(paymentMode); }
+        if (typeof paymentDate !== "undefined") { updateFields.push("paymentDate = ?"); updateVals.push(paymentDate); }
+        if (typeof remarks !== "undefined") { updateFields.push("remarks = ?"); updateVals.push(remarks || ""); }
+        updateVals.push(paymentId);
+
+        db.run("BEGIN", (bErr) => {
+            if (bErr) return res.status(500).json({ success: false, message: "Unable to start edit." });
+            db.run(
+                `UPDATE payments SET ${updateFields.join(", ")} WHERE id = ?`,
+                updateVals,
+                function (updateErr) {
+                    if (updateErr) { db.run("ROLLBACK", () => {}); return res.status(500).json({ success: false, message: "Unable to edit payment." }); }
+
+                    if (!hasLineItems) {
+                        db.run("COMMIT", () => {
+                            res.json({ success: true, message: "Payment edited successfully.", newEditCount: payment.editCount + 1 });
+                        });
+                        return;
+                    }
+
+                    db.run(`DELETE FROM payment_line_items WHERE paymentId = ?`, [paymentId], (delErr) => {
+                        if (delErr) { db.run("ROLLBACK", () => {}); return res.status(500).json({ success: false, message: "Unable to update fee components." }); }
+
+                        let i = 0;
+                        const insertNext = () => {
+                            if (i >= lineItems.length) {
+                                db.run("COMMIT", () => {
+                                    logAudit({
+                                        userId: req.user.id, action: "PAYMENT_EDITED", entityType: "payment", entityId: paymentId,
+                                        details: { oldAmount: payment.amount, newAmount, componentCount: lineItems.length }
+                                    }).catch((auditErr) => console.error("Audit log (PAYMENT_EDITED) failed:", auditErr));
+                                    res.json({ success: true, message: "Payment edited successfully.", newEditCount: payment.editCount + 1 });
+                                });
+                                return;
+                            }
+                            const li = lineItems[i++];
+                            db.run(
+                                `INSERT INTO payment_line_items (paymentId, componentName, amount, mode, paidOn, reference, remark) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                                [paymentId, String(li.componentName || "Fee"), Number(li.amount || 0), li.mode || paymentMode || payment.paymentMode,
+                                 li.paidOn || paymentDate || payment.paymentDate, li.reference || "", li.remark || ""],
+                                (insErr) => {
+                                    if (insErr) { db.run("ROLLBACK", () => {}); return res.status(500).json({ success: false, message: "Unable to update fee components." }); }
+                                    insertNext();
+                                }
+                            );
+                        };
+                        insertNext();
+                    });
+                }
+            );
         });
     });
 };
@@ -374,6 +557,79 @@ exports.monthlyCollection = async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({ success: false, message: "Unable to load monthly collection." });
+    }
+};
+
+// =============================================================
+// FEE DEFAULTERS — read-only, admin/staff with payments access.
+// Students with a positive balance for the active academic year,
+// with an aging bucket. Mirrors reportSummary's ledger math.
+// =============================================================
+exports.getDefaulters = async (req, res) => {
+    try {
+        const year = await new Promise((resolve, reject) => {
+            db.get(`SELECT * FROM academic_years WHERE status = 'active' ORDER BY id DESC LIMIT 1`, [], (e, r) => e ? reject(e) : resolve(r));
+        });
+        if (!year) return res.status(404).json({ success: false, message: "No active academic year." });
+
+        const students = await allQ(`
+            SELECT s.id AS studentId, s.studentName, s.rollNumber, s.className,
+                   s.admissionNumber, s.contact1, s.previousDues, s.concessionAmount,
+                   sfa.id AS feeAccountId
+            FROM student_enrollments se
+            INNER JOIN students s ON s.id = se.studentId
+            LEFT JOIN student_fee_accounts sfa ON sfa.enrollmentId = se.id
+            WHERE se.academicYearId = ? AND se.status = 'active'
+              AND (s.status IS NULL OR s.status = 'active')
+            ORDER BY s.className ASC, CAST(NULLIF(s.rollNumber,'') AS INTEGER) ASC, s.rollNumber ASC
+        `, [year.id]);
+
+        const feeItems = await allQ(`
+            SELECT sfi.feeAccountId, sfi.amount, sfi.itemType, fc.componentName
+            FROM student_fee_items sfi
+            INNER JOIN fee_components fc ON fc.id = sfi.componentId
+        `);
+        const demandBy = {};
+        feeItems.forEach((r) => {
+            const n = String(r.componentName || "").toLowerCase();
+            if (r.itemType === "carry_forward" || n.includes("previous")) return;
+            demandBy[r.feeAccountId] = (demandBy[r.feeAccountId] || 0) + Number(r.amount || 0);
+        });
+
+        const paidRows = await allQ(`
+            SELECT feeAccountId, COALESCE(SUM(amount),0) AS paid
+            FROM payments
+            WHERE (status IS NULL OR status != 'reversed')
+            GROUP BY feeAccountId
+        `);
+        const paidBy = {};
+        paidRows.forEach((r) => { paidBy[r.feeAccountId] = Number(r.paid || 0); });
+
+        const defaulters = students.map((s) => {
+            const standard = Number(demandBy[s.feeAccountId] || 0);
+            const net = Math.max(0, standard - Number(s.concessionAmount || 0));
+            const demand = Number(s.previousDues || 0) + net;
+            const paid = Number(paidBy[s.feeAccountId] || 0);
+            const balance = Math.max(0, demand - paid);
+            return {
+                ...s,
+                totalDemand: demand,
+                totalPaid: paid,
+                balance,
+                bucket: balance === 0 ? "clear" : paid === 0 ? "unpaid" : "partial"
+            };
+        }).filter((s) => s.balance > 0 && s.totalDemand > 0);
+
+        const summary = {
+            count: defaulters.length,
+            totalOutstanding: defaulters.reduce((t, s) => t + s.balance, 0),
+            unpaid: defaulters.filter((s) => s.bucket === "unpaid").length,
+            partial: defaulters.filter((s) => s.bucket === "partial").length
+        };
+        res.json({ success: true, academicYear: year.name, summary, defaulters });
+    } catch (error) {
+        console.error("Defaulters Error:", error);
+        res.status(500).json({ success: false, message: "Unable to load defaulters." });
     }
 };
 

@@ -8,6 +8,13 @@ const { requireRole, requireAdmin, requirePage } = require("../middleware/authMi
 // =====================================================
 router.use(requirePage("fee_concessions"));
 
+// READ-ONLY TC concession records (before "/:studentId" routes).
+router.get(
+    "/tc-records",
+    requireRole("admin", "accountant", "principal", "manager"),
+    concessionController.getTCConcessions
+);
+
 // =====================================================
 // LIST
 // ADMIN + STAFF (accountant, principal, manager)

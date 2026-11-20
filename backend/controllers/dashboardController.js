@@ -59,7 +59,8 @@ exports.summary = async (req, res) => {
             concessionRow,
             paymentRow,
             expenseRow,
-            incomeRow
+            incomeRow,
+            tcCollectedRow
         ] = await Promise.all([
             one(
                 `SELECT COUNT(*) AS total
@@ -107,6 +108,13 @@ exports.summary = async (req, res) => {
                         COALESCE(SUM(amount), 0) AS totalIncomeAmount
                  FROM incomes
                  WHERE status IS NULL OR status != 'reversed'`
+            ),
+            // Cash actually collected at the TC counter (active year only).
+            one(
+                `SELECT COALESCE(SUM(amountCollected), 0) AS total
+                 FROM transfer_certificates
+                 WHERE academicYear = ?`,
+                [year.name]
             )
         ]);
 
@@ -117,6 +125,7 @@ exports.summary = async (req, res) => {
         const pendingFees = Math.max(0, netFee - totalCollection);
         const totalExpenseAmount = Number(expenseRow.totalExpenseAmount || 0);
         const totalIncomeAmount = Number(incomeRow.totalIncomeAmount || 0);
+        const tcCollected = Number(tcCollectedRow.total || 0);
 
         res.json({
             success: true,
@@ -129,6 +138,7 @@ exports.summary = async (req, res) => {
             totalFee: restricted ? 0 : totalFee,
             totalConcessions: restricted ? 0 : totalConcessions,
             netFee: restricted ? 0 : netFee,
+            tcCollected: restricted ? 0 : tcCollected,
             totalCollection: restricted ? 0 : totalCollection,
             pendingFees: restricted ? 0 : pendingFees,
             totalExpenses: restricted ? 0 : Number(expenseRow.totalExpenses || 0),

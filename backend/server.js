@@ -103,6 +103,11 @@ app.use(
 );
 
 app.use(
+    "/documents",
+    require("./routes/documents")
+);
+
+app.use(
     "/payments",
     require("./routes/payments")
 );

@@ -102,6 +102,90 @@ async function setEnrollmentStatus(studentId, status) {
 }
 
 // =====================================================
+// ROLL-NUMBER SHIFT (ARCHIVE)
+// When a student is archived, every ACTIVE student in the
+// same class with a higher numeric roll number moves up by
+// one (roll 11 -> 10, 12 -> 11, ...) so the roster stays
+// compact. The archived student keeps their old roll number
+// in the archive record. Blank / non-numeric rolls are left
+// untouched.
+// =====================================================
+async function shiftRollNumbersAfterArchive(className, rollNumber) {
+    const roll = String(rollNumber || "").trim();
+    if (!className || roll === "" || /[^0-9]/.test(roll)) return 0;
+    const rollNum = Number(roll);
+    let shifted = 0;
+
+    const r1 = await runQuery(
+        `UPDATE students
+         SET rollNumber = CAST(CAST(rollNumber AS INTEGER) - 1 AS TEXT)
+         WHERE className = ?
+           AND (status IS NULL OR status = 'active')
+           AND TRIM(rollNumber) <> ''
+           AND rollNumber NOT GLOB '*[^0-9]*'
+           AND CAST(rollNumber AS INTEGER) > ?`,
+        [className, rollNum]
+    );
+    shifted += r1.changes || 0;
+
+    // Keep the enrollment mirror (dashboard / fee chain) in sync.
+    await runQuery(
+        `UPDATE student_enrollments
+         SET rollNumber = CAST(CAST(rollNumber AS INTEGER) - 1 AS TEXT)
+         WHERE className = ?
+           AND status = 'active'
+           AND TRIM(rollNumber) <> ''
+           AND rollNumber NOT GLOB '*[^0-9]*'
+           AND CAST(rollNumber AS INTEGER) > ?`,
+        [className, rollNum]
+    );
+    return shifted;
+}
+
+// =====================================================
+// ROLL-NUMBER SHIFT (RESTORE — inverse of the archive shift)
+// When a student is restored, they take back their recorded
+// roll number. Everyone active in the class at or above that
+// roll moves up by one (making room), so the student who had
+// shifted into that slot goes back to the roll they had
+// before. If the slot is already free, nothing shifts. Blank
+// / non-numeric rolls are left untouched.
+// =====================================================
+async function shiftRollNumbersForRestore(className, rollNumber, studentId) {
+    const roll = String(rollNumber || "").trim();
+    if (!className || roll === "" || /[^0-9]/.test(roll)) return 0;
+    const rollNum = Number(roll);
+    let shifted = 0;
+
+    const r1 = await runQuery(
+        `UPDATE students
+         SET rollNumber = CAST(CAST(rollNumber AS INTEGER) + 1 AS TEXT)
+         WHERE className = ?
+           AND id != ?
+           AND (status IS NULL OR status = 'active')
+           AND TRIM(rollNumber) <> ''
+           AND rollNumber NOT GLOB '*[^0-9]*'
+           AND CAST(rollNumber AS INTEGER) >= ?`,
+        [className, studentId, rollNum]
+    );
+    shifted += r1.changes || 0;
+
+    // Keep the enrollment mirror (dashboard / fee chain) in sync.
+    await runQuery(
+        `UPDATE student_enrollments
+         SET rollNumber = CAST(CAST(rollNumber AS INTEGER) + 1 AS TEXT)
+         WHERE className = ?
+           AND studentId != ?
+           AND status = 'active'
+           AND TRIM(rollNumber) <> ''
+           AND rollNumber NOT GLOB '*[^0-9]*'
+           AND CAST(rollNumber AS INTEGER) >= ?`,
+        [className, studentId, rollNum]
+    );
+    return shifted;
+}
+
+// =====================================================
 // STUDENT COUNTS
 // Cheap two-number aggregate powering the Students-page
 // tab badges (Active / Archived totals). Reloaded with the
@@ -477,9 +561,12 @@ exports.archiveStudent = (req, res) => {
 
                     (async () => {
                         // Deactivate the student's enrollments so they drop out of
-                        // the dashboard head-count and fee totals.
+                        // the dashboard head-count and fee totals, then close the
+                        // roll-number gap in the class (11 -> 10, 12 -> 11, ...).
+                        let rollsShifted = 0;
                         try {
                             await setEnrollmentStatus(studentId, "archived");
+                            rollsShifted = await shiftRollNumbersAfterArchive(student.className, student.rollNumber);
                         } catch (enrErr) {
                             console.error("Enrollment sync (archive) failed:", enrErr);
                         }
@@ -489,12 +576,17 @@ exports.archiveStudent = (req, res) => {
                                 action: "STUDENT_ARCHIVED",
                                 entityType: "student",
                                 entityId: studentId,
-                                details: { studentName: student.studentName, rollNumber: student.rollNumber, className: student.className, reason, archivedAt }
+                                details: { studentName: student.studentName, rollNumber: student.rollNumber, className: student.className, reason, archivedAt, rollsShifted }
                             });
                         } catch (auditErr) {
                             console.error("Audit log (STUDENT_ARCHIVED) failed:", auditErr);
                         }
-                        res.json({ success: true, message: "Student archived successfully." });
+                        res.json({
+                            success: true,
+                            message: rollsShifted > 0
+                                ? `Student archived successfully. ${rollsShifted} roll number(s) shifted up to close the gap.`
+                                : "Student archived successfully."
+                        });
                     })();
                 }
             );
@@ -518,44 +610,71 @@ exports.restoreStudent = (req, res) => {
             if (!student) return res.status(404).json({ success: false, message: "Student not found." });
             if (student.status !== "archived") return res.status(409).json({ success: false, message: "Student is already active." });
 
-            db.get(
-                `SELECT id FROM students WHERE rollNumber = ? AND className = ? AND id != ? AND (status IS NULL OR status = 'active')`,
+            // A student with an issued transfer certificate is final — cannot be restored.
+            db.get(`SELECT id FROM transfer_certificates WHERE studentId = ? LIMIT 1`, [studentId], (tcErr, tc) => {
+                if (tcErr) return res.status(500).json({ success: false, message: "Unable to check transfer certificate." });
+                if (tc) return res.status(409).json({ success: false, message: "Cannot restore — a transfer certificate has already been issued for this student." });
+
+                db.get(
+                    `SELECT id FROM students WHERE rollNumber = ? AND className = ? AND id != ? AND (status IS NULL OR status = 'active')`,
                 [student.rollNumber, student.className, studentId],
                 (conflictErr, conflict) => {
                     if (conflictErr) return res.status(500).json({ success: false, message: "Unable to check roll number." });
-                    if (conflict) return res.status(409).json({ success: false, message: "The student's roll number is already assigned to another active student in this class." });
 
-                    db.run(
-                        `UPDATE students SET status = 'active', archivedAt = NULL, archivedBy = NULL, archiveReason = NULL WHERE id = ?`,
-                        [studentId],
-                        function (updateErr) {
-                            if (updateErr) return res.status(500).json({ success: false, message: "Unable to restore student." });
-
-                            (async () => {
-                                // Reactivate (or recreate) the enrollment so the
-                                // student re-enters the dashboard totals.
-                                try {
-                                    await ensureEnrollment(studentId, student.className, student.rollNumber);
-                                } catch (enrErr) {
-                                    console.error("Enrollment sync (restore) failed:", enrErr);
-                                }
-                                try {
-                                    await logAudit({
-                                        userId: req.user.id,
-                                        action: "STUDENT_RESTORED",
-                                        entityType: "student",
-                                        entityId: studentId,
-                                        details: { studentName: student.studentName, rollNumber: student.rollNumber, className: student.className }
-                                    });
-                                } catch (auditErr) {
-                                    console.error("Audit log (STUDENT_RESTORED) failed:", auditErr);
-                                }
-                                res.json({ success: true, message: "Student restored successfully." });
-                            })();
+                    // The student is restored to their ORIGINAL roll number. If
+                    // that slot is now taken (it moved up when they were
+                    // archived), shift the occupants back to the rolls they had
+                    // before, reopening the slot. If the slot is already free,
+                    // nothing shifts.
+                    (async () => {
+                        let rollsShifted = 0;
+                        if (conflict) {
+                            try {
+                                rollsShifted = await shiftRollNumbersForRestore(student.className, student.rollNumber, studentId);
+                            } catch (shiftErr) {
+                                console.error("Roll shift (restore) failed:", shiftErr);
+                                return res.status(500).json({ success: false, message: "Unable to restore student: could not re-open their roll number slot." });
+                            }
                         }
-                    );
+
+                        db.run(
+                            `UPDATE students SET status = 'active', archivedAt = NULL, archivedBy = NULL, archiveReason = NULL WHERE id = ?`,
+                            [studentId],
+                            function (updateErr) {
+                                if (updateErr) return res.status(500).json({ success: false, message: "Unable to restore student." });
+
+                                (async () => {
+                                    // Reactivate (or recreate) the enrollment so the
+                                    // student re-enters the dashboard totals.
+                                    try {
+                                        await ensureEnrollment(studentId, student.className, student.rollNumber);
+                                    } catch (enrErr) {
+                                        console.error("Enrollment sync (restore) failed:", enrErr);
+                                    }
+                                    try {
+                                        await logAudit({
+                                            userId: req.user.id,
+                                            action: "STUDENT_RESTORED",
+                                            entityType: "student",
+                                            entityId: studentId,
+                                            details: { studentName: student.studentName, rollNumber: student.rollNumber, className: student.className, rollsShifted }
+                                        });
+                                    } catch (auditErr) {
+                                        console.error("Audit log (STUDENT_RESTORED) failed:", auditErr);
+                                    }
+                                    res.json({
+                                        success: true,
+                                        message: rollsShifted > 0
+                                            ? `Student restored successfully to roll ${student.rollNumber}. ${rollsShifted} roll number(s) moved back to the rolls they had.`
+                                            : "Student restored successfully."
+                                    });
+                                })();
+                            }
+                        );
+                    })();
                 }
             );
+            });
         }
     );
 };

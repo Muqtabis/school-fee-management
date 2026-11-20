@@ -1,5 +1,5 @@
 import { toast, confirmDialog } from "../services/notify";
-import { useEffect, useMemo, useState, useRef, Fragment } from "react";
+import { useEffect, useMemo, useState, useRef, Fragment, useCallback } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import StudentForm from "../components/StudentForm";
@@ -7,6 +7,7 @@ import StudentSearch from "../components/StudentSearch";
 import OverlayDialog from "../components/OverlayDialog";
 import PromptDialog from "../components/PromptDialog";
 import api from "../services/api";
+import { printReceipt } from "../utils/receipt";
 
 const formatClass = (c) => {
     if (c.name) return c.name;
@@ -23,14 +24,71 @@ function StudentsPage() {
     const [classes, setClasses] = useState([]);
     
     const [selectedClass, setSelectedClass] = useState("All");
-    const [selectedCategory, setSelectedCategory] = useState("All");
-    const [searchKeyword, setSearchKeyword] = useState("");
-    const [sortBy, setSortBy] = useState("roll");
+    const [selectedCategory, setSelectedCategory] = useState(() => {
+        try { return localStorage.getItem("students-filter-category") || "All"; } catch (e) { return "All"; }
+    });
+    const [searchKeyword, setSearchKeyword] = useState(() => {
+        try { return localStorage.getItem("students-filter-search") || ""; } catch (e) { return ""; }
+    });
+    const [sortBy, setSortBy] = useState(() => {
+        try { return localStorage.getItem("students-filter-sort") || "roll"; } catch (e) { return "roll"; }
+    });
+    useEffect(() => {
+        try {
+            localStorage.setItem("students-filter-category", selectedCategory);
+            localStorage.setItem("students-filter-search", searchKeyword);
+            localStorage.setItem("students-filter-sort", sortBy);
+        } catch (e) { /* optional */ }
+    }, [selectedCategory, searchKeyword, sortBy]);
     // Unified detail view: { studentId, tab } — tab is "overview" | "fees" | "results".
     // Only the id is kept; the student object is derived from the live list so the
     // modal always shows fresh data after any refresh.
     const [detailState, setDetailState] = useState(null);
     const [showArchived, setShowArchived] = useState(false);
+
+    // ---- UI polish: bulk select, column visibility, saved filters, inline edit ----
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [hiddenCols, setHiddenCols] = useState(() => {
+        try { return JSON.parse(localStorage.getItem("students-hidden-cols") || "[]"); } catch (e) { return []; }
+    });
+    const [showCols, setShowCols] = useState(false);
+    const [inlineEdit, setInlineEdit] = useState(null); // { id, field, value }
+    const COLUMNS = ["Adm No.", "SATS No.", "Roll No.", "Student Name", "Class", "Category", "Contact", "Status"];
+    const toggleCol = (col) => {
+        const next = hiddenCols.includes(col) ? hiddenCols.filter((c) => c !== col) : [...hiddenCols, col];
+        setHiddenCols(next);
+        try { localStorage.setItem("students-hidden-cols", JSON.stringify(next)); } catch (e) { /* optional */ }
+    };
+    const saveInline = async () => {
+        if (!inlineEdit) return;
+        try {
+            await api.put(`/students/${inlineEdit.id}`, { [inlineEdit.field]: inlineEdit.value });
+            toast("Student updated.");
+            setInlineEdit(null);
+            fetchStudents();
+        } catch (e) { toast(e.response?.data?.message || "Unable to update."); }
+    };
+    const bulkArchive = async () => {
+        if (!selectedIds.length) return;
+        if (!(await confirmDialog({ message: `Archive ${selectedIds.length} student(s)?`, confirmLabel: "Archive" }))) return;
+        try {
+            await Promise.all(selectedIds.map((id) => api.post(`/students/${id}/archive`, { reason: "Bulk archive" })));
+            toast(`${selectedIds.length} student(s) archived.`);
+            setSelectedIds([]);
+            fetchStudents();
+            fetchCounts();
+        } catch (e) { toast(e.response?.data?.message || "Bulk archive failed."); }
+    };
+    const bulkExport = () => {
+        const rows = students.filter((s) => selectedIds.includes(s.id));
+        const cols = ["admissionNumber", "studentName", "className", "rollNumber", "contact1"];
+        const csv = [cols.join(","), ...rows.map((r) => cols.map((c) => `"${String(r[c] ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
+        const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+        const a = document.createElement("a");
+        a.href = url; a.download = "students.csv"; a.click();
+        URL.revokeObjectURL(url);
+        toast("Exported selected students.");
+    };
 
     // Tab badge totals (Active / Archived) — refreshed with the roster.
     const [counts, setCounts] = useState({ active: 0, archived: 0 });
@@ -309,26 +367,9 @@ function StudentsPage() {
                     </div>
 
                     <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
-                        <button
-                            type="button"
-                            className={`tab-toggle ${!showArchived ? "primary-btn" : "clear-btn"}`}
-                            onClick={() => handleStatusToggle(false)}
-                        >
+                        <button type="button" className="tab-toggle primary-btn" disabled>
                             Active Students
-                            <span className={`exam-badge ${!showArchived ? "on-primary" : ""}`} title="Total active students">
-                                {counts.active}
-                            </span>
-                        </button>
-
-                        <button
-                            type="button"
-                            className={`tab-toggle ${showArchived ? "primary-btn" : "clear-btn"}`}
-                            onClick={() => handleStatusToggle(true)}
-                        >
-                            Archived Students
-                            <span className={`exam-badge ${showArchived ? "on-primary" : ""}`} title="Total archived students">
-                                {counts.archived}
-                            </span>
+                            <span className="exam-badge on-primary" title="Total active students">{counts.active}</span>
                         </button>
                     </div>
 
@@ -363,54 +404,97 @@ function StudentsPage() {
                         </select>
                         {/* Classes are now created and managed on the dedicated
                             Class Management page. */}
+                        <button type="button" className="clear-btn" onClick={() => setShowCols((v) => !v)}>Columns ▾</button>
                     </div>
+
+                    {showCols && (
+                        <div className="settings-card" style={{ padding: 12, marginBottom: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            {COLUMNS.map((c) => (
+                                <label key={c} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, minHeight: 36 }}>
+                                    <input type="checkbox" checked={!hiddenCols.includes(c)} onChange={() => toggleCol(c)} /> {c}
+                                </label>
+                            ))}
+                        </div>
+                    )}
+
+                    {selectedIds.length > 0 && (
+                        <div className="sticky-actions" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                            <strong>{selectedIds.length} selected</strong>
+                            <div style={{ display: "flex", gap: 8 }}>
+                                <button type="button" className="save-btn" onClick={bulkExport}>Export CSV</button>
+                                <button type="button" className="delete-btn" onClick={bulkArchive}>Archive</button>
+                                <button type="button" className="cancel-btn" onClick={() => setSelectedIds([])}>Clear</button>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="table-container">
                         <table className="stack-sm p-even-table">
                             <thead>
                                 <tr>
-                                    <th>Adm No.</th>
-                                    <th>SATS No.</th>
-                                    <th>Roll No.</th>
-                                    <th>Student Name</th>
-                                    <th>Class</th>
-                                    <th>Category</th>
-                                    <th>Contact</th>
-                                    <th>Status</th>
+                                    <th><input type="checkbox" aria-label="Select all" checked={filteredStudents.length > 0 && filteredStudents.every((s) => selectedIds.includes(s.id))} onChange={(e) => setSelectedIds(e.target.checked ? filteredStudents.map((s) => s.id) : [])} /></th>
+                                    <th style={{ display: hiddenCols.includes("Adm No.") ? "none" : "" }}>Adm No.</th>
+                                    <th style={{ display: hiddenCols.includes("SATS No.") ? "none" : "" }}>SATS No.</th>
+                                    <th style={{ display: hiddenCols.includes("Roll No.") ? "none" : "" }}>Roll No.</th>
+                                    <th style={{ display: hiddenCols.includes("Student Name") ? "none" : "" }}>Student Name</th>
+                                    <th style={{ display: hiddenCols.includes("Class") ? "none" : "" }}>Class</th>
+                                    <th style={{ display: hiddenCols.includes("Category") ? "none" : "" }}>Category</th>
+                                    <th style={{ display: hiddenCols.includes("Contact") ? "none" : "" }}>Contact</th>
+                                    <th style={{ display: hiddenCols.includes("Status") ? "none" : "" }}>Status</th>
                                     <th style={{ textAlign: "right", paddingRight: "20px" }}>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {filteredStudents.length === 0 ? (
                                     <tr>
-                                        <td colSpan="9" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
-                                            {showArchived ? "No archived students found." : "No active students found."}
+                                        <td colSpan="10">
+                                            <div className="empty-state">
+                                                <span className="empty-icon">👨‍🎓</span>
+                                                <strong>{showArchived ? "No archived students" : "No students yet"}</strong>
+                                                <span>{showArchived ? "Archived students will appear here." : "Add your first student to get started."}</span>
+                                                {!showArchived && (
+                                                    <button type="button" className="primary-btn" onClick={handleAddStudent}>+ Add Student</button>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 ) : (
                                     filteredStudents.map((student) => (
                                         <tr key={student.id} style={student.status === "archived" ? { opacity: 0.65 } : {}}>
-                                            <td data-label="Adm No." style={{ color: "#64748B", fontSize: "13px" }}>{student.admissionNumber || "-"}</td>
-                                            <td data-label="SATS No." style={{ color: "#64748B", fontSize: "13px" }}>{student.satsNumber || "-"}</td>
-                                            <td data-label="Roll No."><strong>{student.rollNumber || "-"}</strong></td>
-                                            <td data-label="Student"><strong>{student.studentName}</strong></td>
-                                            <td data-label="Class">{student.className || "-"}</td>
-                                            <td data-label="Category">
+                                            <td data-label="Select">
+                                                <input type="checkbox" aria-label="Select student" checked={selectedIds.includes(student.id)} onChange={(e) => setSelectedIds((prev) => e.target.checked ? [...prev, student.id] : prev.filter((id) => id !== student.id))} />
+                                            </td>
+                                            <td data-label="Adm No." style={{ color: "#64748B", fontSize: "13px", display: hiddenCols.includes("Adm No.") ? "none" : "" }}>{student.admissionNumber || "-"}</td>
+                                            <td data-label="SATS No." style={{ color: "#64748B", fontSize: "13px", display: hiddenCols.includes("SATS No.") ? "none" : "" }}>{student.satsNumber || "-"}</td>
+                                            <td data-label="Roll No." style={{ display: hiddenCols.includes("Roll No.") ? "none" : "" }}><strong>{student.rollNumber || "-"}</strong></td>
+                                            <td data-label="Student" style={{ display: hiddenCols.includes("Student Name") ? "none" : "" }}>
+                                                {inlineEdit?.id === student.id && inlineEdit.field === "studentName" ? (
+                                                    <span><input value={inlineEdit.value} onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })} style={{ width: "90%" }} /><button type="button" className="save-btn" onClick={saveInline} style={{ marginLeft: 4 }}>✓</button></span>
+                                                ) : (
+                                                    <strong onDoubleClick={() => setInlineEdit({ id: student.id, field: "studentName", value: student.studentName || "" })} title="Double-click to edit">{student.studentName}</strong>
+                                                )}
+                                            </td>
+                                            <td data-label="Class" style={{ display: hiddenCols.includes("Class") ? "none" : "" }}>{student.className || "-"}</td>
+                                            <td data-label="Category" style={{ display: hiddenCols.includes("Category") ? "none" : "" }}>
                                                 <span className={student.studentCategory === "rte" ? "payment-badge mode-upi" : "payment-badge mode-default"}>
                                                     {student.studentCategory === "rte" ? "RTE" :
                                                      student.studentCategory === "management" ? "Management" :
                                                      student.studentCategory === "other" ? "Others" : "Regular"}
                                                 </span>
                                             </td>
-                                            <td data-label="Contact">
+                                            <td data-label="Contact" style={{ display: hiddenCols.includes("Contact") ? "none" : "" }}>
                                                 <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.4 }}>
-                                                    <span>{student.contact1 || "-"}</span>
+                                                    {inlineEdit?.id === student.id && inlineEdit.field === "contact1" ? (
+                                                        <span><input value={inlineEdit.value} onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })} style={{ width: "90%" }} /><button type="button" className="save-btn" onClick={saveInline} style={{ marginLeft: 4 }}>✓</button></span>
+                                                    ) : (
+                                                        <span onDoubleClick={() => setInlineEdit({ id: student.id, field: "contact1", value: student.contact1 || "" })} title="Double-click to edit">{student.contact1 || "-"}</span>
+                                                    )}
                                                     {student.contact2 ? (
                                                         <span style={{ fontSize: "12px", color: "#64748B" }}>{student.contact2}</span>
                                                     ) : null}
                                                 </div>
                                             </td>
-                                            <td data-label="Status">
+                                            <td data-label="Status" style={{ display: hiddenCols.includes("Status") ? "none" : "" }}>
                                                 <span className={student.status === "archived" ? "payment-badge mode-default" : "payment-badge mode-upi"}>
                                                     {student.status === "archived" ? "Archived" : "Active"}
                                                 </span>
@@ -682,7 +766,9 @@ function StudentDetailModal({ student, initialTab = "overview", onClose, onEdit 
                         </>
                     ) : tab === "fees" ? (
                         loadingFees ? (
-                            <div style={{ padding: "30px", textAlign: "center", color: "#64748B", fontSize: "14px" }}>Loading fee account...</div>
+                            <div className="skel-card" style={{ margin: "12px 0" }}>
+                                <div className="skel skel-line short" /><div className="skel skel-line tall" /><div className="skel skel-line" />
+                            </div>
                         ) : history ? (
                             <>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "#F8FAFC", padding: "10px 14px", borderRadius: "8px", border: "1px solid #E2E8F0", marginBottom: "16px" }}>
@@ -709,10 +795,10 @@ function StudentDetailModal({ student, initialTab = "overview", onClose, onEdit 
                                 <div>
                                     <div style={{ fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Transaction Receipts Log</div>
                                     <div style={{ border: "1px solid #E2E8F0", borderRadius: "8px", overflow: "hidden", backgroundColor: "#FFFFFF" }}>
-                                        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1.2fr", padding: "8px 14px", backgroundColor: "#F8FAFC", borderBottom: "1px solid #E2E8F0", fontSize: "12px", fontWeight: "600", color: "#475569" }}><span>Date</span><span>Mode</span><span style={{ textAlign: "center" }}>Status</span><span style={{ textAlign: "right" }}>Amount Paid</span></div>
+                                        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1.2fr 0.8fr", padding: "8px 14px", backgroundColor: "#F8FAFC", borderBottom: "1px solid #E2E8F0", fontSize: "12px", fontWeight: "600", color: "#475569" }}><span>Date</span><span>Mode</span><span style={{ textAlign: "center" }}>Status</span><span style={{ textAlign: "right" }}>Amount Paid</span><span style={{ textAlign: "right" }}>Receipt</span></div>
                                         {history.payments?.length === 0 ? <div style={{ padding: "14px", textAlign: "center", color: "#64748B", fontSize: "13px" }}>No receipts recorded for this session.</div> : history.payments?.map((payment) => (
                                             <Fragment key={payment.id}>
-                                                <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1.2fr", alignItems: "center", padding: "9px 14px", borderBottom: "1px solid #F1F5F9", fontSize: "13px", opacity: payment.status === "reversed" ? 0.6 : 1 }}><span style={{ color: "#334155" }}>{payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString("en-IN") : "-"}</span><span style={{ color: "#334155", fontWeight: "500" }}>{payment.paymentMode || "Cash"}</span><span style={{ textAlign: "center" }}><span style={{ fontSize: "10px", fontWeight: "700", padding: "2px 7px", borderRadius: "4px", backgroundColor: payment.status === "reversed" ? "#F1F5F9" : "#DCFCE7", color: payment.status === "reversed" ? "#64748B" : "#15803D" }}>{payment.status === "reversed" ? "Reversed" : "Completed"}</span></span><strong style={{ textAlign: "right", color: "#0F172A" }}>{money(payment.amount)}</strong></div>
+                                                <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1.2fr 0.8fr", alignItems: "center", padding: "9px 14px", borderBottom: "1px solid #F1F5F9", fontSize: "13px", opacity: payment.status === "reversed" ? 0.6 : 1 }}><span style={{ color: "#334155" }}>{payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString("en-IN") : "-"}</span><span style={{ color: "#334155", fontWeight: "500" }}>{payment.paymentMode || "Cash"}</span><span style={{ textAlign: "center" }}><span style={{ fontSize: "10px", fontWeight: "700", padding: "2px 7px", borderRadius: "4px", backgroundColor: payment.status === "reversed" ? "#F1F5F9" : "#DCFCE7", color: payment.status === "reversed" ? "#64748B" : "#15803D" }}>{payment.status === "reversed" ? "Reversed" : "Completed"}</span></span><strong style={{ textAlign: "right", color: "#0F172A" }}>{money(payment.amount)}</strong><span style={{ textAlign: "right" }}>{payment.status !== "reversed" && <button className="receipt-btn" onClick={() => printReceipt(payment.id)}>Receipt</button>}</span></div>
                                                 {payment.status === "reversed" && (
                                                     <div style={{ background: "var(--danger-bg)", color: "var(--danger)", fontSize: "12px", fontWeight: 600, padding: "6px 14px 8px", borderBottom: "1px solid #F1F5F9" }}>
                                                         Reversed{payment.voidedAt ? ` on ${new Date(payment.voidedAt).toLocaleDateString("en-IN")}` : ""} — Reason: {payment.voidReason || "Not recorded"}
@@ -726,7 +812,9 @@ function StudentDetailModal({ student, initialTab = "overview", onClose, onEdit 
                         ) : <div style={{ padding: "20px", textAlign: "center", color: "#DC2626" }}>Unable to load fee account.</div>
                     ) : (
                         loadingResults ? (
-                            <div style={{ padding: "30px", textAlign: "center", color: "#64748B", fontSize: "14px" }}>Loading exam results...</div>
+                            <div className="skel-card" style={{ margin: "12px 0" }}>
+                                <div className="skel skel-line short" /><div className="skel skel-line tall" /><div className="skel skel-line" />
+                            </div>
                         ) : results && results.length > 0 ? (
                             <div>
                                 <div style={{ fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Published Exam Results</div>

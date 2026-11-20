@@ -98,7 +98,18 @@ async function addColumnIfMissing(tableName, columnName, definition) {
 // DATABASE INITIALIZATION
 // =====================================================
 
-async function initializeDatabase() {
+// Initialization is kicked off both on DB connect and by server.js startServer.
+// Share one promise so migrations/backfills never run twice concurrently.
+let initPromise = null;
+function initializeDatabase() {
+    if (!initPromise) initPromise = runInitializeDatabase().catch((e) => {
+        initPromise = null; // allow a clean retry after a failed init
+        throw e;
+    });
+    return initPromise;
+}
+
+async function runInitializeDatabase() {
     try {
         console.log("Starting database initialization...");
 
@@ -259,6 +270,52 @@ async function initializeDatabase() {
                 voidReason TEXT,
                 FOREIGN KEY(studentId) REFERENCES students(id),
                 FOREIGN KEY(feeAccountId) REFERENCES student_fee_accounts(id)
+            )
+        `);
+
+        // PAYMENT REVERSE REQUESTS (non-admin staff request approval first)
+        await run(`
+            CREATE TABLE IF NOT EXISTS payment_reverse_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                paymentId INTEGER NOT NULL,
+                requestedBy INTEGER NOT NULL,
+                requestedByName TEXT,
+                reason TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                createdAt TEXT,
+                reviewedBy INTEGER,
+                reviewedAt TEXT,
+                FOREIGN KEY(paymentId) REFERENCES payments(id)
+            )
+        `);
+
+        // REVERSE REQUESTS (expenses / incomes) — mirror of payment requests
+        await run(`
+            CREATE TABLE IF NOT EXISTS expense_reverse_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                expenseId INTEGER NOT NULL,
+                requestedBy INTEGER NOT NULL,
+                requestedByName TEXT,
+                reason TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                createdAt TEXT,
+                reviewedBy INTEGER,
+                reviewedAt TEXT,
+                FOREIGN KEY(expenseId) REFERENCES expenses(id)
+            )
+        `);
+        await run(`
+            CREATE TABLE IF NOT EXISTS income_reverse_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                incomeId INTEGER NOT NULL,
+                requestedBy INTEGER NOT NULL,
+                requestedByName TEXT,
+                reason TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                createdAt TEXT,
+                reviewedBy INTEGER,
+                reviewedAt TEXT,
+                FOREIGN KEY(incomeId) REFERENCES incomes(id)
             )
         `);
 
@@ -825,7 +882,11 @@ async function initializeDatabase() {
         await seedGradingScale();
         await backfillExamDefinitions();
         await backfillSubjectTeachers();
-        await createIndexes();
+        await addColumnIfMissing("transfer_certificates", "amountCollected", "REAL DEFAULT 0");
+    await addColumnIfMissing("transfer_certificates", "remainingAmount", "REAL DEFAULT 0");
+    await addColumnIfMissing("transfer_certificates", "paymentId", "INTEGER");
+    await backfillTCCollections();
+    await createIndexes();
 
         console.log("Database initialization completed.");
     } catch (error) {
@@ -892,6 +953,12 @@ async function migrateDatabase() {
     await addColumnIfMissing("expenses", "voidedAt", "TEXT");
     await addColumnIfMissing("expenses", "voidedBy", "INTEGER");
     await addColumnIfMissing("expenses", "voidReason", "TEXT");
+    await addColumnIfMissing("expenses", "editCount", "INTEGER NOT NULL DEFAULT 0");
+    await addColumnIfMissing("incomes", "status", "TEXT NOT NULL DEFAULT 'completed'");
+    await addColumnIfMissing("incomes", "voidedAt", "TEXT");
+    await addColumnIfMissing("incomes", "voidedBy", "INTEGER");
+    await addColumnIfMissing("incomes", "voidReason", "TEXT");
+    await addColumnIfMissing("incomes", "editCount", "INTEGER NOT NULL DEFAULT 0");
 
     // PAGE ACCESS LOCK
     // 0 = admin can edit this user's page access; 1 = frozen until unlocked.
@@ -1125,6 +1192,43 @@ async function backfillSubjectTeachers() {
     if (n) {
         console.log(`Backfilled ${n} subject-teacher assignment(s) from legacy class-wide assignments.`);
     }
+}
+
+// TC collections booked before the receipt/payment feature existed have no
+// payment row. Post them once (idempotent via paymentId) so every TC amount
+// flows through the same fee-collection / net-balance / receipt pipeline.
+async function backfillTCCollections() {
+    const rows = await all(`
+        SELECT tc.id AS tcId, tc.studentId, tc.amountCollected, tc.issuedAt, tc.academicYear
+        FROM transfer_certificates tc
+        WHERE tc.paymentId IS NULL AND COALESCE(tc.amountCollected, 0) > 0
+    `);
+    if (!rows.length) return;
+    let n = 0;
+    for (const r of rows) {
+        const accRows = await all(`
+            SELECT sfa.id AS feeAccountId
+            FROM student_fee_accounts sfa
+            INNER JOIN student_enrollments se ON se.id = sfa.enrollmentId
+            WHERE se.studentId = ?
+              AND se.academicYearId = (SELECT id FROM academic_years WHERE name = ? LIMIT 1)
+            LIMIT 1
+        `, [r.studentId, r.academicYear || null]);
+        const acc = accRows[0];
+        if (!acc) continue;
+        const paymentDate = String(r.issuedAt || new Date().toISOString()).slice(0, 10);
+        const res = await run(`
+            INSERT INTO payments (studentId, feeAccountId, paymentDate, amount, paymentMode, remarks, status)
+            VALUES (?, ?, ?, ?, 'Cash', 'Fee collected at TC counter', 'completed')
+        `, [r.studentId, acc.feeAccountId, paymentDate, Number(r.amountCollected)]);
+        await run(`
+            INSERT INTO payment_line_items (paymentId, componentName, amount, mode, paidOn, reference, remark)
+            VALUES (?, 'Fee Collection (TC)', ?, 'Cash', ?, '', 'Collected at TC counter')
+        `, [res.lastID, Number(r.amountCollected), paymentDate]);
+        await run(`UPDATE transfer_certificates SET paymentId = ? WHERE id = ?`, [res.lastID, r.tcId]);
+        n++;
+    }
+    if (n) console.log(`Backfilled ${n} TC collection payment(s).`);
 }
 
 // =====================================================

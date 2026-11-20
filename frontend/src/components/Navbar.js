@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useUI } from "../context/UIContext";
@@ -60,6 +60,24 @@ function Navbar() {
     setTheme(next);
   };
 
+  // Density toggle (persisted) — compact tables show more rows.
+  const [compact, setCompact] = useState(() => {
+    try { return localStorage.getItem("ui-density") === "compact"; } catch (e) { return false; }
+  });
+  const toggleDensity = () => {
+    const next = !compact;
+    document.body.classList.toggle("density-compact", next);
+    try { localStorage.setItem("ui-density", next ? "compact" : "comfortable"); } catch (e) { /* optional */ }
+    setCompact(next);
+  };
+  useEffect(() => {
+    if (compact) document.body.classList.add("density-compact");
+  }, [compact]);
+
+  const openSearch = () => {
+    window.dispatchEvent(new CustomEvent("open-search"));
+  };
+
   const pageTitle = titleFromPath(pathname);
 
   const today = new Date().toLocaleDateString("en-IN", {
@@ -89,6 +107,24 @@ function Navbar() {
       </div>
 
       <div className="navbar-right">
+        <button
+          type="button"
+          className="theme-toggle"
+          onClick={openSearch}
+          aria-label="Search"
+          title="Search pages & students (Ctrl+K)"
+        >
+          ⌕
+        </button>
+        <button
+          type="button"
+          className="theme-toggle"
+          onClick={toggleDensity}
+          aria-label="Toggle table density"
+          title={compact ? "Comfortable rows" : "Compact rows"}
+        >
+          ☰
+        </button>
         <button
           type="button"
           className="theme-toggle"

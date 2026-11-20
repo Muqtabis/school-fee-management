@@ -14,6 +14,10 @@ const STATUS_OPTIONS = [
     { value: "leave", label: "Leave" }
 ];
 
+// Marking dropdown includes a blank "not marked yet" default. Anyone
+// taking attendance picks Present / Absent / Half-day / Leave explicitly.
+const MARK_OPTIONS = [{ value: "", label: "— Select —" }, ...STATUS_OPTIONS];
+
 const STATUS_LABEL = STATUS_OPTIONS.reduce((acc, o) => {
     acc[o.value] = o.label;
     return acc;
@@ -75,7 +79,7 @@ function TeacherAttendancePage() {
             const res = await api.get("/attendance", { params: { date: forDate } });
             const seeded = (res.data.records || []).map((r) => ({
                 ...r,
-                status: r.status || "present",
+                status: r.status || "",
                 remark: r.remark || ""
             }));
             setRows(seeded);
@@ -283,7 +287,7 @@ function TeacherAttendancePage() {
                                                             disabled={dateLocked}
                                                             onChange={(e) => setField(r.teacherId, "status", e.target.value)}
                                                         >
-                                                            {STATUS_OPTIONS.map((o) => (
+                                                            {MARK_OPTIONS.map((o) => (
                                                                 <option key={o.value} value={o.value}>{o.label}</option>
                                                             ))}
                                                         </select>

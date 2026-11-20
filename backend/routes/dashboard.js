@@ -7,6 +7,9 @@ const router =
 const dashboardController =
     require("../controllers/dashboardController");
 
+const activityController =
+    require("../controllers/activityController");
+
 const { requireRole } =
     require("../middleware/authMiddleware");
 
@@ -25,6 +28,13 @@ router.get(
     "/summary",
     requireRole("admin", "accountant", "principal", "manager"),
     dashboardController.summary
+);
+
+// Recent activity feed (read-only, role-filtered).
+router.get(
+    "/activity",
+    requireRole("admin", "accountant", "principal", "manager"),
+    activityController.recentActivity
 );
 
 

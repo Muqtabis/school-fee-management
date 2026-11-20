@@ -12,8 +12,10 @@ function ReportsPage() {
 
     const [rawPayments, setRawPayments] = useState([]);
     const [rawExpenses, setRawExpenses] = useState([]);
+    const [rawIncomes, setRawIncomes] = useState([]);
     const [rawStudents, setRawStudents] = useState([]);
     const [classStructures, setClassStructures] = useState([]);
+    const [tcConcededFee, setTcConcededFee] = useState(0);
     const [reportData, setReportData] = useState({
         academicYear: null,
         totalStudents: 0,
@@ -38,9 +40,10 @@ function ReportsPage() {
             // (e.g. /payments/report-summary is admin-only) cannot blank the whole
             // page for roles that legitimately hold the Reports grant. Totals below
             // are recomputed client-side from the payments/expenses the caller can read.
-            const [summaryRes, expenseRes, paymentsRes, studentsRes, yearsRes] = await Promise.all([
+            const [summaryRes, expenseRes, incomeRes, paymentsRes, studentsRes, yearsRes] = await Promise.all([
                 api.get(`/payments/report-summary?period=all`).catch(() => ({ data: {} })),
                 api.get("/expenses").catch(() => ({ data: [] })),
+                api.get("/incomes").catch(() => ({ data: [] })),
                 api.get("/payments").catch(() => ({ data: [] })),
                 api.get("/students").catch(() => ({ data: [] })),
                 api.get("/fees/academic-years").catch(() => ({ data: [] }))
@@ -48,6 +51,7 @@ function ReportsPage() {
 
             const summary = summaryRes.data || {};
             const expenses = Array.isArray(expenseRes.data) ? expenseRes.data : [];
+            const incomes = Array.isArray(incomeRes.data) ? incomeRes.data : [];
             const payments = Array.isArray(paymentsRes.data)
                 ? paymentsRes.data
                 : Array.isArray(summary.recentPayments)
@@ -79,9 +83,20 @@ function ReportsPage() {
             });
 
             setRawExpenses(expenses);
+            setRawIncomes(incomes);
             setRawPayments(payments);
             setRawStudents(students);
             setClassStructures(structures);
+
+            // TC Conceded Fee = sum of remaining amounts waived at TC time.
+            // Fetched on every load so it stays in sync with issued TCs.
+            try {
+                const tcRes = await api.get("/documents/records");
+                const recs = Array.isArray(tcRes.data?.records) ? tcRes.data.records : [];
+                setTcConcededFee(recs.reduce((s, r) => s + Number(r.remainingAmount || 0), 0));
+            } catch (e) {
+                setTcConcededFee(0);
+            }
         } catch (error) {
             console.error("REPORT FETCH ERROR:", error);
         } finally {
@@ -158,6 +173,14 @@ function ReportsPage() {
         });
     }, [rawExpenses, period]);
 
+    // Filtered Incomes (non-fee inflow: donations, grants, events…)
+    const filteredIncomes = useMemo(() => {
+        return rawIncomes.filter((i) => {
+            if (i.status === "reversed") return false;
+            return isDateInPeriod(i.incomeDate || i.created_at, period);
+        });
+    }, [rawIncomes, period]);
+
     // =====================================================
     // COMPUTED TOTALS & AGGREGATIONS
     // =====================================================
@@ -169,7 +192,23 @@ function ReportsPage() {
         return filteredExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
     }, [filteredExpenses]);
 
-    const netBalance = totalCollection - totalExpenseAmount;
+    const totalIncomeAmount = useMemo(() => {
+        return filteredIncomes.reduce((sum, i) => sum + Number(i.amount || 0), 0);
+    }, [filteredIncomes]);
+
+    const incomeCategorySummary = useMemo(() => {
+        const map = {};
+        filteredIncomes.forEach((i) => {
+            const cat = i.category || "Other";
+            if (!map[cat]) map[cat] = { category: cat, amount: 0, count: 0 };
+            map[cat].amount += Number(i.amount || 0);
+            map[cat].count += 1;
+        });
+        return Object.values(map).sort((a, b) => b.amount - a.amount);
+    }, [filteredIncomes]);
+
+    // Net balance includes ALL inflow: fee collections + other incomes, minus expenses.
+    const netBalance = totalCollection + totalIncomeAmount - totalExpenseAmount;
 
     // Filtered Class Collection Matrix
     const classSummaryMatrix = useMemo(() => {
@@ -505,8 +544,9 @@ function ReportsPage() {
             ? "This Month"
             : "Till Date (All Time)";
 
-    const maximum = Math.max(totalCollection, totalExpenseAmount, 1);
+    const maximum = Math.max(totalCollection, totalIncomeAmount, totalExpenseAmount, 1);
     const collectionHeight = `${(totalCollection / maximum) * 100}%`;
+    const incomeHeight = `${(totalIncomeAmount / maximum) * 100}%`;
     const expenseHeight = `${(totalExpenseAmount / maximum) * 100}%`;
 
     return (
@@ -645,6 +685,19 @@ function ReportsPage() {
                     {/* TOP SUMMARY CARDS */}
                     <h3 className="section-title">Fee Inflow & Balance Summary</h3>
 
+                    {/* NET BALANCE — top */}
+                    <div className="report-cards">
+                        <div className="report-summary-card">
+                            <span>Net Balance</span>
+                            <strong className={netBalance < 0 ? "negative-balance" : "positive-balance"}>
+                                {loading ? "..." : money(netBalance)}
+                            </strong>
+                            <small>Fees + incomes − expenses</small>
+                        </div>
+                    </div>
+
+                    {/* FEES */}
+                    <h3 className="section-title" style={{ marginTop: "18px" }}>Fees</h3>
                     <div className="report-cards">
                         <div className="report-summary-card">
                             <span>Total Receipts</span>
@@ -667,17 +720,45 @@ function ReportsPage() {
                         </div>
 
                         <div className="report-summary-card">
+                            <span>TC Conceded Fee</span>
+                            <strong>{loading ? "..." : money(tcConcededFee)}</strong>
+                            <small>Amount conceded when TCs were issued</small>
+                        </div>
+
+                        {modeSummary.map((m) => (
+                            <div className="report-summary-card" key={m.mode}>
+                                <span>{m.mode} Collection</span>
+                                <strong>{loading ? "..." : money(m.amount)}</strong>
+                                <small>{m.percentage}% of total fee collected</small>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* INCOMES */}
+                    <h3 className="section-title" style={{ marginTop: "18px" }}>Incomes</h3>
+                    <div className="report-cards">
+                        <div className="report-summary-card">
+                            <span>Total Income</span>
+                            <strong>{loading ? "..." : money(totalIncomeAmount)}</strong>
+                            <small>{filteredIncomes.length} income voucher(s)</small>
+                        </div>
+
+                        {incomeCategorySummary.map((c) => (
+                            <div className="report-summary-card" key={c.category}>
+                                <span>{c.category} Income</span>
+                                <strong>{loading ? "..." : money(c.amount)}</strong>
+                                <small>{c.count} voucher(s)</small>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* EXPENSES */}
+                    <h3 className="section-title" style={{ marginTop: "18px" }}>Expenses</h3>
+                    <div className="report-cards">
+                        <div className="report-summary-card">
                             <span>Total Expenses</span>
                             <strong>{loading ? "..." : money(totalExpenseAmount)}</strong>
                             <small>{filteredExpenses.length} expense voucher(s)</small>
-                        </div>
-
-                        <div className="report-summary-card">
-                            <span>Net Cash Balance</span>
-                            <strong className={netBalance < 0 ? "negative-balance" : "positive-balance"}>
-                                {loading ? "..." : money(netBalance)}
-                            </strong>
-                            <small>Inflow minus outflow</small>
                         </div>
                     </div>
 
@@ -693,7 +774,7 @@ function ReportsPage() {
                         <div className="financial-chart">
                             <div className="chart-value">
                                 <span>Net Inflow</span>
-                                <strong>{money(totalCollection)}</strong>
+                                <strong>{money(netBalance)}</strong>
                             </div>
 
                             <div className="chart-area">
@@ -705,6 +786,16 @@ function ReportsPage() {
                                         />
                                     </div>
                                     <span>Fee Collection</span>
+                                </div>
+
+                                <div className="chart-column">
+                                    <div className="chart-bar-wrapper">
+                                        <div
+                                            className="chart-bar income-bar"
+                                            style={{ height: incomeHeight }}
+                                        />
+                                    </div>
+                                    <span>Incomes</span>
                                 </div>
 
                                 <div className="chart-column">
@@ -722,6 +813,10 @@ function ReportsPage() {
                                 <div>
                                     <span className="legend-dot collection-dot" />
                                     <span>Fee Collection</span>
+                                </div>
+                                <div>
+                                    <span className="legend-dot income-dot" />
+                                    <span>Incomes</span>
                                 </div>
                                 <div>
                                     <span className="legend-dot expense-dot" />

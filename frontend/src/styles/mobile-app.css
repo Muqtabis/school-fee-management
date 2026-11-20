@@ -1,0 +1,460 @@
+/* ============================================================
+   MOBILE APP CHROME — scoped under .m-app, rendered only on phones.
+   Native-feeling header, bottom tab bar, sheets, cards and rows.
+   ============================================================ */
+.m-app {
+    --m-nav: 64px;
+    position: relative;
+    min-height: 100dvh;
+    background: var(--background, #f5f7f9);
+    padding-top: calc(56px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(var(--m-nav) + env(safe-area-inset-bottom, 0px) + 14px);
+}
+
+/* ---- top app bar ---- */
+.m-appbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: calc(56px + env(safe-area-inset-top, 0px));
+    padding: env(safe-area-inset-top, 0px) 14px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--navy, #243447);
+    color: #fff;
+    z-index: 950;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+}
+.m-appbar-title {
+    font-family: var(--font-display, Georgia, serif);
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+}
+.m-avatar {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    background: var(--gold, #a9824b);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+}
+.m-avatar:active { transform: scale(0.94); }
+.m-usermenu {
+    position: absolute;
+    top: calc(54px + env(safe-area-inset-top, 0px));
+    right: 12px;
+    min-width: 190px;
+    max-height: 70dvh;
+    overflow-y: auto;
+    background: var(--surface, #fff);
+    color: var(--text, #263238);
+    border-radius: 12px;
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.25);
+    padding: 8px;
+    z-index: 960;
+}
+.m-usermenu-head {
+    padding: 8px 10px 12px;
+    border-bottom: 1px solid var(--border-light, #eee);
+    margin-bottom: 6px;
+    display: flex; flex-direction: column; gap: 2px;
+}
+.m-usermenu-head small { color: var(--text-secondary, #607080); }
+.m-usermenu button {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    text-align: left;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: inherit;
+    font-size: 15px;
+}
+.m-usermenu button:active { background: var(--surface-soft, #f3f5f7); }
+.m-usermenu .m-logout { color: #b3261e; font-weight: 700; }
+
+/* ---- content ---- */
+.m-main { padding: 14px 14px 4px; }
+.m-main h2 { font-size: 20px; margin: 2px 0 12px; }
+.m-main h3 { font-size: 16px; margin: 16px 0 8px; }
+.m-page-lead { color: var(--text-secondary, #607080); font-size: 13px; margin: -6px 0 14px; }
+
+/* ---- bottom tab bar ---- */
+.m-tabbar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    height: calc(var(--m-nav) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    display: flex;
+    background: var(--surface, #fff);
+    border-top: 1px solid var(--border, #d9e0e6);
+    z-index: 950;
+}
+.m-tab {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    text-decoration: none;
+    color: var(--text-secondary, #607080);
+}
+.m-tab-icon { font-size: 20px; line-height: 1; }
+.m-tab-label { font-size: 10px; font-weight: 600; white-space: nowrap; }
+.m-tab-active { color: var(--gold, #a9824b); }
+.m-tab-active .m-tab-label { font-weight: 800; }
+
+/* ---- cards / stats ---- */
+.m-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    min-width: 0;
+    padding: 14px;
+    border-radius: 14px;
+    border: 1px solid var(--border, #d9e0e6);
+    background: var(--surface, #fff);
+    text-align: left;
+    box-shadow: 0 2px 8px rgba(27, 41, 56, 0.06);
+}
+.m-card:active { transform: scale(0.99); }
+.m-card-title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary, #607080); }
+.m-card-value { font-size: 22px; font-family: var(--font-display, Georgia, serif); overflow-wrap: anywhere; }
+.m-card-sub { font-size: 11px; color: var(--text-secondary, #607080); }
+.m-card-gold { border-color: var(--gold, #a9824b); background: linear-gradient(180deg, var(--gold-light, #f6f0e6), var(--surface, #fff)); }
+.m-card-danger { border-color: #f0b4b4; background: #fff5f5; }
+.m-card-good { border-color: #a7d7b8; background: #f2fbf5; }
+
+.m-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+/* ---- lists / rows ---- */
+.m-list { display: flex; flex-direction: column; gap: 10px; }
+.m-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border, #d9e0e6);
+    background: var(--surface, #fff);
+    min-width: 0;
+}
+.m-row-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.m-row-main strong { font-size: 14px; overflow-wrap: anywhere; }
+.m-row-main small { font-size: 11px; color: var(--text-secondary, #607080); }
+.m-row-side { display: flex; align-items: center; gap: 8px; flex-shrink: 0; font-weight: 700; font-size: 13px; }
+.m-empty {
+    padding: 32px 14px;
+    text-align: center;
+    color: var(--text-secondary, #607080);
+    font-size: 14px;
+}
+
+/* ---- segmented control ---- */
+.m-segmented {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 12px;
+    background: var(--surface-soft, #f3f5f7);
+    margin-bottom: 14px;
+}
+.m-segmented button {
+    flex: 1;
+    min-height: 40px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--text-secondary, #607080);
+    font-size: 13px;
+    font-weight: 600;
+}
+.m-segmented .m-seg-active {
+    background: var(--surface, #fff);
+    color: var(--navy, #243447);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+    font-weight: 800;
+}
+
+/* ---- bottom sheet ---- */
+.m-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.42);
+    display: flex;
+    align-items: flex-end;
+}
+.m-sheet {
+    width: 100%;
+    max-height: 88dvh;
+    background: var(--surface, #fff);
+    border-radius: 20px 20px 0 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: mSheetUp 0.2s ease-out;
+}
+@keyframes mSheetUp { from { transform: translateY(24px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+.m-sheet-handle { width: 42px; height: 4px; border-radius: 4px; background: #cbd5e1; margin: 8px auto 2px; }
+.m-sheet-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 16px 12px;
+    border-bottom: 1px solid var(--border-light, #eee);
+}
+.m-sheet-head h3 { margin: 0; font-size: 17px; }
+.m-sheet-head button { min-width: 44px; min-height: 44px; border: 0; background: transparent; font-size: 18px; }
+.m-sheet-body {
+    padding: 14px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+}
+.m-sheet-body label { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; font-size: 12px; font-weight: 600; color: var(--text-secondary, #607080); }
+.m-sheet-body input, .m-sheet-body select, .m-sheet-body textarea {
+    width: 100%;
+    min-height: 44px;
+    font-size: 16px;
+    padding: 10px 12px;
+    border: 1px solid var(--border, #d9e0e6);
+    border-radius: 10px;
+    background: var(--surface, #fff);
+    color: var(--text, #263238);
+}
+.m-sheet-actions { display: flex; gap: 10px; margin-top: 6px; }
+.m-sheet-actions button, .m-btn {
+    flex: 1;
+    min-height: 44px;
+    border: 0;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 700;
+}
+.m-btn-primary { background: var(--gold, #a9824b); color: #fff; }
+.m-btn-ghost { background: var(--surface-soft, #f3f5f7); color: var(--text, #263238); }
+
+/* ---- floating action button ---- */
+.m-fab {
+    position: fixed;
+    right: 16px;
+    bottom: calc(var(--m-nav) + env(safe-area-inset-bottom, 0px) + 14px);
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    border: 0;
+    background: var(--gold, #a9824b);
+    color: #fff;
+    font-size: 28px;
+    line-height: 1;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
+    z-index: 940;
+}
+.m-fab:active { transform: scale(0.95); }
+
+/* ---- search + filter chips ---- */
+.m-search {
+    width: 100%;
+    min-height: 44px;
+    font-size: 16px;
+    padding: 10px 14px;
+    border: 1px solid var(--border, #d9e0e6);
+    border-radius: 12px;
+    background: var(--surface, #fff);
+    color: var(--text, #263238);
+    margin-bottom: 10px;
+}
+.m-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 10px; -webkit-overflow-scrolling: touch; }
+.m-chip {
+    flex: 0 0 auto;
+    min-height: 38px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border, #d9e0e6);
+    background: var(--surface, #fff);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary, #607080);
+}
+.m-chip-active { background: var(--navy, #243447); border-color: var(--navy, #243447); color: #fff; }
+
+@media (prefers-reduced-motion: reduce) {
+    .m-sheet { animation: none; }
+}
+
+/* ---- inline badges / link buttons used in mobile rows ---- */
+.m-badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: #e7f6ed;
+    color: #1f7a3d;
+    font-size: 11px;
+    font-weight: 700;
+}
+.m-badge-off { background: #eef1f4; color: #6b7280; }
+.m-link {
+    min-height: 44px;
+    border: 0;
+    background: transparent;
+    color: var(--gold, #a9824b);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+
+/* ---- full-screen app menu (all web pages, grouped) ---- */
+.m-menu-btn {
+    min-width: 44px;
+    min-height: 44px;
+    border: 0;
+    background: transparent;
+    color: #fff;
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+}
+.m-menu {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+}
+.m-menu-panel {
+    width: min(88vw, 340px);
+    height: 100dvh;
+    background: var(--surface, #fff);
+    display: flex;
+    flex-direction: column;
+    animation: mMenuIn 0.2s ease-out;
+}
+@keyframes mMenuIn { from { transform: translateX(-20px); opacity: 0.7; } to { transform: none; opacity: 1; } }
+.m-menu-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 14px 14px;
+    background: var(--navy, #243447);
+    color: #fff;
+}
+.m-menu-user { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.m-menu-user .m-avatar { flex-shrink: 0; }
+.m-menu-user > div { display: flex; flex-direction: column; min-width: 0; }
+.m-menu-user strong { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-menu-user small { font-size: 11px; opacity: 0.8; }
+.m-menu-head > button {
+    min-width: 44px; min-height: 44px;
+    border: 0; background: transparent; color: #fff; font-size: 18px;
+}
+.m-menu-scroll { flex: 1; overflow-y: auto; padding: 8px 8px 16px; -webkit-overflow-scrolling: touch; }
+.m-menu-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 48px;
+    padding: 8px 12px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text, #263238);
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+}
+.m-menu-link:active { background: var(--surface-soft, #f3f5f7); }
+.m-menu-link:disabled { opacity: 0.45; }
+.m-menu-link:disabled small { margin-left: auto; font-size: 10px; font-weight: 500; }
+.m-menu-icon { font-size: 18px; width: 24px; text-align: center; flex-shrink: 0; }
+.m-menu-group { margin-top: 12px; }
+.m-menu-group-title {
+    padding: 6px 12px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary, #89939d);
+}
+.m-menu-logout {
+    margin: 10px 14px calc(16px + env(safe-area-inset-bottom, 0px));
+    min-height: 48px;
+    border: 0;
+    border-radius: 10px;
+    background: #fdecea;
+    color: #b3261e;
+    font-size: 14px;
+    font-weight: 700;
+}
+@media (prefers-reduced-motion: reduce) {
+    .m-menu-panel { animation: none; }
+}
+
+
+/* ============================================================
+   When the mobile app shell wraps the ORIGINAL pages, hide their
+   desktop Sidebar/Navbar (the shell provides header + bottom tabs
+   + full menu instead). Scoped to .m-app so desktop is unaffected.
+   The .m-app top bar occupies the space these would have taken.
+   ============================================================ */
+@media (max-width: 768px) {
+    .m-app .sidebar,
+    .m-app .sidebar-backdrop,
+    .m-app .navbar,
+    .m-app .p-mobile-cta { display: none !important; }
+    .m-app .dashboard { display: block; }
+    .m-app .main-content { margin-left: 0 !important; padding-top: 0; }
+    .m-app .page-content {
+        padding-top: 6px;
+        padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    }
+}
+
+
+/* Pending-approval dot on the mobile tab bar */
+.m-tab-icon { position: relative; display: inline-block; }
+.m-badge-dot {
+    position: absolute; top: -6px; right: -12px;
+    min-width: 16px; height: 16px; padding: 0 4px;
+    border-radius: 8px; background: #b3261e; color: #fff;
+    font-size: 10px; font-weight: 800; line-height: 16px; text-align: center;
+}
+
+
+/* Mobile app bar search trigger */
+.m-appbar-actions { display: flex; align-items: center; gap: 4px; }
+.m-search-btn {
+    min-width: 44px;
+    min-height: 44px;
+    border: 0;
+    background: transparent;
+    color: #fff;
+    font-size: 22px;
+    line-height: 1;
+}
+.m-search-btn:active { opacity: 0.7; }
+
+/* Command palette on phones — full width, safe-area aware */
+@media (max-width: 640px) {
+    .cmd-backdrop {
+        padding: calc(8px + env(safe-area-inset-top, 0px)) 8px 8px;
+    }
+    .cmd-panel {
+        width: 100%;
+        border-radius: 14px;
+        margin-top: 20px;
+    }
+    .cmd-input { min-height: 52px; }
+    .cmd-body { max-height: calc(100dvh - 140px); }
+}
+

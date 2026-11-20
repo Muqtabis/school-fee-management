@@ -1,5 +1,6 @@
-import { toast } from "../services/notify";
-import { useEffect, useState } from "react";
+﻿import { toast } from "../services/notify";
+import { useEffect, useState, useMemo } from "react";
+import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import PaymentForm from "../components/PaymentForm";
@@ -8,6 +9,8 @@ import SummaryTable from "../components/SummaryTable";
 import api from "../services/api";
 
 function PaymentsPage() {
+    const { user } = useAuth();
+    const isApprover = user?.role === "admin" || user?.role === "principal";
     const [payments, setPayments] = useState([]);
     const [classes, setClasses] = useState([]); // NEW: Dynamic classes state
     const [showForm, setShowForm] = useState(false);
@@ -19,6 +22,16 @@ function PaymentsPage() {
         dateTo: ""
     });
     const [activeYear, setActiveYear] = useState("");
+    const [paymentTab, setPaymentTab] = useState("completed");
+
+    const completedPayments = useMemo(
+        () => payments.filter((p) => p.status !== "reversed"),
+        [payments]
+    );
+    const reversedPayments = useMemo(
+        () => payments.filter((p) => p.status === "reversed"),
+        [payments]
+    );
 
     useEffect(() => {
         loadInitialData();
@@ -28,7 +41,8 @@ function PaymentsPage() {
         await Promise.all([
             fetchPayments(),
             fetchActiveYear(),
-            fetchClasses() // Fetching dynamic classes concurrently
+            fetchClasses(), // Fetching dynamic classes concurrently
+            fetchReverseRequests()
         ]);
     };
 
@@ -93,23 +107,60 @@ function PaymentsPage() {
     // window.prompt + window.confirm pair.
     const [reverseTarget, setReverseTarget] = useState(null);
     const [reversing, setReversing] = useState(false);
+    const [editPayment, setEditPayment] = useState(null);
+    const [reverseRequests, setReverseRequests] = useState([]);
+
+    const fetchReverseRequests = async () => {
+        if (!isApprover) return;
+        try {
+            const res = await api.get("/payments/reverse-requests");
+            setReverseRequests(Array.isArray(res.data) ? res.data : []);
+        } catch (error) {
+            console.error("Unable to load reverse requests:", error);
+        }
+    };
 
     const reversePayment = (payment) => {
         if (payment.status === "reversed") return;
         setReverseTarget(payment);
     };
 
+    // Edit opens the existing PaymentForm modal in edit mode (prefilled).
+    const openEditPayment = (payment) => {
+        setEditPayment(payment);
+        setShowForm(true);
+    };
+
+    const handleFormClose = () => {
+        setShowForm(false);
+        setEditPayment(null);
+        fetchPayments();
+    };
+
     const confirmReverse = async (reason) => {
         if (!reverseTarget) return;
         setReversing(true);
         try {
-            await api.post(`/payments/${reverseTarget.id}/reverse`, { reason });
+            const res = await api.post(`/payments/${reverseTarget.id}/reverse`, { reason });
+            toast(res.data?.message || (isApprover ? "Payment reversed successfully." : "Reverse request submitted for admin approval."));
             setReverseTarget(null);
             fetchPayments();
+            fetchReverseRequests();
         } catch (error) {
             toast(error.response?.data?.message || "Unable to reverse payment.");
         } finally {
             setReversing(false);
+        }
+    };
+
+    const reviewRequest = async (id, action) => {
+        try {
+            const res = await api.post(`/payments/reverse-requests/${id}/${action}`, {});
+            toast(res.data?.message || "Request updated.");
+            fetchPayments();
+            fetchReverseRequests();
+        } catch (error) {
+            toast(error.response?.data?.message || "Unable to review request.");
         }
     };
 
@@ -172,7 +223,76 @@ function PaymentsPage() {
                         <button className="clear-btn" onClick={clearFilters}>Clear</button>
                     </div>
 
-                    <SummaryTable payments={payments} onReverse={reversePayment} />
+                    {/* Tabs — Completed / Reversed / Reverse Requests (approvers only) */}
+                    <div className="exam-tabbar" style={{ marginTop: "20px" }}>
+                        <button
+                            type="button"
+                            className={`exam-tab ${paymentTab === "completed" ? "exam-tab-active" : ""}`}
+                            onClick={() => setPaymentTab("completed")}
+                        >
+                            Completed <span className="exam-badge">{completedPayments.length}</span>
+                        </button>
+                        {isApprover && (
+                            <button
+                                type="button"
+                                className={`exam-tab ${paymentTab === "reversed" ? "exam-tab-active" : ""}`}
+                                onClick={() => setPaymentTab("reversed")}
+                            >
+                                Reversed <span className="exam-badge">{reversedPayments.length}</span>
+                            </button>
+                        )}
+                        {isApprover && (
+                            <button
+                                type="button"
+                                className={`exam-tab ${paymentTab === "requests" ? "exam-tab-active" : ""}`}
+                                onClick={() => { setPaymentTab("requests"); fetchReverseRequests(); }}
+                            >
+                                Reverse Requests <span className="exam-badge">{reverseRequests.length}</span>
+                            </button>
+                        )}
+                    </div>
+
+                    {paymentTab === "requests" && isApprover && (
+                        <div className="settings-card" style={{ marginTop: "14px" }}>
+                            <h3 style={{ margin: "0 0 12px 0" }}>Pending Reverse Requests ({reverseRequests.length})</h3>
+                            {reverseRequests.length === 0 ? (
+                                <p style={{ color: "#64748B", fontSize: "13px" }}>No pending reverse requests.</p>
+                            ) : (
+                                <div className="table-container">
+                                    <table className="compact-table stack-sm">
+                                        <thead>
+                                            <tr><th>Student</th><th>Amount</th><th>Requested by</th><th>Reason</th><th>Action</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {reverseRequests.map((r) => (
+                                                <tr key={r.id}>
+                                                    <td data-label="Student">{r.studentName || "-"} {r.rollNumber ? `(Roll ${r.rollNumber})` : ""}</td>
+                                                    <td data-label="Amount">₹{Number(r.amount || 0).toLocaleString("en-IN")}</td>
+                                                    <td data-label="Requested by">{r.requestedByName || "-"}</td>
+                                                    <td data-label="Reason">{r.reason || "-"}</td>
+                                                    <td data-label="Action">
+                                                        <button className="save-btn" onClick={() => reviewRequest(r.id, "approve")}>Approve</button>
+                                                        <button className="cancel-btn" onClick={() => reviewRequest(r.id, "reject")}>Reject</button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {paymentTab === "completed" && (
+                        <div style={{ marginTop: "14px" }}>
+                            <SummaryTable payments={completedPayments} onReverse={reversePayment} onEdit={openEditPayment} />
+                        </div>
+                    )}
+                    {paymentTab === "reversed" && isApprover && (
+                        <div style={{ marginTop: "14px" }}>
+                            <SummaryTable payments={reversedPayments} onReverse={reversePayment} onEdit={openEditPayment} />
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -182,14 +302,11 @@ function PaymentsPage() {
                 onClick={addPayment}
                 aria-label="Collect Fee"
             >
-                ＋ Collect Fee
+                ï¼‹ Collect Fee
             </button>
 
             {showForm && (
-                <PaymentForm onClose={() => {
-                    setShowForm(false);
-                    fetchPayments();
-                }} />
+                <PaymentForm editPayment={editPayment} onClose={handleFormClose} />
             )}
 
             <PromptDialog
@@ -200,14 +317,14 @@ function PaymentsPage() {
                 message={
                     reverseTarget
                         ? `Student: ${reverseTarget.studentName || "-"}\n` +
-                          `Amount: ₹${Number(reverseTarget.amount || 0).toLocaleString("en-IN")}\n` +
+                          `Amount: â‚¹${Number(reverseTarget.amount || 0).toLocaleString("en-IN")}\n` +
                           `Academic year: ${reverseTarget.academicYearName || activeYear || "-"}`
                         : ""
                 }
                 multiline
                 requireValue
-                placeholder="Reason for reversing (required)"
-                confirmLabel="Reverse"
+                placeholder={isApprover ? "Reason for reversing (required)" : "Reason for requesting reversal (required)"}
+                confirmLabel={isApprover ? "Reverse" : "Send Request"}
                 busy={reversing}
             />
         </div>

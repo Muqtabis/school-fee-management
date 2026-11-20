@@ -1908,6 +1908,10 @@ tbody tr:hover {
     background: var(--success);
 }
 
+.income-bar {
+    background: var(--gold, #a9824b);
+}
+
 .expense-bar {
     background: var(--danger);
 }
@@ -1943,6 +1947,10 @@ tbody tr:hover {
 
 .collection-dot {
     background: var(--success);
+}
+
+.income-dot {
+    background: var(--gold, #a9824b);
 }
 
 .expense-dot {

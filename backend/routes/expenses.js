@@ -7,6 +7,9 @@ const router =
 const expenseController =
     require("../controllers/expenseController");
 
+const financeReverse =
+    require("../controllers/financeReverseController");
+
 const {
     requireRole,
     requireAdmin,
@@ -88,6 +91,31 @@ router.delete(
 
 
 // =====================================================
+// REVERSE REQUESTS (admin / principal only to review)
+// Declared before "/:id" so "reverse-requests" isn't
+// captured as an id.
+// =====================================================
+
+router.get(
+    "/reverse-requests",
+    requireRole("admin", "principal"),
+    financeReverse.getExpenseReverseRequests
+);
+
+router.post(
+    "/reverse-requests/:id/approve",
+    requireRole("admin", "principal"),
+    financeReverse.approveExpenseRequest
+);
+
+router.post(
+    "/reverse-requests/:id/reject",
+    requireRole("admin", "principal"),
+    financeReverse.rejectExpenseRequest
+);
+
+
+// =====================================================
 // SINGLE EXPENSE
 // ADMIN + STAFF
 // =====================================================
@@ -122,13 +150,13 @@ router.put(
 
 // =====================================================
 // REVERSE EXPENSE
-// ADMIN ONLY (finance)
+// ADMIN + PRINCIPAL reverse directly; other staff submit
+// a request for approval.
 // =====================================================
 
 router.post(
     "/:id/reverse",
-    requireAdmin,
-    expenseController.reverseExpense
+    financeReverse.reverseExpense
 );
 
 

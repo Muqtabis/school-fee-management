@@ -737,3 +737,140 @@ a:focus-visible {
         padding-bottom: 78px;
     }
 }
+
+/* ============================================================
+   GLOBAL RESPONSIVE HARDENING LAYER  (all pages + all forms)
+   ------------------------------------------------------------
+   Loaded last so these rules win. Fixes cross-cutting issues:
+   iOS input zoom, 44px touch targets, safe-area insets,
+   horizontal overflow, long-text containment, mobile modals,
+   scrollbar-width parity, touch-active feedback.
+   Mobile-first: base rules apply everywhere; min-width queries
+   relax constraints for tablet/desktop.
+   ============================================================ */
+
+/* ---------- 1. Prevent iOS auto-zoom on focus (inputs <16px zoom the page) ---------- */
+@media (pointer: coarse) {
+    input, select, textarea,
+    .form-group input, .form-group select, .form-group textarea,
+    .search-input, .filter-select, .filter-date {
+        font-size: 16px !important;   /* iOS Safari zooms any control below 16px */
+    }
+}
+
+/* ---------- 2. Minimum 44x44px touch targets on touch devices ---------- */
+@media (pointer: coarse) {
+    button, .primary-btn, .cancel-btn, .save-btn, .edit-btn,
+    .delete-btn, .receipt-btn, .clear-btn,
+    .exam-tab, .att-badge[role="button"],
+    input[type="button"], input[type="submit"], input[type="reset"] {
+        min-height: 44px;
+        min-width: 44px;
+    }
+    /* Keep visual size of checkboxes/radios but enlarge the tap area via the label. */
+    input[type="checkbox"], input[type="radio"] {
+        width: 18px;
+        height: 18px;
+    }
+    label:has(input[type="checkbox"]), label:has(input[type="radio"]) {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+    }
+}
+
+/* ---------- 3. Long-text / dynamic-content containment (no overflow) ---------- */
+html, body, #root {
+    max-width: 100%;
+    overflow-x: hidden;              /* safety net; inner scroll areas still work */
+}
+.page-content, .settings-card, .report-panel,
+.table-container, .student-modal, .payment-modal, .modal-overlay > div {
+    min-width: 0;
+    max-width: 100%;
+}
+/* Wrap long words / URLs / names inside cells, cards and badges. */
+td, th, .report-summary-card, .dashboard-card,
+.settings-card, .app-dialog-message, .att-badge, .payment-badge {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+img, svg, video, canvas, table {
+    max-width: 100%;
+}
+table { border-collapse: collapse; }
+
+/* ---------- 4. Native-feeling scroll / momentum on touch ---------- */
+.table-container, .modal-overlay, .page-content {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* ---------- 5. Mobile: safe-area insets + full-screen-friendly modals ---------- */
+@media (max-width: 640px) {
+    .page-content {
+        padding-left: calc(14px + env(safe-area-inset-left, 0px));
+        padding-right: calc(14px + env(safe-area-inset-right, 0px));
+        padding-top: calc(18px + env(safe-area-inset-top, 0px));
+        padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px) + 78px);
+    }
+    .modal-overlay {
+        padding: calc(8px + env(safe-area-inset-top, 0px))
+                 calc(8px + env(safe-area-inset-right, 0px))
+                 calc(8px + env(safe-area-inset-bottom, 0px))
+                 calc(8px + env(safe-area-inset-left, 0px));
+    }
+    .modal-overlay > div,
+    .student-modal, .payment-modal,
+    .settings-card[role="dialog"], .overlay-dialog-content {
+        width: 100%;
+        max-width: 100%;
+        max-height: calc(100dvh - 16px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+        border-radius: 12px;
+    }
+    /* Forms become single column on phones; inputs full width. */
+    .exam-form-grid, .exam-correction-grid,
+    .payment-form > div[style*="grid"], .report-filters,
+    .settings-grid, .filters-grid {
+        grid-template-columns: 1fr !important;
+    }
+    input, select, textarea, .search-input, .filter-select, .filter-date {
+        width: 100%;
+    }
+}
+
+/* ---------- 6. Touch feedback replaces hover on touch devices ---------- */
+@media (hover: none) {
+    .primary-btn:active, .cancel-btn:active, .save-btn:active,
+    .edit-btn:active, .delete-btn:active, .receipt-btn:active,
+    .exam-tab:active, .exam-chip:active {
+        opacity: 0.78;
+        transform: scale(0.98);
+    }
+    /* Any hover-only reveal is forced visible on touch. */
+    .hover-reveal, [class*="on-hover"] { opacity: 1 !important; visibility: visible !important; }
+}
+
+/* ---------- 7. Scrollbar-width parity (Windows classic vs Mac overlay) ---------- */
+html {
+    scrollbar-gutter: stable;   /* reserve gutter so layout width matches across OSes */
+}
+
+/* ---------- 8. Fluid type scaling for long viewports / ultrawide ---------- */
+@media (min-width: 1536px) {
+    .page-content { max-width: 1600px; margin-inline: auto; }
+}
+@media (max-height: 480px) and (orientation: landscape) {
+    .modal-overlay > div, .student-modal, .payment-modal {
+        max-height: calc(100dvh - 12px);
+    }
+}
+
+/* ---------- 9. Respect reduced motion (all animated surfaces) ---------- */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+

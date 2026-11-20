@@ -72,6 +72,11 @@ router.delete("/grading-scales/:id", examAdmin, gradingController.deleteGradingS
 // so any of those page grants opens it.
 router.get("/definitions", requireRole("admin", "teacher", "supporting_teacher", "principal", "manager"), requireAnyPage("marks_entry", "exam_results", "results_overview"), examController.getExamDefinitions);
 router.get("/definitions/:definitionId", examAdmin, examController.getExamDefinition);
+router.put(
+    "/definitions/:definitionId",
+    requireRole("admin", "principal"),
+    examController.updateExamDefinition
+);
 
 // A student's structured result history across exams.
 router.get("/students/:studentId/results", examAdmin, resultController.getStudentResultHistory);

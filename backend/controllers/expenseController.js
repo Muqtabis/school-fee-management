@@ -474,6 +474,21 @@ exports.updateExpense = (
 
             }
 
+            if (
+                Number(expense.editCount || 0) >= 1
+            ) {
+
+                return res.status(409).json({
+
+                    success: false,
+
+                    message:
+                        "This expense has already been edited once."
+
+                });
+
+            }
+
 
             db.run(
                 `
@@ -486,7 +501,8 @@ exports.updateExpense = (
                     expenseDate = ?,
                     paymentMode = ?,
                     paidTo = ?,
-                    description = ?
+                    description = ?,
+                    editCount = COALESCE(editCount, 0) + 1
 
                 WHERE id = ?
                 `,

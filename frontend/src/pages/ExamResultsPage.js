@@ -1,12 +1,14 @@
 import { toast } from "../services/notify";
 import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext";
+import useUnsavedGuard from "../hooks/useUnsavedGuard";
 
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import api from "../services/api";
 import ExamDetail from "../components/exam/ExamDetail";
 import GradingScalesManager from "../components/exam/GradingScalesManager";
-import { ASSESSMENT_SLOTS, assessmentSlot, examTypeLabel, examCategoryLabel, STATUS_LABEL } from "../components/exam/examConstants";
+import { ASSESSMENT_SLOTS, assessmentSlot, examTypeLabel, examCategoryLabel, STATUS_LABEL, EXAM_TYPES, EXAM_CATEGORIES, TERM_OPTIONS } from "../components/exam/examConstants";
 
 
 // =====================================================
@@ -19,12 +21,18 @@ import { ASSESSMENT_SLOTS, assessmentSlot, examTypeLabel, examCategoryLabel, STA
 // =====================================================
 
 function ExamResultsPage() {
+    const { user } = useAuth();
+    // Only admin / principal may edit exam definitions.
+    const canEditExam = user?.role === "admin" || user?.role === "principal";
 
     const [definitions, setDefinitions] = useState([]);
     const [classes, setClasses] = useState([]);
     const [years, setYears] = useState([]);
     const [scales, setScales] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    // The exam form is strictly bound to the ACTIVE academic year.
+    const activeYear = years.find((y) => y.status === "active") || null;
 
     const [openDef, setOpenDef] = useState(null); // opened definition -> detail view
     const [showGrading, setShowGrading] = useState(false);
@@ -41,6 +49,7 @@ function ExamResultsPage() {
     const [treatAsFinal, setTreatAsFinal] = useState(false);
     const [selectedClasses, setSelectedClasses] = useState([]);
     const [creating, setCreating] = useState(false);
+    useUnsavedGuard(Boolean(form.examName.trim() || selectedClasses.length > 0));
 
 
     const loadDefinitions = useCallback(async () => {
@@ -120,7 +129,7 @@ function ExamResultsPage() {
                 examCategory: isFinalExam ? "final" : slot.examCategory,
                 term: slot.term,
                 weightage: form.weightage === "" ? null : Number(form.weightage),
-                academicYearId: form.academicYearId || null,
+                academicYearId: activeYear?.id || null,
                 startDate: form.startDate || null,
                 endDate: form.endDate || null,
                 gradingScaleId: form.gradingScaleId || null,
@@ -145,6 +154,84 @@ function ExamResultsPage() {
         }
     };
 
+
+    // ---- Edit exam (admin / principal only) — same form as create ----
+    const [editingDef, setEditingDef] = useState(null);
+    const [editForm, setEditForm] = useState({});
+    const [editNameTouched, setEditNameTouched] = useState(false);
+    const [editTreatAsFinal, setEditTreatAsFinal] = useState(false);
+    const [editSelectedClasses, setEditSelectedClasses] = useState([]);
+    const [savingEdit, setSavingEdit] = useState(false);
+
+    const openEdit = (d) => {
+        // Map the saved definition back to an assessment slot.
+        let slot = "t1_fa1";
+        const isFinal = d.examType === "final" || d.examCategory === "final";
+        if (isFinal) slot = "t2_sa";
+        else if (d.examCategory === "term") slot = d.term === "term_2" ? "t2_sa" : "t1_sa";
+        else slot = d.term === "term_2" ? "t2_fa3" : "t1_fa1";
+        setEditForm({
+            slot,
+            examName: d.name || "",
+            weightage: d.weightage === null || d.weightage === undefined ? "" : String(d.weightage),
+            gradingScaleId: d.gradingScaleId || "",
+            startDate: d.startDate || "",
+            endDate: d.endDate || ""
+        });
+        setEditNameTouched(true);
+        setEditTreatAsFinal(isFinal);
+        setEditSelectedClasses((d.classes || []).map((c) => c.className));
+        setEditingDef(d);
+    };
+
+    const changeEditSlot = (slotValue) => {
+        const slot = assessmentSlot(slotValue);
+        setEditForm((prev) => ({
+            ...prev,
+            slot: slotValue,
+            examName: editNameTouched ? prev.examName : slot.defaultName
+        }));
+        setEditTreatAsFinal(false);
+    };
+
+    const toggleEditClass = (name) => {
+        setEditSelectedClasses((prev) =>
+            prev.includes(name) ? prev.filter((c) => c !== name) : [...prev, name]
+        );
+    };
+
+    const saveEdit = async (e) => {
+        e.preventDefault();
+        if (!editForm.examName.trim()) return toast("Enter an exam name.");
+        if (editSelectedClasses.length === 0) return toast("Select at least one class.");
+        try {
+            setSavingEdit(true);
+            const slot = assessmentSlot(editForm.slot);
+            const isFinalExam = editTreatAsFinal && slot.value === "t2_sa";
+            const res = await api.put(`/exams/definitions/${editingDef.id}`, {
+                examName: editForm.examName.trim(),
+                examType: isFinalExam ? "final" : slot.examType,
+                examCategory: isFinalExam ? "final" : slot.examCategory,
+                term: slot.term,
+                weightage: editForm.weightage === "" ? null : Number(editForm.weightage),
+                academicYearId: activeYear?.id || null,
+                gradingScaleId: editForm.gradingScaleId || null,
+                startDate: editForm.startDate || null,
+                endDate: editForm.endDate || null,
+                classNames: editSelectedClasses
+            });
+            const skipped = res.data?.skipped || [];
+            let msg = res.data?.message || "Exam updated successfully.";
+            if (skipped.length) msg += "\n\nSkipped:\n" + skipped.map((s) => "• " + s.className + ": " + s.reason).join("\n");
+            toast(msg);
+            setEditingDef(null);
+            loadDefinitions();
+        } catch (error) {
+            toast(error.response?.data?.message || "Unable to update exam.");
+        } finally {
+            setSavingEdit(false);
+        }
+    };
 
     // ---- Detail view ----
     if (openDef) {
@@ -216,10 +303,12 @@ function ExamResultsPage() {
                                     />
                                 </label>
                                 <label>Academic year
-                                    <select value={form.academicYearId} onChange={(e) => setForm({ ...form, academicYearId: e.target.value })}>
-                                        <option value="">— None —</option>
-                                        {years.map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}
-                                    </select>
+                                    <input
+                                        value={activeYear ? activeYear.name : "No active year configured"}
+                                        readOnly
+                                        title="Exams are always created in the active academic year"
+                                        style={{ backgroundColor: "#f1f5f9", cursor: "not-allowed" }}
+                                    />
                                 </label>
                                 <label>Grading scale
                                     <select value={form.gradingScaleId} onChange={(e) => setForm({ ...form, gradingScaleId: e.target.value })}>
@@ -287,7 +376,7 @@ function ExamResultsPage() {
                                 </div>
                             </div>
 
-                            <button type="submit" className="primary-btn" disabled={creating}>
+                            <button type="submit" className="primary-btn" disabled={creating || !activeYear}>
                                 {creating ? "Creating..." : `Create Exam${selectedClasses.length > 1 ? ` (${selectedClasses.length} classes)` : ""}`}
                             </button>
                         </form>
@@ -326,6 +415,11 @@ function ExamResultsPage() {
                                             ))}
                                         </td>
                                         <td>
+                                            {canEditExam && (
+                                                <button type="button" className="edit-btn" style={{ marginRight: "8px" }} onClick={() => openEdit(d)}>
+                                                    Edit
+                                                </button>
+                                            )}
                                             <button type="button" className="primary-btn" onClick={() => setOpenDef(d)}>
                                                 Open
                                             </button>
@@ -335,6 +429,87 @@ function ExamResultsPage() {
                             </tbody>
                         </table>
                     </div>
+
+                    {/* EDIT EXAM MODAL (admin / principal only) */}
+                    {editingDef && canEditExam && (
+                        <div className="modal-overlay" onClick={() => setEditingDef(null)}>
+                            <div className="settings-card" role="dialog" aria-modal="true"
+                                 style={{ width: "min(92vw, 620px)", maxHeight: "88vh", overflowY: "auto", position: "relative" }}
+                                 onClick={(e) => e.stopPropagation()}>
+                                <button type="button" className="close-btn" onClick={() => setEditingDef(null)}
+                                        style={{ position: "absolute", top: "12px", right: "12px" }}>✕</button>
+                                <h3 style={{ margin: 0 }}>Edit Exam</h3>
+                                <p style={{ color: "#666", marginTop: "6px" }}>
+                                    Editing “{editingDef.name}”. Changes apply to all its classes.
+                                </p>
+                                                                <form onSubmit={saveEdit} style={{ marginTop: "16px" }}>
+                                    <div className="exam-form-grid">
+                                        <label>Exam name
+                                            <input value={editForm.examName || ""}
+                                                onChange={(e) => { setEditNameTouched(true); setEditForm({ ...editForm, examName: e.target.value }); }}
+                                                placeholder="e.g. Summative Assessment 1, 2026" required />
+                                        </label>
+                                        <label>Assessment
+                                            <select value={editForm.slot || "t1_sa"} onChange={(e) => changeEditSlot(e.target.value)}>
+                                                {ASSESSMENT_SLOTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                                            </select>
+                                        </label>
+                                        <label>Weightage
+                                            <input type="number" min="0" step="1" value={editForm.weightage || ""}
+                                                onChange={(e) => setEditForm({ ...editForm, weightage: e.target.value })}
+                                                placeholder={assessmentSlot(editForm.slot || "t1_sa").examCategory === "unit_test" ? "default 15" : "default 20"}
+                                                disabled={editTreatAsFinal} />
+                                        </label>
+                                        <label>Academic year
+                                            <input value={activeYear ? activeYear.name : "No active year configured"} readOnly
+                                                title="Exams always belong to the active academic year"
+                                                style={{ backgroundColor: "#f1f5f9", cursor: "not-allowed" }} />
+                                        </label>
+                                        <label>Grading scale
+                                            <select value={editForm.gradingScaleId || ""} onChange={(e) => setEditForm({ ...editForm, gradingScaleId: e.target.value })}>
+                                                <option value="">Default</option>
+                                                {scales.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                            </select>
+                                        </label>
+                                        <label>Start date
+                                            <input type="date" value={editForm.startDate || ""} onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} />
+                                        </label>
+                                        <label>End date
+                                            <input type="date" value={editForm.endDate || ""} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} />
+                                        </label>
+                                    </div>
+                                    {assessmentSlot(editForm.slot || "t1_sa").value === "t2_sa" && (
+                                        <label style={{ display: "flex", alignItems: "center", gap: "8px", margin: "12px 0 0", fontSize: "13px", cursor: "pointer" }}>
+                                            <input type="checkbox" checked={editTreatAsFinal} onChange={(e) => setEditTreatAsFinal(e.target.checked)} style={{ width: "16px", height: "16px" }} />
+                                            <span>Treat this SA2 as the year's <strong>Final exam</strong> — its card combines <strong>Term I + Term II</strong>.</span>
+                                        </label>
+                                    )}
+                                    <p style={{ fontSize: "12px", color: "#777", margin: "10px 0 0" }}>
+                                        The <strong>Assessment</strong> picks the exam name automatically (still editable). Classes with marks already entered are kept even if deselected.
+                                    </p>
+                                    <div style={{ margin: "14px 0" }}>
+                                        <div style={{ fontSize: "13px", color: "#555", marginBottom: "8px" }}>Classes</div>
+                                        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                                            {classes.length === 0 ? (
+                                                <span style={{ color: "#b45309" }}>No classes found.</span>
+                                            ) : classes.map((c) => (
+                                                <label key={c} className={"exam-chip" + (editSelectedClasses.includes(c) ? " exam-chip-active" : "")}>
+                                                    <input type="checkbox" checked={editSelectedClasses.includes(c)} onChange={() => toggleEditClass(c)} style={{ marginRight: "6px" }} />
+                                                    {c}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div style={{ display: "flex", gap: "10px", marginTop: "18px" }}>
+                                        <button type="submit" className="primary-btn" disabled={savingEdit || !activeYear}>
+                                            {savingEdit ? "Saving..." : "Save Changes"}
+                                        </button>
+                                        <button type="button" className="cancel-btn" onClick={() => setEditingDef(null)}>Cancel</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

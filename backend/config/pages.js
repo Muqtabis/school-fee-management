@@ -24,6 +24,12 @@ const PAGES = [
         description: "Main overview with key metrics, summaries, and quick actions."
     },
     {
+        key: "archived_students",
+        label: "Archived Students",
+        path: "/archived-students",
+        description: "View archived students, restore them, and access their transfer certificates."
+    },
+    {
         key: "students",
         label: "Students",
         path: "/students",
@@ -64,6 +70,12 @@ const PAGES = [
         label: "Reports",
         path: "/reports",
         description: "Generate comprehensive financial and student attendance reports."
+    },
+    {
+        key: "defaulters",
+        label: "Fee Defaulters",
+        path: "/defaulters",
+        description: "Students with outstanding fee balances and contact details."
     },
     {
         key: "notifications",
@@ -112,6 +124,12 @@ const PAGES = [
         label: "Student Attendance",
         path: "/student-attendance",
         description: "Mark and track student attendance by class and date."
+    },
+    {
+        key: "transfer_certificate",
+        label: "Transfer Certificate",
+        path: "/transfer-certificate",
+        description: "Generate and print transfer certificates for students."
     },
     {
         key: "exam_results",

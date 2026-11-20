@@ -1,0 +1,338 @@
+/* ============================================================
+   UI POLISH LAYER — skeletons, accessibility, density, print,
+   empty states, colour-blind-safe status cues. Loaded last.
+   ============================================================ */
+
+/* ---------- 1. Skeleton loaders ---------- */
+.skel {
+    background: linear-gradient(90deg, var(--surface-soft, #eef1f4) 25%, #e3e8ed 50%, var(--surface-soft, #eef1f4) 75%);
+    background-size: 200% 100%;
+    animation: skelShimmer 1.3s linear infinite;
+    border-radius: 8px;
+}
+@keyframes skelShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.skel-card { padding: 16px; border: 1px solid var(--border, #d9e0e6); border-radius: 10px; background: var(--surface, #fff); }
+.skel-line { height: 12px; margin: 8px 0; }
+.skel-line.short { width: 55%; }
+.skel-line.tall { height: 22px; }
+.skel-block { height: 90px; margin-bottom: 10px; }
+
+/* ---------- 2. Focus rings + skip link ---------- */
+:where(a, button, input, select, textarea):focus-visible {
+    outline: 3px solid var(--gold, #a9824b);
+    outline-offset: 2px;
+}
+.skip-link {
+    position: fixed;
+    top: -60px;
+    left: 12px;
+    z-index: 3000;
+    padding: 10px 16px;
+    border-radius: 8px;
+    background: var(--navy, #243447);
+    color: #fff;
+}
+.skip-link:focus { top: 12px; }
+
+/* ---------- 3. Colour-blind-safe status cues (add icons, not just colour) ---------- */
+.att-present::before { content: "✓ "; }
+.att-absent::before { content: "✕ "; }
+.att-half::before { content: "◐ "; }
+.att-leave::before { content: "⏾ "; }
+.exam-badge-open::before { content: "○ "; }
+.exam-badge-locked::before { content: "◔ "; }
+.exam-badge-published::before { content: "● "; }
+
+/* ---------- 4. Density toggle ---------- */
+body.density-compact .dashboard-table td,
+body.density-compact .dashboard-table th,
+body.density-compact .stack-sm td,
+body.density-compact .stack-sm th { padding: 5px 8px !important; font-size: 12px; }
+body.density-compact .table-container { padding: 8px; }
+
+/* ---------- 5. Sticky quick-action bars on mobile ---------- */
+@media (max-width: 768px) {
+    .sticky-actions {
+        position: sticky;
+        bottom: 0;
+        z-index: 30;
+        display: flex;
+        gap: 8px;
+        padding: 10px 0;
+        background: var(--background, #f5f7f9);
+    }
+    .sticky-actions > * { flex: 1; min-height: 44px; }
+}
+
+/* ---------- 6. Empty states with clear CTA styling ---------- */
+.empty-state {
+    padding: 36px 16px;
+    text-align: center;
+    color: var(--text-secondary, #607080);
+}
+.empty-state .empty-icon { font-size: 34px; display: block; margin-bottom: 8px; }
+.empty-state strong { display: block; color: var(--text, #263238); margin-bottom: 4px; }
+.empty-state button { min-height: 44px; margin-top: 12px; }
+
+/* ---------- 7. Print-friendly views ---------- */
+@media print {
+    .sidebar, .navbar, .exam-tabbar, .page-header button,
+    .p-mobile-cta, .m-tabbar, .m-appbar, .m-fab,
+    .action-buttons, .modal-overlay { display: none !important; }
+    .main-content, .m-app { margin: 0 !important; padding: 0 !important; }
+    .page-content, .m-main { padding: 0 !important; }
+    table { width: 100%; border-collapse: collapse; }
+    .report-panel, .settings-card { border: 1px solid #ccc; box-shadow: none; break-inside: avoid; }
+    body { background: #fff; color: #000; }
+}
+
+/* ---------- 8. Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+    .skel { animation: none; }
+}
+
+/* ---------- Command palette ---------- */
+.cmd-backdrop {
+    position: fixed; inset: 0; z-index: 2500;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: min(14vh, 120px) 14px 14px;
+}
+.cmd-panel {
+    width: min(92vw, 620px);
+    background: var(--surface, #fff);
+    border-radius: 14px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+}
+.cmd-input {
+    width: 100%; min-height: 56px;
+    padding: 14px 18px; font-size: 16px;
+    border: 0; border-bottom: 1px solid var(--border, #d9e0e6);
+    background: var(--surface, #fff); color: var(--text, #263238);
+}
+.cmd-body { max-height: min(60vh, 460px); overflow-y: auto; padding: 8px; }
+.cmd-label {
+    padding: 8px 10px 4px; font-size: 10px; font-weight: 800;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-secondary, #89939d);
+}
+.cmd-item {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    min-height: 44px; padding: 10px 12px; border: 0; border-radius: 9px;
+    background: transparent; color: var(--text, #263238);
+    font-size: 14px; font-weight: 600; text-align: left;
+}
+.cmd-item:hover, .cmd-item:focus-visible { background: var(--surface-soft, #f3f5f7); }
+.cmd-item small { margin-left: auto; color: var(--text-secondary, #89939d); font-size: 11px; }
+.cmd-empty { padding: 28px 12px; text-align: center; color: var(--text-secondary, #89939d); }
+
+/* ---------- Offline banner ---------- */
+.offline-banner {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 3000;
+    padding: 8px 14px; text-align: center;
+    background: #b3261e; color: #fff; font-size: 13px; font-weight: 600;
+}
+
+/* ---------- Pull-to-refresh indicator ---------- */
+.ptr-indicator {
+    position: fixed; top: -60px; left: 0; right: 0; z-index: 2900;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    height: 48px; background: var(--navy, #243447); color: #fff; font-size: 13px;
+    transition: transform 0.15s ease;
+}
+.ptr-indicator.active { transform: translateY(60px); }
+
+
+/* Swipe-to-reveal row actions (mobile) */
+@media (hover: none) and (max-width: 768px) {
+    .table-container tr { transition: transform 0.18s ease; }
+    .table-container tr.swipe-open { transform: translateX(-88px); }
+    .table-container tr .swipe-actions {
+        display: none;
+    }
+    .table-container tr.swipe-open .swipe-actions {
+        display: inline-flex;
+        gap: 4px;
+    }
+}
+
+
+/* Two-line search results: title + real description from the page registry */
+.cmd-item-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.cmd-item-text strong { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmd-item-text small { font-size: 11px; font-weight: 400; color: var(--text-secondary, #89939d); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+
+/* Selected row highlight on Transfer Certificate student picker */
+tr.tc-selected { background: var(--gold-light, #f6f0e6) !important; }
+tr.tc-selected td { font-weight: 700; }
+
+
+/* ============================================================
+   TRANSFER CERTIFICATE — responsive layout
+   Laptop: two columns (picker | details). Mobile: stacked,
+   certificate details directly below the selected student card.
+   NO internal scrolling — the page scrolls naturally.
+   ============================================================ */
+.tc-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+    width: 100%;
+    max-width: 1180px;
+}
+@media (min-width: 1024px) {
+    .tc-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+}
+.tc-panel { min-width: 0; max-width: 100%; }
+
+/* Search + filters */
+.tc-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.tc-filters select { flex: 1; min-width: 140px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--border, #d9e0e6); border-radius: 8px; background: var(--surface, #fff); color: var(--text, #263238); font-size: 15px; }
+.tc-count { margin: 12px 0 8px; font-size: 12px; font-weight: 700; color: var(--text-secondary, #607080); }
+
+/* Student list — clickable rows, no internal scroll */
+.tc-list { display: flex; flex-direction: column; gap: 8px; }
+.tc-student-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    width: 100%; min-height: 56px; padding: 10px 12px;
+    border: 1px solid var(--border, #d9e0e6); border-radius: 10px;
+    background: var(--surface, #fff); color: var(--text, #263238);
+    text-align: left; cursor: pointer;
+}
+.tc-student-row:active { transform: scale(0.99); }
+.tc-student-row:hover { border-color: var(--gold, #a9824b); }
+.tc-student-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tc-student-main strong { font-size: 14px; overflow-wrap: anywhere; }
+.tc-student-main small { font-size: 11px; color: var(--text-secondary, #607080); }
+.tc-student-action { flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--gold, #a9824b); }
+.tc-student-row.tc-selected { background: var(--gold-light, #f6f0e6); border-color: var(--gold, #a9824b); }
+
+/* Selected student card */
+.tc-selected-card {
+    padding: 14px; border-radius: 10px;
+    border: 1px solid var(--gold, #a9824b);
+    background: var(--gold-light, #f6f0e6);
+    font-size: 15px; overflow-wrap: anywhere;
+}
+.tc-chip { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; background: var(--surface, #fff); font-size: 11px; font-weight: 700; }
+.tc-selected-sub { margin-top: 6px; font-size: 12px; color: var(--text-secondary, #607080); }
+.tc-hint { padding: 16px; border-radius: 10px; background: var(--surface-soft, #f3f5f7); color: var(--text-secondary, #607080); font-size: 13px; }
+.tc-section-title { margin: 18px 0 8px; font-size: 15px; }
+
+/* Profile + fee detail grids */
+.tc-detail-grid, .tc-fee-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.tc-detail-grid > div, .tc-fee-grid > div {
+    padding: 8px 10px; border: 1px solid var(--border-light, #e9edf1); border-radius: 8px;
+    display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.tc-detail-grid span, .tc-fee-grid span { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary, #607080); }
+.tc-detail-grid strong, .tc-fee-grid strong { font-size: 13px; overflow-wrap: anywhere; }
+.tc-full { grid-column: 1 / -1; }
+.tc-fee-items { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.tc-fee-items > div { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; padding: 4px 6px; border-bottom: 1px solid var(--border-light, #e9edf1); }
+
+/* Concession */
+.tc-concession { margin-top: 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tc-concession-current { font-size: 12px; color: var(--text-secondary, #607080); }
+.tc-concession-form { margin-top: 10px; padding: 12px; border-radius: 10px; background: var(--surface-soft, #f3f5f7); display: flex; flex-direction: column; gap: 10px; }
+.tc-concession-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; }
+.tc-concession-form input, .tc-concession-form select { min-height: 44px; font-size: 16px; padding: 8px 10px; border: 1px solid var(--border, #d9e0e6); border-radius: 8px; background: var(--surface, #fff); color: var(--text, #263238); }
+
+/* Certificate form + download */
+.tc-actions { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
+.tc-actions button { min-height: 44px; }
+
+@media (max-width: 768px) {
+    .tc-layout { gap: 14px; }
+    .tc-filters select { min-width: 0; }
+    .tc-actions button { width: 100%; }
+    .exam-form-grid { grid-template-columns: 1fr !important; }
+}
+@media (max-width: 640px) {
+    .tc-panel { padding: 14px; }
+    .tc-detail-grid, .tc-fee-grid { grid-template-columns: 1fr 1fr; }
+    .tc-student-row { min-height: 60px; }
+}
+
+/* TC filters — wrap cleanly inside a half-width panel (not payment-filters 6-col grid) */
+.tc-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.tc-filters .search-input { flex: 1 1 100%; min-width: 0; }
+.tc-filters .filter-select { flex: 1 1 130px; min-width: 0; }
+.tc-filters .clear-btn { flex: 0 0 auto; }
+/* Student table fits inside the panel — no horizontal overflow/overlap */
+.tc-panel .table-container { width: 100%; overflow-x: auto; }
+.tc-panel .table-container table { min-width: 0; width: 100%; }
+/* No details card until a student is selected: full-width single column */
+.tc-layout-single { grid-template-columns: 1fr !important; }
+
+
+/* Mobile: details appear inline right after the selected student row.
+   Desktop: details stay in the right column; the inline row is hidden. */
+.tc-inline-details-row { display: none; }
+@media (max-width: 768px) {
+    .tc-details-desktop { display: none !important; }
+    .tc-inline-details-row { display: table-row !important; }
+    /* stack-sm reflows tr into a card; make the inline cell a plain container */
+    .tc-inline-details-row td { display: block !important; width: 100% !important; padding: 0 !important; border: 0 !important; }
+    .tc-inline-details-row td::before { content: none !important; }
+    .tc-details-inline { padding: 14px; }
+    .tc-details-inline .tc-section-title:first-child { margin-top: 0; }
+}
+@media (min-width: 769px) {
+    .tc-details-inline { display: none !important; }
+}
+
+
+/* Overall balance highlight on TC page */
+.tc-overall-balance {
+    margin-top: 10px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border, #d9e0e6);
+    background: var(--surface-soft, #f3f5f7);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+.tc-overall-balance span { font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary, #607080); }
+.tc-overall-balance strong { font-size: 22px; font-family: var(--font-display, Georgia, serif); }
+
+
+/* TC amount-collecting section (replaces concession on TC page) */
+.tc-amount-collect { margin-top: 16px; padding: 14px; border-radius: 10px; border: 1px solid var(--gold, #a9824b); background: var(--gold-light, #f6f0e6); }
+.tc-amount-collect label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 700; color: var(--text-secondary, #607080); }
+.tc-amount-collect input { min-height: 44px; font-size: 16px; padding: 8px 10px; border: 1px solid var(--border, #d9e0e6); border-radius: 8px; background: var(--surface, #fff); color: var(--text, #263238); }
+.tc-amount-remaining { margin-top: 10px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.tc-amount-remaining strong { font-size: 18px; }
+/* Pinned read-only TC Concession panel on Fee Concessions page */
+.tc-concession-panel { margin-bottom: 18px; }
+.tc-concession-panel h3 { margin-bottom: 4px; }
+.tc-concession-note { font-size: 12px; color: var(--text-secondary, #607080); margin-bottom: 10px; }
+
+
+/* Tab visibility helper (Fee Concessions / TC Concession) */
+.hidden-section { display: none !important; }
+
+
+/* ============================================================
+   PHONE: hard-coded INLINE grids (no class) can't be reached by
+   the normal .cards/.report-cards media queries. Collapse them
+   to auto-fitting columns so money values, the profile/receipt
+   tables and multi-field form rows never get crushed or clipped.
+   Scoped under .m-app so desktop/tablet is completely unaffected.
+   ============================================================ */
+@media (max-width: 640px) {
+    .m-app [style*="grid-template-columns"] {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)) !important;
+    }
+    /* "span 3" address/remark cells assume a 3-col grid — reset on phones */
+    .m-app .overlay-dialog-content [style*="grid-column"] {
+        grid-column: auto !important;
+    }
+    /* Let .stack-sm reflow timetable rows into cards (inline min-width won) */
+    .m-app table.stack-sm { min-width: 0 !important; }
+}
+

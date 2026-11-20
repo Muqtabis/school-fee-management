@@ -40,6 +40,23 @@ function updateConcessionFields(id, { concessionAmount, concessionReason, studen
 // =====================================================
 // LIST CONCESSIONS (active students with concession > 0)
 // =====================================================
+// READ-ONLY: TC concession records — remaining amounts from issued TCs.
+// No add/edit/delete. Any user with the fee_concessions page can view.
+exports.getTCConcessions = (req, res) => {
+    const year = String(req.query.academicYear || "").trim();
+    const sql = `SELECT studentName, className, rollNumber, academicYear,
+                        amountCollected, remainingAmount, balance, issuedAt
+                 FROM transfer_certificates
+                 ${year ? "WHERE academicYear = ?" : ""}
+                 ORDER BY issuedAt DESC, id DESC`;
+    const db = require("../db");
+    db.all(sql, year ? [year] : [], (err, rows) => {
+        if (err) return res.status(500).json({ success: false, message: "Unable to load TC concessions." });
+        const years = [...new Set((rows || []).map(r => r.academicYear).filter(Boolean))].sort();
+        res.json({ success: true, records: rows || [], academicYears: years });
+    });
+};
+
 exports.getConcessions = (req, res) => {
     const { className, category } = req.query;
 

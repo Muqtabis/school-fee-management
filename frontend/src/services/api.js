@@ -28,7 +28,16 @@ api.interceptors.request.use((config) => {
 //    still valid — do NOT log the user out. Let the calling page surface an
 //    "access denied" message instead of bouncing to /login.
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Light haptic feedback on successful write actions (touch devices).
+    try {
+      const m = (response.config?.method || "get").toLowerCase();
+      if (["post", "put", "patch", "delete"].includes(m) && navigator.vibrate) {
+        navigator.vibrate(12);
+      }
+    } catch (e) { /* haptics optional */ }
+    return response;
+  },
   (error) => {
     const isLoginRequest =
       error.config && error.config.url && error.config.url.includes("/auth/login");
