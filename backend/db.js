@@ -882,11 +882,39 @@ async function runInitializeDatabase() {
         await seedGradingScale();
         await backfillExamDefinitions();
         await backfillSubjectTeachers();
+
+        // TC records — create on every DB, including fresh / older installs
+        // that never had the table. Columns below backfill legacy schemas.
+        await run(`
+            CREATE TABLE IF NOT EXISTS transfer_certificates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                studentId INTEGER NOT NULL,
+                studentName TEXT,
+                className TEXT,
+                rollNumber TEXT,
+                admissionNumber TEXT,
+                fatherName TEXT,
+                academicYear TEXT,
+                reason TEXT,
+                leavingDate TEXT,
+                conduct TEXT,
+                totalDemand REAL DEFAULT 0,
+                concession REAL DEFAULT 0,
+                totalPaid REAL DEFAULT 0,
+                balance REAL DEFAULT 0,
+                issuedBy INTEGER,
+                issuedAt TEXT,
+                amountCollected REAL DEFAULT 0,
+                remainingAmount REAL DEFAULT 0,
+                paymentId INTEGER,
+                FOREIGN KEY(studentId) REFERENCES students(id)
+            )
+        `);
         await addColumnIfMissing("transfer_certificates", "amountCollected", "REAL DEFAULT 0");
-    await addColumnIfMissing("transfer_certificates", "remainingAmount", "REAL DEFAULT 0");
-    await addColumnIfMissing("transfer_certificates", "paymentId", "INTEGER");
-    await backfillTCCollections();
-    await createIndexes();
+        await addColumnIfMissing("transfer_certificates", "remainingAmount", "REAL DEFAULT 0");
+        await addColumnIfMissing("transfer_certificates", "paymentId", "INTEGER");
+        await backfillTCCollections();
+        await createIndexes();
 
         console.log("Database initialization completed.");
     } catch (error) {
