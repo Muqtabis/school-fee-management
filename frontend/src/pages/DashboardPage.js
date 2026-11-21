@@ -58,7 +58,6 @@ function DashboardPage() {
         tcCollected: 0
     });
 
-    const [prevDuesFollowUp, setPrevDuesFollowUp] = useState([]);
     const [recentPayments, setRecentPayments] = useState([]);
     const [recentExpenses, setRecentExpenses] = useState([]);
     const [activity, setActivity] = useState([]);
@@ -117,16 +116,6 @@ function DashboardPage() {
                 const recs = Array.isArray(tcRes.data?.records) ? tcRes.data.records : [];
                 tcConcededFee = recs.reduce((s, r) => s + Number(r.remainingAmount || 0), 0);
             } catch (e) { /* non-fatal: keep 0 */ }
-
-            // Follow-up list: students still carrying previous-year dues.
-            try {
-                const dues = await api.get("/concessions/previous-dues");
-                setPrevDuesFollowUp(
-                    (Array.isArray(dues.data) ? dues.data : [])
-                        .filter((s) => Number(s.remainingDues || 0) > 0)
-                        .sort((a, b) => Number(b.remainingDues || 0) - Number(a.remainingDues || 0))
-                );
-            } catch (e) { setPrevDuesFollowUp([]); }
 
             // Recent lists only exist for roles allowed to see
             // financial data; restricted roles skip these calls
@@ -296,32 +285,6 @@ function DashboardPage() {
                                 );
                             })}
                     </div>
-
-                    {/* Previous-dues follow-up — the real recovery list */}
-                    {canSeeFinancial && prevDuesFollowUp.length > 0 && (
-                        <div className="dashboard-table" style={{ marginTop: "20px" }}>
-                            <h3>Previous Dues — Follow Up</h3>
-                            <table className="stack-sm">
-                                <thead>
-                                    <tr><th>Student</th><th>Class</th><th>Dues</th><th>Conceded</th><th>Still To Collect</th><th style={{ textAlign: "right" }}>Action</th></tr>
-                                </thead>
-                                <tbody>
-                                    {prevDuesFollowUp.map((s) => (
-                                        <tr key={s.id}>
-                                            <td data-label="Student"><strong>{s.studentName || "-"}</strong></td>
-                                            <td data-label="Class">{s.className || "-"}</td>
-                                            <td data-label="Dues">{money(s.previousDues)}</td>
-                                            <td data-label="Conceded">{money(s.previousDuesConcession)}</td>
-                                            <td data-label="Still To Collect"><strong className="negative-balance">{money(s.remainingDues)}</strong></td>
-                                            <td data-label="Action" style={{ textAlign: "right" }}>
-                                                <button type="button" className="edit-btn" onClick={() => navigate("/fee-concessions", { state: { tab: "prevDues" } })}>Concede</button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
 
                     {/* Tables Section (financial roles only) */}
                     {canSeeFinancial && (

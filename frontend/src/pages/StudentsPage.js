@@ -429,6 +429,33 @@ function StudentsPage() {
                         </small>
                     </div>
 
+                    {/* Class-wise gender chart (fills the space below filters) */}
+                    <div className="settings-card gender-chart-card">
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                            <strong style={{ fontSize: 14 }}>Class-wise Gender Chart</strong>
+                            <span className="strength-chip" style={{ color: "#1D4ED8" }}>■ Boys {boysTotal}</span>
+                            <span className="strength-chip" style={{ color: "#BE185D" }}>■ Girls {girlsTotal}</span>
+                        </div>
+                        <div className="gender-chart-v">
+                            {sortedByClass.map((r) => {
+                                const b = Number(r.boys || 0), g = Number(r.girls || 0);
+                                const scale = Math.max(b, g, 1);
+                                const ticks = [0, Math.round(scale / 2), scale];
+                                return (
+                                    <div className="gender-chart-col" key={r.className} title={`${r.className} — Boys ${b}, Girls ${g}`}>
+                                        <div className="gender-chart-col-values">
+                                            <span className="v boys">{b}</span><span className="v girls">{g}</span>
+                                        </div>
+                                        <div className="gender-chart-col-bars">
+                                            <span className="grid-line" />
+                                            <span className="vbar boys" style={{ "--pct": (b / scale * 100) + "%" }} />
+                                            <span className="vbar girls" style={{ "--pct": (g / scale * 100) + "%" }} />
+                                        </div>
+                                        <span className="gender-chart-col-label">{r.className}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     {/* RIGHT COLUMN — filters + class gender chart */}
                     <div className="students-side-col">
                     <div className="settings-card filters-card">
@@ -471,33 +498,6 @@ function StudentsPage() {
                     </div>
                     </div>
 
-                    {/* Class-wise gender chart (fills the space below filters) */}
-                    <div className="settings-card gender-chart-card">
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-                            <strong style={{ fontSize: 14 }}>Class-wise Gender Chart</strong>
-                            <span className="strength-chip" style={{ color: "#1D4ED8" }}>■ Boys {boysTotal}</span>
-                            <span className="strength-chip" style={{ color: "#BE185D" }}>■ Girls {girlsTotal}</span>
-                        </div>
-                        <div className="gender-chart-v">
-                            {sortedByClass.map((r) => {
-                                const b = Number(r.boys || 0), g = Number(r.girls || 0);
-                                const scale = Math.max(b, g, 1);
-                                const ticks = [0, Math.round(scale / 2), scale];
-                                return (
-                                    <div className="gender-chart-col" key={r.className} title={`${r.className} — Boys ${b}, Girls ${g}`}>
-                                        <div className="gender-chart-col-values">
-                                            <span className="v boys">{b}</span><span className="v girls">{g}</span>
-                                        </div>
-                                        <div className="gender-chart-col-bars">
-                                            <span className="grid-line" />
-                                            <span className="vbar boys" style={{ "--pct": (b / scale * 100) + "%" }} />
-                                            <span className="vbar girls" style={{ "--pct": (g / scale * 100) + "%" }} />
-                                        </div>
-                                        <span className="gender-chart-col-label">{r.className}</span>
-                                    </div>
-                                );
-                            })}
-                        </div>
                     </div>
                     </div>
                     </div>
