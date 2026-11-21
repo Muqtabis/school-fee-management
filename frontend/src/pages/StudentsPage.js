@@ -429,7 +429,9 @@ function StudentsPage() {
                         </small>
                     </div>
 
-                    {/* Class-wise gender chart (fills the space below filters) */}
+                    <div className="students-side-col">
+
+                    {/* Class-wise gender chart (desktop only) */}
                     <div className="settings-card gender-chart-card">
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
                             <strong style={{ fontSize: 14 }}>Class-wise Gender Chart</strong>
@@ -456,8 +458,9 @@ function StudentsPage() {
                                 );
                             })}
                         </div>
-                    {/* RIGHT COLUMN — filters + class gender chart */}
-                    <div className="students-side-col">
+                    </div>
+
+                    {/* Search & filters */}
                     <div className="settings-card filters-card">
                         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
                             <strong style={{ fontSize: 14 }}>Search &amp; Filter</strong>
@@ -498,7 +501,6 @@ function StudentsPage() {
                     </div>
                     </div>
 
-                    </div>
                     </div>
                     </div>
 
