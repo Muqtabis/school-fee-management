@@ -63,6 +63,7 @@ exports.exportStudents = async (req, res) => {
             "id", "admissionNumber", "satsNumber", "penNumber", "rollNumber",
             "studentName", "className", "gender", "dob", "fatherName", "motherName",
             "contact1", "contact2", "address", "remark", "previousDues",
+            "previousDuesConcession", "previousDuesConcessionReason",
             "tuitionFee", "concessionAmount", "concessionReason", "studentCategory",
             "status", "archivedAt", "archivedBy", "archiveReason"
         ];
@@ -93,6 +94,8 @@ exports.exportStudents = async (req, res) => {
             address: "Address",
             remark: "Remarks",
             previousDues: "Previous Dues (Rs.)",
+            previousDuesConcession: "Previous Dues Conceded (Rs.)",
+            previousDuesConcessionReason: "Previous Dues Concession Reason",
             tuitionFee: "Tuition Fee (Rs.)",
             concessionAmount: "Concession (Rs.)",
             concessionReason: "Concession Reason",

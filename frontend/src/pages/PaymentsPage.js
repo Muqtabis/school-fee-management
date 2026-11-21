@@ -106,6 +106,8 @@ function PaymentsPage() {
     // Reverse flow: centered PromptDialog replaces the old
     // window.prompt + window.confirm pair.
     const [reverseTarget, setReverseTarget] = useState(null);
+    const [reasonTarget, setReasonTarget] = useState(null);
+    const [savingReason, setSavingReason] = useState(false);
     const [reversing, setReversing] = useState(false);
     const [editPayment, setEditPayment] = useState(null);
     const [reverseRequests, setReverseRequests] = useState([]);
@@ -150,6 +152,25 @@ function PaymentsPage() {
             toast(error.response?.data?.message || "Unable to reverse payment.");
         } finally {
             setReversing(false);
+        }
+    };
+
+    const saveReason = async (reason) => {
+        if (!reasonTarget) return;
+        if (reason.length < 10 || /^(.)\1+$/.test(reason)) {
+            toast("Please enter a clear reason (at least 10 characters).");
+            return;
+        }
+        setSavingReason(true);
+        try {
+            const res = await api.put(`/payments/${reasonTarget.id}/void-reason`, { reason });
+            toast(res.data?.message || "Reason updated.");
+            setReasonTarget(null);
+            fetchPayments();
+        } catch (error) {
+            toast(error.response?.data?.message || "Unable to update reason.");
+        } finally {
+            setSavingReason(false);
         }
     };
 
@@ -290,7 +311,7 @@ function PaymentsPage() {
                     )}
                     {paymentTab === "reversed" && isApprover && (
                         <div style={{ marginTop: "14px" }}>
-                            <SummaryTable payments={reversedPayments} onReverse={reversePayment} onEdit={openEditPayment} />
+                            <SummaryTable payments={reversedPayments} onReverse={reversePayment} onEdit={openEditPayment} onEditReason={isApprover ? (p) => setReasonTarget(p) : undefined} />
                         </div>
                     )}
                 </div>
@@ -323,9 +344,23 @@ function PaymentsPage() {
                 }
                 multiline
                 requireValue
-                placeholder={isApprover ? "Reason for reversing (required)" : "Reason for requesting reversal (required)"}
+                placeholder={isApprover ? "Clear reason, at least 10 characters (required)" : "Reason for requesting reversal (required)"}
                 confirmLabel={isApprover ? "Reverse" : "Send Request"}
                 busy={reversing}
+            />
+
+            <PromptDialog
+                open={!!reasonTarget}
+                onClose={() => setReasonTarget(null)}
+                onConfirm={saveReason}
+                title={reasonTarget ? `Fix reason for payment #${reasonTarget.id}` : ""}
+                message={reasonTarget ? `Student: ${reasonTarget.studentName || "-"}\nAmount: ₹${Number(reasonTarget.amount || 0).toLocaleString("en-IN")}\nCurrent reason: ${reasonTarget.voidReason || "Not recorded"}` : ""}
+                initialValue=""
+                multiline
+                requireValue
+                placeholder="Write a clear reason, at least 10 characters"
+                confirmLabel="Save reason"
+                busy={savingReason}
             />
         </div>
     );

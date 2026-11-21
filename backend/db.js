@@ -914,6 +914,12 @@ async function runInitializeDatabase() {
         await addColumnIfMissing("transfer_certificates", "remainingAmount", "REAL DEFAULT 0");
         await addColumnIfMissing("transfer_certificates", "paymentId", "INTEGER");
         await backfillTCCollections();
+        // Legacy TCs created before the collection feature stored remainingAmount
+        // as 0 even when a balance was left. Restore the true written-off amount.
+        await run(`UPDATE transfer_certificates
+                   SET remainingAmount = MAX(0, COALESCE(balance,0) - COALESCE(amountCollected,0))
+                   WHERE COALESCE(remainingAmount,0) = 0
+                     AND COALESCE(balance,0) > COALESCE(amountCollected,0)`);
         await createIndexes();
 
         console.log("Database initialization completed.");
@@ -954,6 +960,11 @@ async function migrateDatabase() {
     await addColumnIfMissing("students", "remark", "TEXT");
     await addColumnIfMissing("students", "concessionAmount", "REAL DEFAULT 0");
     await addColumnIfMissing("students", "concessionReason", "TEXT");
+    // Separate concession for carried-forward previous-year dues. The regular
+    // concessionAmount only reduces current-year fee items, so partial dues
+    // waivers need their own field (capped at the student's previousDues).
+    await addColumnIfMissing("students", "previousDuesConcession", "REAL DEFAULT 0");
+    await addColumnIfMissing("students", "previousDuesConcessionReason", "TEXT");
     await addColumnIfMissing("students", "studentCategory", "TEXT DEFAULT 'general'");
     // Role rename: "receptionist" became "accountant". Idempotent — after the
     // first run no receptionist rows remain. Page-access rows are keyed by
@@ -981,6 +992,7 @@ async function migrateDatabase() {
     await addColumnIfMissing("expenses", "voidedAt", "TEXT");
     await addColumnIfMissing("expenses", "voidedBy", "INTEGER");
     await addColumnIfMissing("expenses", "voidReason", "TEXT");
+    await addColumnIfMissing("payments", "editCount", "INTEGER NOT NULL DEFAULT 0");
     await addColumnIfMissing("expenses", "editCount", "INTEGER NOT NULL DEFAULT 0");
     await addColumnIfMissing("incomes", "status", "TEXT NOT NULL DEFAULT 'completed'");
     await addColumnIfMissing("incomes", "voidedAt", "TEXT");

@@ -199,7 +199,11 @@ exports.getStudentCounts = async (req, res) => {
             allQuery(
                 `SELECT className,
                         SUM(CASE WHEN status IS NULL OR status = 'active' THEN 1 ELSE 0 END) AS active,
-                        SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) AS archived
+                        SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) AS archived,
+                        SUM(CASE WHEN (status IS NULL OR status = 'active')
+                                  AND LOWER(TRIM(COALESCE(gender,''))) IN ('boy','male','m') THEN 1 ELSE 0 END) AS boys,
+                        SUM(CASE WHEN (status IS NULL OR status = 'active')
+                                  AND LOWER(TRIM(COALESCE(gender,''))) IN ('girl','girls','female','f') THEN 1 ELSE 0 END) AS girls
                  FROM students
                  WHERE className IS NOT NULL AND TRIM(className) <> ''
                  GROUP BY className`
@@ -216,7 +220,9 @@ exports.getStudentCounts = async (req, res) => {
         const byClass = byClassRows.map((row) => ({
             className: row.className,
             active: row.active || 0,
-            archived: row.archived || 0
+            archived: row.archived || 0,
+            boys: row.boys || 0,
+            girls: row.girls || 0
         }));
         res.json({ success: true, counts, byClass });
     } catch (error) {

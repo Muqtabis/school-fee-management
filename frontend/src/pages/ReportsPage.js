@@ -30,6 +30,40 @@ function ReportsPage() {
             maximumFractionDigits: 2
         })}`;
 
+    // ---- Customizable summary cards (same UX as the Dashboard) ----
+    const REPORT_CARDS = ["Net Balance", "Total Receipts", "Total Fee Collected", "Remaining Fee Balance", "TC Conceded Fee", "Total Income", "Total Expenses"];
+    const [hiddenReportCards, setHiddenReportCards] = useState(() => {
+        try { return JSON.parse(localStorage.getItem("report-hidden-cards") || "[]"); } catch (e) { return []; }
+    });
+    const [reportCardOrder, setReportCardOrder] = useState(() => {
+        try {
+            const saved = JSON.parse(localStorage.getItem("report-card-order") || "[]");
+            const valid = Array.isArray(saved) ? saved.filter((c) => typeof c === "string") : [];
+            return [...valid, ...REPORT_CARDS.filter((c) => !valid.includes(c))];
+        } catch (e) { return [...REPORT_CARDS]; }
+    });
+    const [customizingReports, setCustomizingReports] = useState(false);
+    const reportCardVisible = (name) => !hiddenReportCards.includes(name);
+    const toggleReportCard = (name) => {
+        const next = hiddenReportCards.includes(name)
+            ? hiddenReportCards.filter((c) => c !== name)
+            : [...hiddenReportCards, name];
+        setHiddenReportCards(next);
+        try { localStorage.setItem("report-hidden-cards", JSON.stringify(next)); } catch (e) { /* optional */ }
+    };
+    const saveReportOrder = (next) => {
+        setReportCardOrder(next);
+        try { localStorage.setItem("report-card-order", JSON.stringify(next)); } catch (e) { /* optional */ }
+    };
+    const moveReportCard = (index, direction, list) => {
+        const target = index + direction;
+        if (target < 0 || target >= list.length) return;
+        const next = [...list];
+        [next[index], next[target]] = [next[target], next[index]];
+        saveReportOrder(next);
+    };
+    const resetReportOrder = () => saveReportOrder([...REPORT_CARDS]);
+
     // =====================================================
     // FETCH DATA FROM VM (READ-ONLY)
     // =====================================================
@@ -186,6 +220,20 @@ function ReportsPage() {
     // =====================================================
     const totalCollection = useMemo(() => {
         return filteredPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    }, [filteredPayments]);
+
+    // Split the same collection into three real buckets so nobody has to
+    // explain why "Fee Collection" looks high: current students, exited
+    // students (old receipts) and cash taken at the TC counter.
+    const collectionSplit = useMemo(() => {
+        const out = { continuing: 0, exited: 0, tcCounter: 0 };
+        filteredPayments.forEach((p) => {
+            const amt = Number(p.amount || 0);
+            if (p.remarks === "Fee collected at TC counter") out.tcCounter += amt;
+            else if (p.studentStatus === "archived") out.exited += amt;
+            else out.continuing += amt;
+        });
+        return out;
     }, [filteredPayments]);
 
     const totalExpenseAmount = useMemo(() => {
@@ -549,6 +597,30 @@ function ReportsPage() {
     const incomeHeight = `${(totalIncomeAmount / maximum) * 100}%`;
     const expenseHeight = `${(totalExpenseAmount / maximum) * 100}%`;
 
+    // All summary cards in one place so the Customize panel can show/hide and
+    // reorder them just like the Dashboard. Mode/category cards are dynamic.
+    const reportCardDefs = {
+        "Net Balance": { value: money(netBalance), small: "Fees + incomes − expenses", tone: netBalance < 0 ? "negative-balance" : "positive-balance" },
+        "Total Receipts": { value: filteredPayments.length, small: selectedClass === "all" ? "All active receipts" : `Class ${selectedClass} receipts` },
+        "Total Fee Collected": {
+            value: money(totalCollection),
+            small: "Net cash/digital inflow",
+            detail: `Current ${money(collectionSplit.continuing)} · Exited ${money(collectionSplit.exited)} · TC counter ${money(collectionSplit.tcCounter)}`
+        },
+        "Remaining Fee Balance": { value: money(classTotals.balance), small: selectedClass === "all" ? "Outstanding across all classes" : `Outstanding for Class ${selectedClass}`, tone: classTotals.balance > 0 ? "negative-balance" : "positive-balance" },
+        "TC Conceded Fee": { value: money(tcConcededFee), small: "Amount conceded when TCs were issued" },
+        "Total Income": { value: money(totalIncomeAmount), small: `${filteredIncomes.length} income voucher(s)` },
+        "Total Expenses": { value: money(totalExpenseAmount), small: `${filteredExpenses.length} expense voucher(s)` }
+    };
+    modeSummary.forEach((m) => {
+        reportCardDefs[`${m.mode} Collection`] = { value: money(m.amount), small: `${m.percentage}% of total fee collected` };
+    });
+    incomeCategorySummary.forEach((c) => {
+        reportCardDefs[`${c.category} Income`] = { value: money(c.amount), small: `${c.count} voucher(s)` };
+    });
+    const activeCardNames = [...reportCardOrder];
+    Object.keys(reportCardDefs).forEach((name) => { if (!activeCardNames.includes(name)) activeCardNames.push(name); });
+
     return (
         <div className="dashboard">
             <Sidebar />
@@ -682,84 +754,48 @@ function ReportsPage() {
                         Receipts Count: <strong>{filteredPayments.length}</strong>
                     </div>
 
-                    {/* TOP SUMMARY CARDS */}
-                    <h3 className="section-title">Fee Inflow & Balance Summary</h3>
-
-                    {/* NET BALANCE — top */}
-                    <div className="report-cards">
-                        <div className="report-summary-card">
-                            <span>Net Balance</span>
-                            <strong className={netBalance < 0 ? "negative-balance" : "positive-balance"}>
-                                {loading ? "..." : money(netBalance)}
-                            </strong>
-                            <small>Fees + incomes − expenses</small>
-                        </div>
+                    {/* TOP SUMMARY CARDS — show/hide and reorder from Customize */}
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+                        <button type="button" className="clear-btn" onClick={() => setCustomizingReports((v) => !v)}>{customizingReports ? "Done" : "⚙ Customize cards"}</button>
                     </div>
-
-                    {/* FEES */}
-                    <h3 className="section-title" style={{ marginTop: "18px" }}>Fees</h3>
-                    <div className="report-cards">
-                        <div className="report-summary-card">
-                            <span>Total Receipts</span>
-                            <strong>{loading ? "..." : filteredPayments.length}</strong>
-                            <small>{selectedClass === "all" ? "All active receipts" : `Class ${selectedClass} receipts`}</small>
-                        </div>
-
-                        <div className="report-summary-card">
-                            <span>Total Fee Collected</span>
-                            <strong>{loading ? "..." : money(totalCollection)}</strong>
-                            <small>Net cash/digital inflow</small>
-                        </div>
-
-                        <div className="report-summary-card">
-                            <span>Remaining Fee Balance</span>
-                            <strong className={classTotals.balance > 0 ? "negative-balance" : "positive-balance"}>
-                                {loading ? "..." : money(classTotals.balance)}
-                            </strong>
-                            <small>{selectedClass === "all" ? "Outstanding across all classes" : `Outstanding for Class ${selectedClass}`}</small>
-                        </div>
-
-                        <div className="report-summary-card">
-                            <span>TC Conceded Fee</span>
-                            <strong>{loading ? "..." : money(tcConcededFee)}</strong>
-                            <small>Amount conceded when TCs were issued</small>
-                        </div>
-
-                        {modeSummary.map((m) => (
-                            <div className="report-summary-card" key={m.mode}>
-                                <span>{m.mode} Collection</span>
-                                <strong>{loading ? "..." : money(m.amount)}</strong>
-                                <small>{m.percentage}% of total fee collected</small>
+                    {customizingReports && (
+                        <div className="settings-card" style={{ padding: 14, marginBottom: 12 }}>
+                            <div style={{ fontSize: 12, color: "#64748B", marginBottom: 10 }}>
+                                Tick a card to show it. Use ↑ / ↓ to set the order of the summary cards. Your layout is saved automatically.
                             </div>
-                        ))}
-                    </div>
-
-                    {/* INCOMES */}
-                    <h3 className="section-title" style={{ marginTop: "18px" }}>Incomes</h3>
-                    <div className="report-cards">
-                        <div className="report-summary-card">
-                            <span>Total Income</span>
-                            <strong>{loading ? "..." : money(totalIncomeAmount)}</strong>
-                            <small>{filteredIncomes.length} income voucher(s)</small>
-                        </div>
-
-                        {incomeCategorySummary.map((c) => (
-                            <div className="report-summary-card" key={c.category}>
-                                <span>{c.category} Income</span>
-                                <strong>{loading ? "..." : money(c.amount)}</strong>
-                                <small>{c.count} voucher(s)</small>
+                            <div style={{ display: "grid", gap: 6 }}>
+                                {activeCardNames.map((c, i) => (
+                                    <div key={c} style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 40 }}>
+                                        <input type="checkbox" checked={reportCardVisible(c)} onChange={() => toggleReportCard(c)} aria-label={"Show " + c} />
+                                        <span style={{ fontSize: 12, flex: 1, minWidth: 0 }}>{c}</span>
+                                        <button type="button" className="clear-btn" style={{ padding: "4px 10px" }} onClick={() => moveReportCard(i, -1, activeCardNames)} disabled={i === 0} aria-label={"Move " + c + " up"}>↑</button>
+                                        <button type="button" className="clear-btn" style={{ padding: "4px 10px" }} onClick={() => moveReportCard(i, 1, activeCardNames)} disabled={i === activeCardNames.length - 1} aria-label={"Move " + c + " down"}>↓</button>
+                                    </div>
+                                ))}
                             </div>
-                        ))}
-                    </div>
-
-                    {/* EXPENSES */}
-                    <h3 className="section-title" style={{ marginTop: "18px" }}>Expenses</h3>
-                    <div className="report-cards">
-                        <div className="report-summary-card">
-                            <span>Total Expenses</span>
-                            <strong>{loading ? "..." : money(totalExpenseAmount)}</strong>
-                            <small>{filteredExpenses.length} expense voucher(s)</small>
+                            <button type="button" className="clear-btn" style={{ marginTop: 10 }} onClick={resetReportOrder}>Reset to default order</button>
                         </div>
+                    )}
+
+                    <h3 className="section-title">Fee Inflow &amp; Balance Summary</h3>
+                    <div className="report-cards">
+                        {activeCardNames
+                            .filter((name) => reportCardVisible(name) && reportCardDefs[name])
+                            .map((name) => {
+                                const d = reportCardDefs[name];
+                                return (
+                                    <div className="report-summary-card" key={name}>
+                                        <span>{name}</span>
+                                        <strong className={d.tone || ""}>{loading ? "..." : d.value}</strong>
+                                        <small>{d.small}</small>
+                                        {d.detail && (
+                                            <small style={{ display: "block", marginTop: "4px", fontSize: "10px", color: "#64748B" }}>
+                                                {loading ? "..." : d.detail}
+                                            </small>
+                                        )}
+                                    </div>
+                                );
+                            })}
                     </div>
 
                     {/* CASH FLOW BAR GRAPH */}

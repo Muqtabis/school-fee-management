@@ -15,6 +15,18 @@ router.get(
     concessionController.getTCConcessions
 );
 
+// Previous-dues concessions (before "/:studentId" routes).
+router.get(
+    "/previous-dues",
+    requireRole("admin", "accountant", "principal", "manager"),
+    concessionController.getPreviousDuesConcessions
+);
+router.put(
+    "/previous-dues/:studentId",
+    requireRole("admin", "accountant", "principal", "manager"),
+    concessionController.upsertPreviousDuesConcession
+);
+
 // =====================================================
 // LIST
 // ADMIN + STAFF (accountant, principal, manager)

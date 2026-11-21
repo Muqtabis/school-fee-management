@@ -9,7 +9,7 @@ const logAudit = require("../utils/auditLogger");
 exports.getOverallBalance = (req, res) => {
     const studentId = Number(req.params.id || req.query.studentId);
     if (!studentId) return res.status(400).json({ success: false, message: "Student is required." });
-    db.get(`SELECT id, previousDues, concessionAmount FROM students WHERE id = ?`, [studentId], (err, s) => {
+    db.get(`SELECT id, previousDues, previousDuesConcession, concessionAmount FROM students WHERE id = ?`, [studentId], (err, s) => {
         if (err) return res.status(500).json({ success: false, message: "Database error." });
         if (!s) return res.status(404).json({ success: false, message: "Student not found." });
         db.get(`SELECT id FROM academic_years WHERE status='active' ORDER BY id DESC LIMIT 1`, [], (yErr, year) => {
@@ -23,19 +23,26 @@ exports.getOverallBalance = (req, res) => {
                 if (aErr) return res.status(500).json({ success: false, message: "Database error." });
                 const accId = acc ? acc.accId : null;
                 if (!accId) {
-                    return res.json({ success: true, previousDues: Number(s.previousDues||0), items: 0, concession: Number(s.concessionAmount||0), paid: 0, totalDemand: Number(s.previousDues||0), balance: Math.max(0, Number(s.previousDues||0) - Number(s.concessionAmount||0)) });
+                    const effPrev = Math.max(0, Number(s.previousDues||0) - Number(s.previousDuesConcession||0));
+                    // No fee items exist, so the fee concession has nothing to reduce.
+                    return res.json({ success: true, previousDues: effPrev, items: 0, rawItems: 0, concession: Number(s.concessionAmount||0), paid: 0, totalDemand: effPrev, balance: effPrev });
                 }
-                db.get(`SELECT COALESCE(SUM(amount),0) AS items FROM student_fee_items WHERE feeAccountId = ?`, [accId], (iErr, it) => {
+                db.get(`SELECT COALESCE(SUM(CASE WHEN sfi.itemType = 'carry_forward' OR LOWER(COALESCE(fc.componentName,'')) LIKE '%previous%' THEN 0 ELSE sfi.amount END),0) AS items
+                        FROM student_fee_items sfi LEFT JOIN fee_components fc ON fc.id = sfi.componentId
+                        WHERE sfi.feeAccountId = ?`, [accId], (iErr, it) => {
                     if (iErr) return res.status(500).json({ success: false, message: "Database error." });
                     db.get(`SELECT COALESCE(SUM(amount),0) AS paid FROM payments WHERE feeAccountId = ? AND (status IS NULL OR status != 'reversed')`, [accId], (pErr, pay) => {
                         if (pErr) return res.status(500).json({ success: false, message: "Database error." });
-                        const prev = Number(s.previousDues||0);
-                        const items = Number(it.items||0);
+                        const prev = Math.max(0, Number(s.previousDues||0) - Number(s.previousDuesConcession||0));
+                        const rawItems = Number(it.items||0);
                         const concession = Number(s.concessionAmount||0);
+                        // Same rule as the ledger: a concession can never reduce
+                        // another component or the already-adjusted previous dues.
+                        const netItems = Math.max(0, rawItems - concession);
                         const paid = Number(pay.paid||0);
-                        const totalDemand = prev + items;
-                        const balance = Math.max(0, totalDemand - concession - paid);
-                        res.json({ success: true, academicYear: year ? year.name : "", previousDues: prev, items, concession, paid, totalDemand, balance });
+                        const totalDemand = prev + netItems;
+                        const balance = Math.max(0, totalDemand - paid);
+                        res.json({ success: true, academicYear: year ? year.name : "", previousDues: prev, items: netItems, rawItems, concession, paid, totalDemand, balance });
                     });
                 });
             });

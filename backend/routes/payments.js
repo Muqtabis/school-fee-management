@@ -188,6 +188,13 @@ router.post(
     paymentController.reversePayment
 );
 
+// Fix the explanation on an already-reversed payment (admin/principal only).
+router.put(
+    "/:id/void-reason",
+    requireRole("admin", "principal"),
+    paymentController.updateVoidReason
+);
+
 
 // =====================================================
 // UPDATE DISABLED

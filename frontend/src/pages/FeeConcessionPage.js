@@ -1,5 +1,6 @@
 import { toast, confirmDialog } from "../services/notify";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import OverlayDialog from "../components/OverlayDialog";
@@ -32,10 +33,16 @@ const categoryLabel = (value) =>
 
 function FeeConcessionPage() {
     const { user } = useAuth();
+    const location = useLocation();
+    useEffect(() => {
+        const wanted = location.state?.tab;
+        if (wanted === "prevDues" || wanted === "tc" || wanted === "concessions") setActiveTab(wanted);
+    }, [location.state]);
     // Removing a concession is money-impacting — admin only.
     const isAdmin = user?.role === "admin";
 
     const [students, setStudents] = useState([]);
+    const [concessionRows, setConcessionRows] = useState([]);
     const [classes, setClasses] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -47,11 +54,29 @@ function FeeConcessionPage() {
     const [tcRecords, setTcRecords] = useState([]);
     const [tcYear, setTcYear] = useState("All");
     const [tcYears, setTcYears] = useState([]);
+    // Previous-dues concession tab — only students with carried dues.
+    const [prevDuesStudents, setPrevDuesStudents] = useState([]);
+    const [prevDuesClass, setPrevDuesClass] = useState("All");
+    const [prevDialog, setPrevDialog] = useState(null); // { id, studentName, previousDues, ... }
+    const [prevForm, setPrevForm] = useState({ amount: "", reason: "" });
+    const [savingPrev, setSavingPrev] = useState(false);
     useEffect(() => {
         api.get("/concessions/tc-records", { params: tcYear === "All" ? {} : { academicYear: tcYear } })
             .then((r) => { setTcRecords(r.data.records || []); setTcYears(r.data.academicYears || []); })
             .catch(() => {});
     }, [tcYear]);
+
+    const loadPrevDues = useCallback(async () => {
+        try {
+            const r = await api.get("/concessions/previous-dues", {
+                params: prevDuesClass === "All" ? {} : { className: prevDuesClass }
+            });
+            setPrevDuesStudents(Array.isArray(r.data) ? r.data : []);
+        } catch (e) {
+            toast(e.response?.data?.message || "Unable to load previous dues.");
+        }
+    }, [prevDuesClass]);
+    useEffect(() => { if (activeTab === "prevDues") loadPrevDues(); }, [activeTab, loadPrevDues]);
     const [searchKeyword, setSearchKeyword] = useState("");
     const [sortBy, setSortBy] = useState("roll");
 
@@ -73,12 +98,14 @@ function FeeConcessionPage() {
         const load = async () => {
             setLoading(true);
             try {
-                const [studentsRes, classesRes] = await Promise.all([
+                const [studentsRes, classesRes, concessionsRes] = await Promise.all([
                     api.get("/students", { params: { status: "active" } }),
-                    api.get("/classes")
+                    api.get("/classes"),
+                    api.get("/concessions").catch(() => ({ data: [] }))
                 ]);
                 setStudents(Array.isArray(studentsRes.data) ? studentsRes.data : []);
                 setClasses(Array.isArray(classesRes.data) ? classesRes.data : []);
+                setConcessionRows(Array.isArray(concessionsRes.data) ? concessionsRes.data : []);
             } catch (error) {
                 console.error("Unable to load concession data:", error);
                 setStudents([]);
@@ -155,12 +182,22 @@ function FeeConcessionPage() {
 
     const summary = useMemo(() => {
         const conceded = students.filter((s) => Number(s.concessionAmount || 0) > 0);
+        // All three concessions count toward the total granted this year:
+        // regular fee concessions, amounts written off at TC, and previous-dues waivers.
+        const regular = concessionRows.length
+            ? concessionRows.reduce((sum, s) => sum + Number(s.effectiveConcession || 0), 0)
+            : conceded.reduce((sum, s) => sum + Number(s.concessionAmount || 0), 0);
+        const tcConcession = (tcRecords || []).reduce((sum, r) => sum + Number(r.remainingAmount || 0), 0);
+        const prevDuesConcession = (prevDuesStudents || []).reduce((sum, s) => sum + Number(s.previousDuesConcession || 0), 0);
         return {
             concessionCount: conceded.length,
-            totalConcession: conceded.reduce((sum, s) => sum + Number(s.concessionAmount || 0), 0),
+            regularConcession: regular,
+            tcConcession,
+            prevDuesConcession,
+            totalConcession: regular + tcConcession + prevDuesConcession,
             rteCount: students.filter((s) => (s.studentCategory || "general") === "rte").length
         };
-    }, [students]);
+    }, [students, concessionRows, tcRecords, prevDuesStudents]);
 
     const money = (value) =>
         `₹${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -244,6 +281,39 @@ function FeeConcessionPage() {
         }
     };
 
+    const openPrevDialog = (student) => {
+        setPrevDialog(student);
+        setPrevForm({
+            amount: String(Number(student.previousDuesConcession || 0)),
+            reason: student.previousDuesConcessionReason || ""
+        });
+    };
+
+    const handleSavePrev = async (e) => {
+        e.preventDefault();
+        if (!prevDialog) return;
+        const amount = Number(prevForm.amount);
+        if (!Number.isFinite(amount) || amount < 0) return toast("Concession amount must be 0 or more.");
+        if (amount > Number(prevDialog.previousDues || 0)) return toast("Cannot concede more than the student's previous dues.");
+        const reason = String(prevForm.reason || "").trim();
+        if (amount > 0 && !reason) return toast("A reason is required when conceding previous dues.");
+
+        setSavingPrev(true);
+        try {
+            await api.put(`/concessions/previous-dues/${prevDialog.id}`, {
+                previousDuesConcession: amount,
+                previousDuesConcessionReason: reason
+            });
+            toast(amount > 0 ? "Previous dues concession saved." : "Previous dues concession cleared.");
+            setPrevDialog(null);
+            await loadPrevDues();
+        } catch (error) {
+            toast(error.response?.data?.message || "Unable to save previous dues concession.");
+        } finally {
+            setSavingPrev(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="dashboard">
@@ -273,13 +343,16 @@ function FeeConcessionPage() {
                             <p>Categorise students (RTE, Management, etc.) and manage fee concessions &amp; free education.</p>
                         </div>
 
-                        <button className="primary-btn" onClick={openAdd}>
-                            + Add Concession
-                        </button>
+                        {activeTab === "concessions" && (
+                            <button className="primary-btn" onClick={openAdd}>
+                                + Add Concession
+                            </button>
+                        )}
                     </div>
 
                     <div className="exam-tabbar" style={{ marginTop: 20 }}>
                         <button type="button" className={"exam-tab " + (activeTab === "concessions" ? "exam-tab-active" : "")} onClick={() => setActiveTab("concessions")}>Fee Concessions</button>
+                        <button type="button" className={"exam-tab " + (activeTab === "prevDues" ? "exam-tab-active" : "")} onClick={() => { setActiveTab("prevDues"); loadPrevDues(); }}>Previous Dues</button>
                         <button type="button" className={"exam-tab " + (activeTab === "tc" ? "exam-tab-active" : "")} onClick={() => { setActiveTab("tc"); api.get("/concessions/tc-records", { params: tcYear === "All" ? {} : { academicYear: tcYear } }).then((r) => { setTcRecords(r.data.records || []); setTcYears(r.data.academicYears || []); }).catch(() => {}); }}>TC Concession</button>
                     </div>
 
@@ -295,7 +368,7 @@ function FeeConcessionPage() {
                         <p className="tc-concession-note">Remaining amounts recorded when transfer certificates were issued. This section cannot be edited.</p>
                         <div className="table-container">
                             <table className="stack-sm">
-                                <thead><tr><th>Student</th><th>Class</th><th>Academic Year</th><th>Collected</th><th>Remaining</th><th>Issued</th></tr></thead>
+                                <thead><tr><th>Student</th><th>Class</th><th>Academic Year</th><th>Collected</th><th>Conceded (Written Off)</th><th>Issued</th></tr></thead>
                                 <tbody>
                                     {tcRecords.length === 0 ? (
                                         <tr><td colSpan="6"><div className="empty-state"><strong>No TC concessions</strong><span>Records appear here when a TC is issued with a remaining amount.</span></div></td></tr>
@@ -305,8 +378,48 @@ function FeeConcessionPage() {
                                             <td data-label="Class">{r.className || "-"}</td>
                                             <td data-label="Academic Year">{r.academicYear || "-"}</td>
                                             <td data-label="Collected">₹{Number(r.amountCollected || 0).toLocaleString("en-IN")}</td>
-                                            <td data-label="Remaining"><strong className="negative-balance">₹{Number(r.remainingAmount || 0).toLocaleString("en-IN")}</strong></td>
+                                            <td data-label="Conceded (Written Off)"><strong className="negative-balance">₹{Number(r.remainingAmount || 0).toLocaleString("en-IN")}</strong></td>
                                             <td data-label="Issued">{r.issuedAt ? new Date(r.issuedAt).toLocaleDateString("en-IN") : "-"}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {/* PREVIOUS-DUES CONCESSION TAB — only students carrying dues */}
+                    <div className={"settings-card" + (activeTab === "prevDues" ? "" : " hidden-section")} style={{ marginBottom: 18 }}>
+                        <div className="payment-filters">
+                            <strong style={{ marginRight: "auto" }}>Previous Dues Concession</strong>
+                            <select
+                                className="filter-select"
+                                value={prevDuesClass}
+                                onChange={(e) => setPrevDuesClass(e.target.value)}
+                            >
+                                <option value="All">All Classes</option>
+                                {classes.map((c) => {
+                                    const displayClass = formatClass(c);
+                                    return <option key={c.id} value={displayClass}>{displayClass}</option>;
+                                })}
+                            </select>
+                            <button type="button" className="clear-btn" onClick={loadPrevDues}>Refresh</button>
+                        </div>
+                        <p className="tc-concession-note">Only students carrying previous-year dues appear here. Concede part or all of their dues — the remaining amount is what they must pay before a TC. Archived students cannot be edited.</p>
+                        <div className="table-container">
+                            <table className="stack-sm">
+                                <thead><tr><th>Student</th><th>Class</th><th>Previous Dues</th><th>Conceded</th><th>Remaining</th><th>Reason</th><th style={{ textAlign: "right" }}>Action</th></tr></thead>
+                                <tbody>
+                                    {prevDuesStudents.length === 0 ? (
+                                        <tr><td colSpan="7"><div className="empty-state"><strong>No previous dues</strong><span>No students are carrying previous-year dues.</span></div></td></tr>
+                                    ) : prevDuesStudents.map((s) => (
+                                        <tr key={s.id}>
+                                            <td data-label="Student"><strong>{s.studentName || "-"}</strong><br /><small style={{ color: "#64748B" }}>Roll {s.rollNumber || "-"} · {s.fatherName || "-"}</small></td>
+                                            <td data-label="Class">{s.className || "-"}</td>
+                                            <td data-label="Previous Dues">{money(s.previousDues)}</td>
+                                            <td data-label="Conceded"><strong className="positive-balance">{money(s.previousDuesConcession)}</strong></td>
+                                            <td data-label="Remaining"><strong className={Number(s.remainingDues) > 0 ? "negative-balance" : "positive-balance"}>{money(s.remainingDues)}</strong></td>
+                                            <td data-label="Reason">{s.previousDuesConcessionReason || "-"}</td>
+                                            <td data-label="Action" style={{ textAlign: "right" }}><button type="button" className="edit-btn" onClick={() => openPrevDialog(s)}>Edit</button></td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -322,6 +435,9 @@ function FeeConcessionPage() {
                         <div style={{ backgroundColor: "#F0FDF4", border: "1px solid #BBF7D0", padding: "12px", borderRadius: "8px" }}>
                             <span style={{ fontSize: "11px", color: "#15803D", fontWeight: "600" }}>TOTAL CONCEDED PER YEAR</span>
                             <div style={{ fontSize: "18px", fontWeight: "700", color: "#16A34A", marginTop: "2px" }}>{money(summary.totalConcession)}</div>
+                            <small style={{ display: "block", fontSize: "10px", color: "#15803D", marginTop: "4px", lineHeight: "1.5" }}>
+                                Fees {money(summary.regularConcession)} · TC {money(summary.tcConcession)} · Prev dues {money(summary.prevDuesConcession)}
+                            </small>
                         </div>
                         <div style={{ backgroundColor: "#EFF6FF", border: "1px solid #BFDBFE", padding: "12px", borderRadius: "8px" }}>
                             <span style={{ fontSize: "11px", color: "#1E40AF", fontWeight: "600" }}>RTE STUDENTS</span>
@@ -443,14 +559,16 @@ function FeeConcessionPage() {
             </div>
 
             {/* Floating mobile action, matching the Students page pattern */}
-            <button
-                type="button"
-                className="p-mobile-cta"
-                onClick={openAdd}
-                aria-label="Add Concession"
-            >
-                ＋ Concession
-            </button>
+            {activeTab === "concessions" && (
+                <button
+                    type="button"
+                    className="p-mobile-cta"
+                    onClick={openAdd}
+                    aria-label="Add Concession"
+                >
+                    ＋ Concession
+                </button>
+            )}
 
             {/* CATEGORY + CONCESSION EDITOR */}
             {showDialog && (
@@ -559,6 +677,66 @@ function FeeConcessionPage() {
                                 <button type="button" className="cancel-btn" onClick={() => setShowDialog(false)}>Cancel</button>
                                 <button type="submit" className="save-btn" disabled={saving} style={{ padding: "10px 24px" }}>
                                     {saving ? "Saving..." : "Save"}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </OverlayDialog>
+            )}
+
+            {/* PREVIOUS-DUES CONCESSION EDITOR */}
+            {prevDialog && (
+                <OverlayDialog onClose={() => setPrevDialog(null)} ariaLabel="Previous dues concession editor">
+                    <div className="student-modal" style={{ maxWidth: "520px", maxHeight: "90vh", overflowY: "auto" }}>
+                        <div className="modal-header" style={{ position: "sticky", top: 0, backgroundColor: "#fff", zIndex: 10 }}>
+                            <div>
+                                <h2>Concede Previous Dues</h2>
+                                <p>{prevDialog.studentName} — {prevDialog.className} · Roll {prevDialog.rollNumber || "-"}</p>
+                            </div>
+                            <button type="button" className="close-btn" onClick={() => setPrevDialog(null)}>✕</button>
+                        </div>
+                        <form className="student-form" onSubmit={handleSavePrev} style={{ padding: "20px" }}>
+                            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18, padding: 12, borderRadius: 8, backgroundColor: "#F8FAFC", border: "1px solid #E2E8F0" }}>
+                                <span>Previous dues: <strong>{money(prevDialog.previousDues)}</strong></span>
+                                <span>Already conceded: <strong className="positive-balance">{money(prevDialog.previousDuesConcession)}</strong></span>
+                                <span>Remaining: <strong className="negative-balance">{money(prevDialog.remainingDues)}</strong></span>
+                            </div>
+
+                            <div className="form-group" style={{ marginBottom: "16px" }}>
+                                <label>
+                                    Concede from previous dues (₹) <small style={{ color: "#64748B" }}>(0 clears)</small>
+                                </label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max={Number(prevDialog.previousDues || 0)}
+                                    step="0.01"
+                                    value={prevForm.amount}
+                                    onChange={(e) => setPrevForm({ ...prevForm, amount: e.target.value })}
+                                    placeholder="e.g. 700"
+                                />
+                                <small style={{ color: "#64748B", display: "block", marginTop: "4px" }}>
+                                    Maximum {money(prevDialog.previousDues)}. The rest must be paid before a TC can be issued.
+                                </small>
+                            </div>
+
+                            {Number(prevForm.amount) > 0 && (
+                                <div className="form-group" style={{ marginBottom: "16px" }}>
+                                    <label>Reason *</label>
+                                    <textarea
+                                        rows={3}
+                                        value={prevForm.reason}
+                                        onChange={(e) => setPrevForm({ ...prevForm, reason: e.target.value })}
+                                        placeholder="e.g. Part of previous dues waived at TC"
+                                        required
+                                    />
+                                </div>
+                            )}
+
+                            <div className="modal-actions" style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #E2E8F0", display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                                <button type="button" className="cancel-btn" onClick={() => setPrevDialog(null)}>Cancel</button>
+                                <button type="submit" className="save-btn" disabled={savingPrev} style={{ padding: "10px 24px" }}>
+                                    {savingPrev ? "Saving..." : "Save"}
                                 </button>
                             </div>
                         </form>

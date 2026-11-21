@@ -318,7 +318,7 @@ export default function TransferCertificatePage() {
                             </div>
                             <div className="table-container" style={{ marginTop: 10 }}>
                                 <table className="stack-sm">
-                                    <thead><tr><th>TC No.</th><th>Student</th><th>Class</th><th>Academic Year</th><th>Leaving</th><th>Balance</th><th>Issued</th><th style={{textAlign:"right"}}>Fee Receipt</th><th style={{textAlign:"right"}}>Download</th></tr></thead>
+                                    <thead><tr><th>TC No.</th><th>Student</th><th>Class</th><th>Academic Year</th><th>Leaving</th><th>Conceded (Written Off)</th><th>Issued</th><th style={{textAlign:"right"}}>Fee Receipt</th><th style={{textAlign:"right"}}>Download</th></tr></thead>
                                     <tbody>
                                         {tcRecords.length === 0 ? (
                                             <tr><td colSpan="9"><div className="empty-state"><strong>No TC records</strong><span>Issue a TC to see it here.</span></div></td></tr>
@@ -329,7 +329,7 @@ export default function TransferCertificatePage() {
                                                 <td data-label="Class">{r.className || "-"}</td>
                                                 <td data-label="Academic Year">{r.academicYear || "-"}</td>
                                                 <td data-label="Leaving">{r.leavingDate || "-"}</td>
-                                                <td data-label="Balance">{money(r.balance)}</td>
+                                                <td data-label="Conceded (Written Off)"><strong className="negative-balance">{money(r.remainingAmount)}</strong></td>
                                                 <td data-label="Issued">{new Date(r.issuedAt).toLocaleDateString("en-IN")}</td>
                                                 <td data-label="Fee Receipt" style={{textAlign:"right"}}>
                                                     {r.paymentId ? (

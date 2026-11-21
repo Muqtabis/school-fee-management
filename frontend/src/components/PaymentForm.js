@@ -162,7 +162,7 @@ function PaymentForm({ onClose, editPayment }) {
     const parsedLedger = useMemo(() => {
         if (!feeSummary || !feeSummary.items) return null;
 
-        const studentPrevDues = Number(selectedStudent?.previousDues || 0);
+        const studentPrevDues = Math.max(0, Number(selectedStudent?.previousDues || 0) - Number(selectedStudent?.previousDuesConcession || 0));
         const concession = Number(selectedStudent?.concessionAmount || 0);
 
         let totalTuitionAmount = 0;
@@ -182,7 +182,18 @@ function PaymentForm({ onClose, editPayment }) {
             }
         });
 
-        const netTuition = Math.max(0, totalTuitionAmount - concession);
+        // Concession reduces the whole fee, not just tuition. Apply it to
+        // tuition first, then to the remaining components, so the payable
+        // ledger matches max(0, total items - concession) used everywhere else.
+        let concessionLeft = Math.max(0, concession);
+        const tuitionTake = Math.min(concessionLeft, totalTuitionAmount);
+        const netTuition = Math.max(0, totalTuitionAmount - tuitionTake);
+        concessionLeft -= tuitionTake;
+        rawAdditionalItems.forEach((item) => {
+            const take = Math.min(concessionLeft, Number(item.amount || 0));
+            item.amount = Number(item.amount || 0) - take;
+            concessionLeft -= take;
+        });
 
         // Single tuition bucket (no term splitting). Legacy payments tagged with
         // "Term 1/2/3" are folded into the one "tuition fee" total.
@@ -207,7 +218,9 @@ function PaymentForm({ onClose, editPayment }) {
                     } else if (paidMap[cName] !== undefined) {
                         paidMap[cName] += amt;
                     } else {
-                        paidMap[cName] = (paidMap[cName] || 0) + amt;
+                        // Unrecognised line items (e.g. "Fee Collection (TC)")
+                        // go into the shared pool and are allocated below.
+                        unassignedLegacyPool += amt;
                     }
                 });
             } else {

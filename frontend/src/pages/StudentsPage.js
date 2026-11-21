@@ -173,6 +173,20 @@ function StudentsPage() {
         return map;
     }, [byClass]);
 
+    // Class-wise gender strength table (active students only).
+    const classRank = (name) => {
+        const s = String(name || "").toLowerCase();
+        if (s.startsWith("lkg")) return 0;
+        if (s.startsWith("ukg")) return 1;
+        return 10 + (parseInt(String(name).match(/\d+/)?.[0] || "999", 10) || 999);
+    };
+    const sortedByClass = useMemo(
+        () => [...byClass].sort((a, b) => classRank(a.className) - classRank(b.className) || String(a.className).localeCompare(String(b.className), undefined, { numeric: true })),
+        [byClass]
+    );
+    const boysTotal = byClass.reduce((sum, r) => sum + Number(r.boys || 0), 0);
+    const girlsTotal = byClass.reduce((sum, r) => sum + Number(r.girls || 0), 0);
+
     // Which per-class number to show depends on the selected tab —
     // archived counts while viewing the archived tab.
     const classCount = (displayClass) => {
@@ -366,13 +380,62 @@ function StudentsPage() {
                         )}
                     </div>
 
-                    <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
-                        <button type="button" className="tab-toggle primary-btn" disabled>
-                            Active Students
-                            <span className="exam-badge on-primary" title="Total active students">{counts.active}</span>
-                        </button>
+                    {/* TOP ROW — strength table (left) + search & filters (right) */}
+                    <div className="students-top-row">
+                    <div className="settings-card strength-card">
+                        <div style={{ marginBottom: 10 }}>
+                            <strong style={{ fontSize: 14 }}>Class-wise Student Strength</strong>
+                            <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                                <span className="strength-chip">Classes: {sortedByClass.length}</span>
+                                <span className="strength-chip" style={{ color: "#1D4ED8" }}>Boys: {boysTotal}</span>
+                                <span className="strength-chip" style={{ color: "#BE185D" }}>Girls: {girlsTotal}</span>
+                                <span className="strength-chip">On roll: {counts.active}</span>
+                            </div>
+                        </div>
+                        <div className="table-container">
+                            <table className="stack-sm strength-table">
+                                <thead>
+                                    <tr>
+                                        <th>Class</th>
+                                        <th className="num">Boys</th>
+                                        <th className="num">Girls</th>
+                                        <th className="num">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {sortedByClass.length === 0 ? (
+                                        <tr><td colSpan="4"><div className="empty-state"><strong>No class data</strong><span>Add students to see class strength.</span></div></td></tr>
+                                    ) : sortedByClass.map((r) => (
+                                        <tr key={r.className}>
+                                            <td data-label="Class"><strong>{r.className}</strong></td>
+                                            <td data-label="Boys" className="num boys">{r.boys || 0}</td>
+                                            <td data-label="Girls" className="num girls">{r.girls || 0}</td>
+                                            <td data-label="Total" className="num"><strong>{Number(r.boys || 0) + Number(r.girls || 0)}</strong></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td data-label="Class"><strong>TOTAL</strong></td>
+                                        <td data-label="Boys" className="num"><strong>{boysTotal}</strong></td>
+                                        <td data-label="Girls" className="num"><strong>{girlsTotal}</strong></td>
+                                        <td data-label="Total" className="num"><strong>{boysTotal + girlsTotal}</strong></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                        <small style={{ display: "block", marginTop: 8, fontSize: 11, color: "#64748B" }}>
+                            Active students only. {counts.active - boysTotal - girlsTotal} student(s) have no gender recorded and are not counted in Boys/Girls.
+                        </small>
                     </div>
 
+                    {/* RIGHT COLUMN — filters + class gender chart */}
+                    <div className="students-side-col">
+                    <div className="settings-card filters-card">
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+                            <strong style={{ fontSize: 14 }}>Search &amp; Filter</strong>
+                            <span className="strength-chip">Showing: {filteredStudents.length}</span>
+                        </div>
                     <div className="student-filters" style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
                         <div style={{ flex: 1, minWidth: "200px" }}>
                             <StudentSearch onSearch={handleSearch} />
@@ -406,7 +469,41 @@ function StudentsPage() {
                             Class Management page. */}
                         <button type="button" className="clear-btn" onClick={() => setShowCols((v) => !v)}>Columns ▾</button>
                     </div>
+                    </div>
 
+                    {/* Class-wise gender chart (fills the space below filters) */}
+                    <div className="settings-card gender-chart-card">
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                            <strong style={{ fontSize: 14 }}>Class-wise Gender Chart</strong>
+                            <span className="strength-chip" style={{ color: "#1D4ED8" }}>■ Boys {boysTotal}</span>
+                            <span className="strength-chip" style={{ color: "#BE185D" }}>■ Girls {girlsTotal}</span>
+                        </div>
+                        <div className="gender-chart-v">
+                            {sortedByClass.map((r) => {
+                                const b = Number(r.boys || 0), g = Number(r.girls || 0);
+                                const scale = Math.max(b, g, 1);
+                                const ticks = [0, Math.round(scale / 2), scale];
+                                return (
+                                    <div className="gender-chart-col" key={r.className} title={`${r.className} — Boys ${b}, Girls ${g}`}>
+                                        <div className="gender-chart-col-values">
+                                            <span className="v boys">{b}</span><span className="v girls">{g}</span>
+                                        </div>
+                                        <div className="gender-chart-col-bars">
+                                            <span className="grid-line" />
+                                            <span className="vbar boys" style={{ "--pct": (b / scale * 100) + "%" }} />
+                                            <span className="vbar girls" style={{ "--pct": (g / scale * 100) + "%" }} />
+                                        </div>
+                                        <span className="gender-chart-col-label">{r.className}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                    </div>
+                    </div>
+
+                    {/* Student records table */}
+                    <div className="settings-card records-card" style={{ marginTop: 14 }}>
                     {showCols && (
                         <div className="settings-card" style={{ padding: 12, marginBottom: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
                             {COLUMNS.map((c) => (
@@ -521,6 +618,7 @@ function StudentsPage() {
                             </tbody>
                         </table>
                     </div>
+                    </div>
                 </div>
             </div>
 
@@ -578,7 +676,7 @@ function StudentsPage() {
 // UNIFIED STUDENT DETAIL MODAL
 // One place for everything: profile + full fee account.
 // =====================================================
-function StudentDetailModal({ student, initialTab = "overview", onClose, onEdit }) {
+export function StudentDetailModal({ student, initialTab = "overview", onClose, onEdit }) {
     const [tab, setTab] = useState(initialTab);
     const [history, setHistory] = useState(null);
     const [loadingFees, setLoadingFees] = useState(true);
@@ -652,7 +750,7 @@ function StudentDetailModal({ student, initialTab = "overview", onClose, onEdit 
     const Value = ({ children }) => <div style={{ fontSize: "14px", fontWeight: "600", color: "#0F172A", marginBottom: "16px" }}>{children || "-"}</div>;
 
     // Fee math (mirrors the standalone ledger).
-    const prevDues = Number(student?.previousDues || 0);
+    const prevDues = Math.max(0, Number(student?.previousDues || 0) - Number(student?.previousDuesConcession || 0));
     const concession = Number(student?.concessionAmount || 0);
     let standardTotal = Number(history?.totalFee || 0);
     if (Array.isArray(history?.items) && history.items.length > 0) {

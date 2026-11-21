@@ -25,7 +25,8 @@ const runQ = (sql, params = []) =>
 exports.getPayments = (req, res) => {
     const { search, studentId, className, paymentMode, dateFrom, dateTo } = req.query;
     let sql = `
-        SELECT payments.*, students.studentName, students.rollNumber, students.className, students.fatherName, ay.name AS academicYearName
+        SELECT payments.*, students.studentName, students.rollNumber, students.className, students.fatherName,
+               students.status AS studentStatus, ay.name AS academicYearName
         FROM payments
         LEFT JOIN students ON payments.studentId = students.id
         LEFT JOIN student_fee_accounts sfa ON payments.feeAccountId = sfa.id
@@ -192,7 +193,9 @@ const APPROVER_ROLES = ["admin", "principal"];
 exports.reversePayment = (req, res) => {
     const paymentId = Number(req.params.id);
     const reason = String(req.body?.reason || "").trim();
-    if (!reason) return res.status(400).json({ success: false, message: "Reversal reason required." });
+    if (reason.length < 10 || /^(.)\1+$/.test(reason)) {
+        return res.status(400).json({ success: false, message: "Please enter a clear reversal reason (at least 10 characters)." });
+    }
 
     db.get(`SELECT * FROM payments WHERE id = ?`, [paymentId], (err, payment) => {
         if (err || !payment) return res.status(404).json({ success: false, message: "Payment not found." });
@@ -227,6 +230,26 @@ exports.reversePayment = (req, res) => {
             })
                 .catch((auditErr) => console.error("Audit log (PAYMENT_REVERSED) failed:", auditErr))
                 .finally(() => res.json({ success: true, message: "Payment reversed successfully." }));
+        });
+    });
+};
+
+// Correct the reason on an already-reversed payment (admin/principal only).
+// The reversal itself is untouched — only the explanation is fixed.
+exports.updateVoidReason = (req, res) => {
+    const paymentId = Number(req.params.id);
+    const reason = String(req.body?.reason || "").trim();
+    if (!paymentId) return res.status(400).json({ success: false, message: "Invalid payment ID." });
+    if (reason.length < 10 || /^(.)\1+$/.test(reason)) {
+        return res.status(400).json({ success: false, message: "Please enter a clear reason (at least 10 characters)." });
+    }
+    db.get(`SELECT id, status FROM payments WHERE id = ?`, [paymentId], (err, payment) => {
+        if (err || !payment) return res.status(404).json({ success: false, message: "Payment not found." });
+        if (payment.status !== "reversed") return res.status(409).json({ success: false, message: "Only reversed payments can have their reason edited." });
+        db.run(`UPDATE payments SET voidReason = ? WHERE id = ?`, [reason, paymentId], function (uErr) {
+            if (uErr) return res.status(500).json({ success: false, message: "Unable to update reason." });
+            logAudit({ userId: req.user.id, action: "PAYMENT_VOID_REASON_UPDATED", entityType: "payment", entityId: paymentId, details: { reason } }).catch(() => {});
+            res.json({ success: true, message: "Reason updated." });
         });
     });
 };
@@ -317,7 +340,7 @@ exports.editPayment = (req, res) => {
     db.get(`SELECT * FROM payments WHERE id = ?`, [paymentId], (err, payment) => {
         if (err) return res.status(500).json({ success: false, message: "Database error." });
         if (!payment) return res.status(404).json({ success: false, message: "Payment not found." });
-        if (payment.editCount >= 1) return res.status(409).json({ success: false, message: "This payment has already been edited once." });
+        if (Number(payment.editCount || 0) >= 1) return res.status(409).json({ success: false, message: "This payment has already been edited once." });
         if (payment.status === "reversed") return res.status(409).json({ success: false, message: "A reversed payment cannot be edited." });
 
         // If full line items were provided, they are the source of truth:
@@ -335,7 +358,7 @@ exports.editPayment = (req, res) => {
         }
 
         const updateFields = ["amount = ?", "editCount = ?"];
-        const updateVals = [newAmount, payment.editCount + 1];
+        const updateVals = [newAmount, Number(payment.editCount || 0) + 1];
         if (typeof paymentMode !== "undefined") { updateFields.push("paymentMode = ?"); updateVals.push(paymentMode); }
         if (typeof paymentDate !== "undefined") { updateFields.push("paymentDate = ?"); updateVals.push(paymentDate); }
         if (typeof remarks !== "undefined") { updateFields.push("remarks = ?"); updateVals.push(remarks || ""); }
@@ -351,7 +374,7 @@ exports.editPayment = (req, res) => {
 
                     if (!hasLineItems) {
                         db.run("COMMIT", () => {
-                            res.json({ success: true, message: "Payment edited successfully.", newEditCount: payment.editCount + 1 });
+                            res.json({ success: true, message: "Payment edited successfully.", newEditCount: Number(payment.editCount || 0) + 1 });
                         });
                         return;
                     }
@@ -367,7 +390,7 @@ exports.editPayment = (req, res) => {
                                         userId: req.user.id, action: "PAYMENT_EDITED", entityType: "payment", entityId: paymentId,
                                         details: { oldAmount: payment.amount, newAmount, componentCount: lineItems.length }
                                     }).catch((auditErr) => console.error("Audit log (PAYMENT_EDITED) failed:", auditErr));
-                                    res.json({ success: true, message: "Payment edited successfully.", newEditCount: payment.editCount + 1 });
+                                    res.json({ success: true, message: "Payment edited successfully.", newEditCount: Number(payment.editCount || 0) + 1 });
                                 });
                                 return;
                             }
@@ -461,21 +484,41 @@ exports.dashboardSummary = async (req, res) => {
         if (!year) return res.status(404).json({ success: false, message: "No active academic year." });
 
         // These aggregates are independent — run them concurrently.
-        const [totalStudents, feeData, paymentData, totalTeachers, concessionData] = await Promise.all([
+        const [totalStudents, feeData, prevDuesData, netFeeData, paymentData, totalTeachers, concessionData] = await Promise.all([
             new Promise((resolve, reject) => {
-                db.get(`SELECT COUNT(*) AS total FROM student_enrollments WHERE academicYearId = ? AND status = 'active'`, [year.id], (err, row) => {
+                db.get(`SELECT COUNT(*) AS total FROM student_enrollments se INNER JOIN students s ON s.id=se.studentId WHERE se.academicYearId = ? AND se.status = 'active' AND (s.status IS NULL OR s.status = 'active')`, [year.id], (err, row) => {
                     if (err) reject(err); else resolve(Number(row.total || 0));
                 });
             }),
             new Promise((resolve, reject) => {
                 db.get(`
-                    SELECT COALESCE(SUM(sfi.amount), 0) AS totalFee
+                    SELECT COALESCE(SUM(CASE WHEN sfi.itemType = 'carry_forward' OR LOWER(COALESCE(fc.componentName,'')) LIKE '%previous%' THEN 0 ELSE sfi.amount END), 0) AS totalFee
                     FROM student_fee_items sfi
                     INNER JOIN student_fee_accounts sfa ON sfa.id = sfi.feeAccountId
                     INNER JOIN student_enrollments se ON se.id = sfa.enrollmentId
+                    INNER JOIN students s ON s.id = se.studentId
+                    LEFT JOIN fee_components fc ON fc.id = sfi.componentId
                     WHERE se.academicYearId = ? AND se.status = 'active'
+                      AND (s.status IS NULL OR s.status = 'active')
                 `, [year.id], (err, row) => {
                     if (err) reject(err); else resolve(Number(row.totalFee || 0));
+                });
+            }),
+            new Promise((resolve, reject) => {
+                db.get(`SELECT COALESCE(SUM(MAX(COALESCE(s.previousDues,0)-COALESCE(s.previousDuesConcession,0),0)),0) AS t
+                        FROM student_enrollments se INNER JOIN students s ON s.id=se.studentId
+                        WHERE se.academicYearId=? AND se.status='active' AND (s.status IS NULL OR s.status='active')`, [year.id], (err, row) => {
+                    if (err) reject(err); else resolve(Number(row.t || 0));
+                });
+            }),
+            new Promise((resolve, reject) => {
+                db.get(`SELECT COALESCE(SUM(MAX(COALESCE(s.previousDues,0)-COALESCE(s.previousDuesConcession,0),0)+MAX(COALESCE(d.standardNet,0)-COALESCE(s.concessionAmount,0),0)),0) AS t
+                        FROM student_enrollments se INNER JOIN students s ON s.id=se.studentId
+                        LEFT JOIN student_fee_accounts sfa ON sfa.enrollmentId=se.id
+                        LEFT JOIN (SELECT sfi.feeAccountId, COALESCE(SUM(CASE WHEN sfi.itemType='carry_forward' OR LOWER(COALESCE(fc.componentName,'')) LIKE '%previous%' THEN 0 ELSE sfi.amount END),0) standardNet
+                                   FROM student_fee_items sfi LEFT JOIN fee_components fc ON fc.id=sfi.componentId GROUP BY sfi.feeAccountId) d ON d.feeAccountId=sfa.id
+                        WHERE se.academicYearId=? AND se.status='active' AND (s.status IS NULL OR s.status='active')`, [year.id], (err, row) => {
+                    if (err) reject(err); else resolve(Number(row.t || 0));
                 });
             }),
             new Promise((resolve, reject) => {
@@ -505,6 +548,7 @@ exports.dashboardSummary = async (req, res) => {
                     FROM student_enrollments se
                     INNER JOIN students s ON s.id = se.studentId
                     WHERE se.academicYearId = ? AND se.status = 'active'
+                      AND (s.status IS NULL OR s.status = 'active')
                 `, [year.id], (err, row) => {
                     if (err) reject(err); else resolve(Number(row.totalConcessions || 0));
                 });
@@ -514,7 +558,7 @@ exports.dashboardSummary = async (req, res) => {
         // Concessions lower the real demand: net fee = standard - concessions.
         // Pending = net fee - collected, so the numbers always add up:
         // Total Fees (net) = Fee Collection + Pending Fees.
-        const netFee = Math.max(0, feeData - concessionData);
+        const netFee = Math.max(0, netFeeData);
 
         res.json({
             academicYear: { id: year.id, name: year.name },
@@ -522,7 +566,7 @@ exports.dashboardSummary = async (req, res) => {
             totalTeachers,
             totalPayments: Number(paymentData.totalPayments || 0),
             totalCollection: Number(paymentData.totalCollection || 0),
-            totalFee: feeData,
+            totalFee: feeData + prevDuesData,
             totalConcessions: concessionData,
             netFee,
             pendingFees: Math.max(0, netFee - Number(paymentData.totalCollection || 0))
@@ -574,7 +618,7 @@ exports.getDefaulters = async (req, res) => {
 
         const students = await allQ(`
             SELECT s.id AS studentId, s.studentName, s.rollNumber, s.className,
-                   s.admissionNumber, s.contact1, s.previousDues, s.concessionAmount,
+                   s.admissionNumber, s.contact1, s.previousDues, s.previousDuesConcession, s.concessionAmount,
                    sfa.id AS feeAccountId
             FROM student_enrollments se
             INNER JOIN students s ON s.id = se.studentId
@@ -608,7 +652,7 @@ exports.getDefaulters = async (req, res) => {
         const defaulters = students.map((s) => {
             const standard = Number(demandBy[s.feeAccountId] || 0);
             const net = Math.max(0, standard - Number(s.concessionAmount || 0));
-            const demand = Number(s.previousDues || 0) + net;
+            const demand = Math.max(0, Number(s.previousDues || 0) - Number(s.previousDuesConcession || 0)) + net;
             const paid = Number(paidBy[s.feeAccountId] || 0);
             const balance = Math.max(0, demand - paid);
             return {
@@ -670,6 +714,7 @@ exports.reportSummary = async (req, res) => {
                 FROM student_enrollments se
                 INNER JOIN students s ON s.id = se.studentId
                 WHERE se.academicYearId = ? AND se.status = 'active'
+                  AND (s.status IS NULL OR s.status = 'active')
                 ORDER BY se.className, se.rollNumber
             `, [year.id], (err, rows) => err ? reject(err) : resolve(rows));
         });
@@ -693,11 +738,14 @@ exports.reportSummary = async (req, res) => {
 
         const feeTotal = await new Promise((resolve, reject) => {
             db.get(`
-                SELECT COALESCE(SUM(sfi.amount), 0) AS total
+                SELECT COALESCE(SUM(CASE WHEN sfi.itemType = 'carry_forward' OR LOWER(COALESCE(fc.componentName,'')) LIKE '%previous%' THEN 0 ELSE sfi.amount END), 0) AS total
                 FROM student_fee_items sfi
                 INNER JOIN student_fee_accounts sfa ON sfa.id = sfi.feeAccountId
                 INNER JOIN student_enrollments se ON se.id = sfa.enrollmentId
+                INNER JOIN students s ON s.id = se.studentId
+                LEFT JOIN fee_components fc ON fc.id = sfi.componentId
                 WHERE se.academicYearId = ? AND se.status = 'active'
+                  AND (s.status IS NULL OR s.status = 'active')
             `, [year.id], (err, row) => err ? reject(err) : resolve(Number(row.total || 0)));
         });
 
@@ -722,7 +770,7 @@ exports.reportSummary = async (req, res) => {
                     COUNT(DISTINCT se.studentId) AS students,
                     COALESCE(SUM(
                         CASE WHEN sfa.id IS NULL THEN 0
-                             ELSE COALESCE(s.previousDues, 0)
+                             ELSE MAX(COALESCE(s.previousDues, 0) - COALESCE(s.previousDuesConcession, 0), 0)
                                   + MAX(COALESCE(demand.standardNet, 0) - COALESCE(s.concessionAmount, 0), 0)
                         END
                     ), 0) AS assessed
@@ -739,6 +787,7 @@ exports.reportSummary = async (req, res) => {
                     GROUP BY sfi.feeAccountId
                 ) demand ON demand.feeAccountId = sfa.id
                 WHERE se.academicYearId = ? AND se.status = 'active'
+                  AND (s.status IS NULL OR s.status = 'active')
                 GROUP BY se.className
             `, [year.id], (err, rows) => err ? reject(err) : resolve(rows || []));
         });
@@ -835,12 +884,13 @@ exports.exportBundle = async (req, res) => {
                 s.gender, s.dob, s.fatherName, s.motherName,
                 s.contact1, s.contact2, s.studentCategory, s.remark,
                 s.tuitionFee,
-                s.previousDues, s.concessionAmount,
+                s.previousDues, s.previousDuesConcession, s.concessionAmount,
                 sfa.id AS feeAccountId
             FROM student_enrollments se
             INNER JOIN students s ON s.id = se.studentId
             LEFT JOIN student_fee_accounts sfa ON sfa.enrollmentId = se.id
             WHERE se.academicYearId = ? AND se.status = 'active'
+              AND (s.status IS NULL OR s.status = 'active')
             ORDER BY CAST(NULLIF(s.className,'') AS INTEGER) ASC, s.className ASC,
                      CAST(NULLIF(s.rollNumber,'') AS INTEGER) ASC, s.rollNumber ASC
         `, [year.id]);
@@ -870,7 +920,7 @@ exports.exportBundle = async (req, res) => {
 
         // Compose per-student ledger with balance.
         const buildLedger = (s) => {
-            const prevDues = Number(s.previousDues || 0);
+            const prevDues = Math.max(0, Number(s.previousDues || 0) - Number(s.previousDuesConcession || 0));
             const concession = Number(s.concessionAmount || 0);
             const standard = Number(demandByAccount[s.feeAccountId] || 0);
             const netAcademic = Math.max(0, standard - concession);

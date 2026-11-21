@@ -60,16 +60,35 @@ exports.getTCConcessions = (req, res) => {
 exports.getConcessions = (req, res) => {
     const { className, category } = req.query;
 
+    // A granted concession only reduces fees that actually exist. Compute the
+    // effective (pure) amount = min(granted, current-year fee items) so the
+    // "Total Conceded" figure never overstates what was really written off.
     let sql = `
-        SELECT id, studentName, rollNumber, admissionNumber, className,
-               studentCategory, concessionAmount, concessionReason
-        FROM students
-        WHERE (status IS NULL OR status = 'active') AND concessionAmount > 0
+        SELECT s.id, s.studentName, s.rollNumber, s.admissionNumber, s.className,
+               s.studentCategory, s.concessionAmount, s.concessionReason,
+               COALESCE(d.totalItems, 0) AS currentFeeItems,
+               MIN(s.concessionAmount, COALESCE(d.totalItems, 0)) AS effectiveConcession
+        FROM students s
+        LEFT JOIN (
+            SELECT se.studentId,
+                   COALESCE(SUM(CASE WHEN sfi.itemType = 'carry_forward'
+                                      OR LOWER(COALESCE(fc.componentName,'')) LIKE '%previous%'
+                                      THEN 0 ELSE sfi.amount END), 0) AS totalItems
+            FROM student_enrollments se
+            INNER JOIN student_fee_accounts sfa ON sfa.enrollmentId = se.id
+            INNER JOIN student_fee_items sfi ON sfi.feeAccountId = sfa.id
+            LEFT JOIN fee_components fc ON fc.id = sfi.componentId
+            WHERE se.status = 'active' AND se.academicYearId = (
+                SELECT id FROM academic_years WHERE status='active' ORDER BY id DESC LIMIT 1
+            )
+            GROUP BY se.studentId
+        ) d ON d.studentId = s.id
+        WHERE (s.status IS NULL OR s.status = 'active') AND s.concessionAmount > 0
     `;
     const params = [];
 
     if (className && className !== "All") {
-        sql += ` AND className = ?`;
+        sql += ` AND s.className = ?`;
         params.push(className);
     }
 
@@ -210,5 +229,81 @@ exports.deleteConcession = async (req, res) => {
     } catch (err) {
         console.error("Concession removal error:", err);
         res.status(500).json({ success: false, message: "Unable to remove concession." });
+    }
+};
+
+
+// =====================================================
+// PREVIOUS-DUES CONCESSIONS
+// Only students carrying previous-year dues appear here. This concession is
+// capped at the student's previousDues and is subtracted from the dues in
+// every calculation (student ledger, payments, receipts, TC, dashboard, reports).
+// It is separate from concessionAmount, which only reduces current-year fees.
+// =====================================================
+exports.getPreviousDuesConcessions = (req, res) => {
+    const { className } = req.query;
+    let sql = `
+        SELECT id, studentName, rollNumber, className, fatherName, contact1, status,
+               previousDues, previousDuesConcession, previousDuesConcessionReason
+        FROM students
+        WHERE COALESCE(previousDues, 0) > 0
+          AND (status IS NULL OR status = 'active')
+    `;
+    const params = [];
+    if (className && className !== "All") { sql += ` AND className = ?`; params.push(className); }
+    sql += ` ORDER BY className ASC, CAST(NULLIF(rollNumber, '') AS INTEGER) ASC, rollNumber ASC`;
+    db.all(sql, params, (err, rows) => {
+        if (err) return res.status(500).json({ success: false, message: "Unable to load previous dues." });
+        res.json((rows || []).map((r) => ({
+            ...r,
+            remainingDues: Math.max(0, Number(r.previousDues || 0) - Number(r.previousDuesConcession || 0))
+        })));
+    });
+};
+
+exports.upsertPreviousDuesConcession = async (req, res) => {
+    const studentId = Number(req.params.studentId);
+    const amount = Number(req.body.previousDuesConcession);
+    const reason = String(req.body.previousDuesConcessionReason || "").trim();
+
+    if (!studentId || studentId <= 0) return res.status(400).json({ success: false, message: "Invalid student ID." });
+    if (!Number.isFinite(amount) || amount < 0) return res.status(400).json({ success: false, message: "Concession amount must be 0 or more." });
+    if (amount > 0 && !reason) return res.status(400).json({ success: false, message: "A reason is required when conceding previous dues." });
+
+    try {
+        const student = await getStudentById(studentId);
+        if (!student) return res.status(404).json({ success: false, message: "Student not found." });
+        if (student.status === "archived") return res.status(409).json({ success: false, message: "Archived students cannot be edited. Restore the student first." });
+        if (amount > Number(student.previousDues || 0)) {
+            return res.status(400).json({ success: false, message: "Previous dues concession cannot exceed the student's previous dues." });
+        }
+
+        const changes = await new Promise((resolve, reject) => {
+            db.run(
+                `UPDATE students SET previousDuesConcession = ?, previousDuesConcessionReason = ? WHERE id = ?`,
+                [amount, amount > 0 ? reason : "", studentId],
+                function (err) { if (err) reject(err); else resolve(this.changes); }
+            );
+        });
+        if (changes === 0) return res.status(404).json({ success: false, message: "Student not found." });
+
+        try {
+            await logAudit({
+                userId: req.user.id,
+                action: amount > 0 ? "PREV_DUES_CONCESSION_UPDATED" : "PREV_DUES_CONCESSION_CLEARED",
+                entityType: "student",
+                entityId: studentId,
+                details: {
+                    studentName: student.studentName,
+                    previous: { amount: Number(student.previousDuesConcession || 0), reason: student.previousDuesConcessionReason || "" },
+                    new: { amount, reason, previousDues: Number(student.previousDues || 0) }
+                }
+            });
+        } catch (auditErr) { console.error("Audit log (previous dues concession) failed:", auditErr); }
+
+        res.json({ success: true, message: "Previous dues concession saved." });
+    } catch (err) {
+        console.error("Previous dues concession save error:", err);
+        res.status(500).json({ success: false, message: "Unable to save previous dues concession." });
     }
 };

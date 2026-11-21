@@ -6,6 +6,7 @@ import api from "../services/api";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import { SkeletonTable } from "../components/Skeleton";
+import { StudentDetailModal } from "./StudentsPage";
 
 const money = (v) => `₹${Number(v || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -21,6 +22,7 @@ export default function ArchivedStudentsPage() {
     const [tcYears, setTcYears] = useState([]);
     const [tcYear, setTcYear] = useState("All");
     const [tcLoading, setTcLoading] = useState(false);
+    const [profileStudent, setProfileStudent] = useState(null);
 
     const loadStudents = useCallback(async () => {
         setLoading(true);
@@ -125,13 +127,16 @@ export default function ArchivedStudentsPage() {
                                                     <td data-label="Admission No.">{s.admissionNumber || "-"}</td>
                                                     <td data-label="Archived">{s.archivedAt ? new Date(s.archivedAt).toLocaleDateString("en-IN") : "-"}</td>
                                                     <td data-label="Action" style={{ textAlign: "right" }}>
-                                                        {tcIssuedIds.includes(String(s.id)) ? (
-                                                            <span className="payment-badge mode-default" title="TC issued - cannot be restored">TC issued</span>
-                                                        ) : (
-                                                        <button type="button" className="primary-btn" disabled={busyId === s.id} onClick={() => restore(s)}>
-                                                            {busyId === s.id ? "Restoring…" : "Restore"}
-                                                        </button>
-                                                        )}
+                                                        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                                                            <button type="button" className="edit-btn" onClick={() => setProfileStudent(s)}>View Profile</button>
+                                                            {tcIssuedIds.includes(String(s.id)) ? (
+                                                                <span className="payment-badge mode-default" title="TC issued - cannot be restored">TC issued</span>
+                                                            ) : (
+                                                            <button type="button" className="primary-btn" disabled={busyId === s.id} onClick={() => restore(s)}>
+                                                                {busyId === s.id ? "Restoring…" : "Restore"}
+                                                            </button>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -151,7 +156,7 @@ export default function ArchivedStudentsPage() {
                             </div>
                             <div className="table-container" style={{ marginTop: 10 }}>
                                 <table className="stack-sm">
-                                    <thead><tr><th>TC No.</th><th>Student</th><th>Class</th><th>Academic Year</th><th>Leaving</th><th>Balance</th><th>Issued</th><th style={{ textAlign: "right" }}>Download</th></tr></thead>
+                                    <thead><tr><th>TC No.</th><th>Student</th><th>Class</th><th>Academic Year</th><th>Leaving</th><th>Conceded (Written Off)</th><th>Issued</th><th style={{ textAlign: "right" }}>Download</th></tr></thead>
                                     <tbody>
                                         {tcLoading ? (
                                             <tr><td colSpan="8">Loading…</td></tr>
@@ -164,7 +169,7 @@ export default function ArchivedStudentsPage() {
                                                 <td data-label="Class">{r.className || "-"}</td>
                                                 <td data-label="Academic Year">{r.academicYear || "-"}</td>
                                                 <td data-label="Leaving">{r.leavingDate || "-"}</td>
-                                                <td data-label="Balance">{money(r.balance)}</td>
+                                                <td data-label="Conceded (Written Off)"><strong className="negative-balance">{money(r.remainingAmount)}</strong></td>
                                                 <td data-label="Issued">{new Date(r.issuedAt).toLocaleDateString("en-IN")}</td>
                                                 <td data-label="Download" style={{ textAlign: "right" }}>
                                                     <button type="button" className="primary-btn" onClick={() => downloadTC(r)}>⬇ Download</button>
@@ -176,6 +181,14 @@ export default function ArchivedStudentsPage() {
                             </div>
                         </div>
                     )}
+
+                {profileStudent && (
+                    <StudentDetailModal
+                        student={profileStudent}
+                        initialTab="overview"
+                        onClose={() => setProfileStudent(null)}
+                    />
+                )}
                 </div>
             </div>
         </div>

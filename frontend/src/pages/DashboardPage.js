@@ -23,6 +23,10 @@ const CARD_ROUTES = {
     "Expense Transactions": "/expenses"
 };
 
+// Default card order. Users can reorder from the Customize panel; any new
+// cards added later are appended automatically to saved orders.
+const ALL_CARDS = ["Net Balance", "Students", "Teachers", "Total Fees", "Fee Concessions", "TC Conceded Fee", "Fee Collection", "Pending Fees", "School Expenses", "School Incomes", "Total Payments", "Expense Transactions"];
+
 function DashboardPage() {
     const navigate = useNavigate();
     const { user } = useAuth();
@@ -54,6 +58,7 @@ function DashboardPage() {
         tcCollected: 0
     });
 
+    const [prevDuesFollowUp, setPrevDuesFollowUp] = useState([]);
     const [recentPayments, setRecentPayments] = useState([]);
     const [recentExpenses, setRecentExpenses] = useState([]);
     const [activity, setActivity] = useState([]);
@@ -63,13 +68,33 @@ function DashboardPage() {
         try { return JSON.parse(localStorage.getItem("dashboard-hidden-cards") || "[]"); } catch (e) { return []; }
     });
     const [customizing, setCustomizing] = useState(false);
-    const ALL_CARDS = ["Net Balance", "Students", "Teachers", "Total Fees", "Fee Concessions", "TC Conceded Fee", "Fee Collection", "Pending Fees", "School Expenses", "School Incomes", "Total Payments", "Expense Transactions"];
+    // Per-user card priority order (persisted in this browser, like show/hide).
+    const [cardOrder, setCardOrder] = useState(() => {
+        try {
+            const saved = JSON.parse(localStorage.getItem("dashboard-card-order") || "[]");
+            const valid = Array.isArray(saved) ? saved.filter((c) => ALL_CARDS.includes(c)) : [];
+            return [...valid, ...ALL_CARDS.filter((c) => !valid.includes(c))];
+        } catch (e) { return [...ALL_CARDS]; }
+    });
     const toggleCard = (name) => {
         const next = hiddenCards.includes(name) ? hiddenCards.filter((c) => c !== name) : [...hiddenCards, name];
         setHiddenCards(next);
         try { localStorage.setItem("dashboard-hidden-cards", JSON.stringify(next)); } catch (e) { /* optional */ }
     };
     const cardVisible = (name) => !hiddenCards.includes(name);
+
+    const saveOrder = (next) => {
+        setCardOrder(next);
+        try { localStorage.setItem("dashboard-card-order", JSON.stringify(next)); } catch (e) { /* optional */ }
+    };
+    const moveCard = (index, direction) => {
+        const target = index + direction;
+        if (target < 0 || target >= cardOrder.length) return;
+        const next = [...cardOrder];
+        [next[index], next[target]] = [next[target], next[index]];
+        saveOrder(next);
+    };
+    const resetOrder = () => saveOrder([...ALL_CARDS]);
 
     useEffect(() => {
         fetchDashboard();
@@ -92,6 +117,16 @@ function DashboardPage() {
                 const recs = Array.isArray(tcRes.data?.records) ? tcRes.data.records : [];
                 tcConcededFee = recs.reduce((s, r) => s + Number(r.remainingAmount || 0), 0);
             } catch (e) { /* non-fatal: keep 0 */ }
+
+            // Follow-up list: students still carrying previous-year dues.
+            try {
+                const dues = await api.get("/concessions/previous-dues");
+                setPrevDuesFollowUp(
+                    (Array.isArray(dues.data) ? dues.data : [])
+                        .filter((s) => Number(s.remainingDues || 0) > 0)
+                        .sort((a, b) => Number(b.remainingDues || 0) - Number(a.remainingDues || 0))
+                );
+            } catch (e) { setPrevDuesFollowUp([]); }
 
             // Recent lists only exist for roles allowed to see
             // financial data; restricted roles skip these calls
@@ -189,6 +224,23 @@ function DashboardPage() {
         );
     }
 
+    // Values, icons and colours in one place so the Customize panel can
+    // render the cards in whatever priority order the user chooses.
+    const cardMeta = {
+        "Net Balance": { value: money(summary.netBalance), icon: "💵", color: "var(--p-slate)", financial: true },
+        "Students": { value: summary.totalStudents, icon: "👨‍🎓", color: "var(--navy)", financial: false },
+        "Teachers": { value: summary.totalTeachers, icon: "🧑‍🏫", color: "var(--navy)", financial: false },
+        "Total Fees": { value: money(Math.max(0, summary.netFee - summary.tcCollected)), icon: "📚", color: "var(--navy)", financial: true },
+        "Fee Concessions": { value: money(summary.totalConcessions), icon: "🏷️", color: "var(--p-slate)", financial: true },
+        "TC Conceded Fee": { value: money(summary.tcConcededFee), icon: "🎓", color: "var(--p-slate)", financial: true },
+        "Fee Collection": { value: money(summary.totalCollection), icon: "💰", color: "var(--p-slate)", financial: true },
+        "Pending Fees": { value: money(summary.pendingFees), icon: "⚠️", color: "var(--danger)", financial: true },
+        "School Expenses": { value: money(summary.totalExpenseAmount), icon: "💸", color: "var(--p-slate)", financial: true },
+        "School Incomes": { value: money(summary.totalIncomeAmount), icon: "📈", color: "var(--p-slate)", financial: true },
+        "Total Payments": { value: summary.totalPayments, icon: "🧾", color: "var(--p-slate)", financial: true },
+        "Expense Transactions": { value: summary.totalExpenses, icon: "📋", color: "var(--p-slate)", financial: true }
+    };
+
     return (
         <div className="dashboard">
             <Sidebar />
@@ -210,41 +262,64 @@ function DashboardPage() {
                         <button type="button" className="clear-btn" onClick={() => setCustomizing((v) => !v)}>{customizing ? "Done" : "⚙ Customize cards"}</button>
                     </div>
                     {customizing && (
-                        <div className="settings-card" style={{ padding: 12, marginBottom: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            {ALL_CARDS.map((c) => (
-                                <label key={c} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, minHeight: 36 }}>
-                                    <input type="checkbox" checked={cardVisible(c)} onChange={() => toggleCard(c)} /> {c}
-                                </label>
-                            ))}
+                        <div className="settings-card" style={{ padding: 14, marginBottom: 12 }}>
+                            <div style={{ fontSize: 12, color: "#64748B", marginBottom: 10 }}>
+                                Tick a card to show it. Use ↑ / ↓ to set the order it appears on your dashboard. Your layout is saved automatically.
+                            </div>
+                            <div style={{ display: "grid", gap: 6 }}>
+                                {cardOrder.map((c, i) => (
+                                    <div key={c} style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 40 }}>
+                                        <input type="checkbox" checked={cardVisible(c)} onChange={() => toggleCard(c)} aria-label={`Show ${c}`} />
+                                        <span style={{ fontSize: 12, flex: 1, minWidth: 0 }}>{c}</span>
+                                        <button type="button" className="clear-btn" style={{ padding: "4px 10px" }} onClick={() => moveCard(i, -1)} disabled={i === 0} aria-label={`Move ${c} up`}>↑</button>
+                                        <button type="button" className="clear-btn" style={{ padding: "4px 10px" }} onClick={() => moveCard(i, 1)} disabled={i === cardOrder.length - 1} aria-label={`Move ${c} down`}>↓</button>
+                                    </div>
+                                ))}
+                            </div>
+                            <button type="button" className="clear-btn" style={{ marginTop: 10 }} onClick={resetOrder}>Reset to default order</button>
                         </div>
                     )}
 
-                    {/* First Row of Cards */}
+                    {/* Cards render in the user's chosen priority order.
+                        TC-collected cash comes off Total Fees here (and off Pending Fees
+                        via totalCollection), and is in Net Balance server-side. */}
                     <div className="cards">
-                        {canSeeFinancial && cardVisible("Net Balance") && <DashboardCard title="Net Balance" value={money(summary.netBalance)} icon="💵" color="var(--p-slate)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Net Balance"])} />}
-                        {cardVisible("Students") && <DashboardCard title="Students" value={summary.totalStudents} icon="👨‍🎓" color="var(--navy)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Students"])} />}
-                        {cardVisible("Teachers") && <DashboardCard title="Teachers" value={summary.totalTeachers} icon="🧑‍🏫" color="var(--navy)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Teachers"])} />}
-                        {canSeeFinancial && (
-                            <>
-                                {/* Cash collected at the TC counter is treated as recovered — it comes off the
-                                    net fee demand here, off Pending Fees (already lower via totalCollection),
-                                    and is added to Net Balance (totalCollection includes it) server-side. */}
-                                {cardVisible("Total Fees") && <DashboardCard title="Total Fees" value={money(Math.max(0, summary.netFee - summary.tcCollected))} icon="📚" color="var(--navy)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Total Fees"])} />}
-                                {cardVisible("Fee Concessions") && <DashboardCard title="Fee Concessions" value={money(summary.totalConcessions)} icon="🏷️" color="var(--p-slate)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Fee Concessions"])} />}
-                                {cardVisible("TC Conceded Fee") && <DashboardCard title="TC Conceded Fee" value={money(summary.tcConcededFee)} icon="🎓" color="var(--p-slate)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["TC Conceded Fee"])} />}
-                                {cardVisible("Fee Collection") && <DashboardCard title="Fee Collection" value={money(summary.totalCollection)} icon="💰" color="var(--p-slate)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Fee Collection"])} />}
-                                {cardVisible("Pending Fees") && <DashboardCard title="Pending Fees" value={money(summary.pendingFees)} icon="⚠️" color="var(--danger)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Pending Fees"])} />}
-                            </>
-                        )}
+                        {cardOrder
+                            .filter((name) => cardVisible(name) && (!cardMeta[name]?.financial || canSeeFinancial))
+                            .map((name) => {
+                                const c = cardMeta[name];
+                                if (!c) return null;
+                                return (
+                                    <DashboardCard key={name} title={name} value={c.value} icon={c.icon}
+                                        color={c.color} chipColor="var(--gold-light)"
+                                        onClick={() => navigate(CARD_ROUTES[name])} />
+                                );
+                            })}
                     </div>
 
-                    {/* Second Row of Cards (financial roles only) */}
-                    {canSeeFinancial && (
-                        <div className="cards" style={{ marginTop: "20px" }}>
-                            {cardVisible("School Expenses") && <DashboardCard title="School Expenses" value={money(summary.totalExpenseAmount)} icon="💸" color="var(--p-slate)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["School Expenses"])} />}
-                            {cardVisible("School Incomes") && <DashboardCard title="School Incomes" value={money(summary.totalIncomeAmount)} icon="📈" color="var(--p-slate)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["School Incomes"])} />}
-                            {cardVisible("Total Payments") && <DashboardCard title="Total Payments" value={summary.totalPayments} icon="🧾" color="var(--p-slate)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Total Payments"])} />}
-                            {cardVisible("Expense Transactions") && <DashboardCard title="Expense Transactions" value={summary.totalExpenses} icon="📋" color="var(--p-slate)" chipColor="var(--gold-light)" onClick={() => navigate(CARD_ROUTES["Expense Transactions"])} />}
+                    {/* Previous-dues follow-up — the real recovery list */}
+                    {canSeeFinancial && prevDuesFollowUp.length > 0 && (
+                        <div className="dashboard-table" style={{ marginTop: "20px" }}>
+                            <h3>Previous Dues — Follow Up</h3>
+                            <table className="stack-sm">
+                                <thead>
+                                    <tr><th>Student</th><th>Class</th><th>Dues</th><th>Conceded</th><th>Still To Collect</th><th style={{ textAlign: "right" }}>Action</th></tr>
+                                </thead>
+                                <tbody>
+                                    {prevDuesFollowUp.map((s) => (
+                                        <tr key={s.id}>
+                                            <td data-label="Student"><strong>{s.studentName || "-"}</strong></td>
+                                            <td data-label="Class">{s.className || "-"}</td>
+                                            <td data-label="Dues">{money(s.previousDues)}</td>
+                                            <td data-label="Conceded">{money(s.previousDuesConcession)}</td>
+                                            <td data-label="Still To Collect"><strong className="negative-balance">{money(s.remainingDues)}</strong></td>
+                                            <td data-label="Action" style={{ textAlign: "right" }}>
+                                                <button type="button" className="edit-btn" onClick={() => navigate("/fee-concessions", { state: { tab: "prevDues" } })}>Concede</button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     )}
 

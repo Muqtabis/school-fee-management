@@ -336,3 +336,336 @@ tr.tc-selected td { font-weight: 700; }
     .m-app table.stack-sm { min-width: 0 !important; }
 }
 
+
+/* ============================================================
+   CLASS-WISE STRENGTH TABLE (Students page) ï¿½ proper ledger look
+   on desktop. On phones .stack-sm still reflows to cards.
+   ============================================================ */
+@media (min-width: 641px) {
+    .strength-card {
+        display: table;
+        width: fit-content;
+        min-width: 380px;
+        max-width: 640px;
+        padding: 16px 18px;
+    }
+    .strength-card .table-container {
+        border: none;
+        box-shadow: none;
+        padding: 0;
+        margin: 0;
+    }
+    .strength-table {
+        border-collapse: separate;
+        border-spacing: 0;
+        width: auto;
+        min-width: 380px;
+        max-width: 560px;
+        margin: 0 auto;
+        border: 1px solid var(--border, #d9e0e6);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .strength-table th:first-child,
+    .strength-table td:first-child { width: 40%; padding-left: 16px; }
+    .strength-table th.num,
+    .strength-table td.num { width: 20%; padding: 3px 16px; }
+    .strength-table thead th,
+    table.strength-table thead tr th {
+        background: #0F172A !important;
+        color: #FFFFFF !important;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .6px;
+        padding: 7px 16px;
+        text-align: left;
+        opacity: 1;
+    }
+    .strength-table thead th.num { text-align: right; }
+    .strength-table tbody td {
+        padding: 3px 16px;
+        border-bottom: 1px solid #E2E8F0;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+    .strength-table tbody tr:nth-child(even) { background: #F8FAFC; }
+    .strength-table tbody tr:hover { background: #F1F5F9; }
+    .strength-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .strength-table td.boys { color: #1D4ED8; font-weight: 600; }
+    .strength-table td.girls { color: #BE185D; font-weight: 600; }
+    .strength-table tfoot td {
+        padding: 7px 16px;
+        background: #0F172A !important;
+        color: #FFFFFF !important;
+        font-weight: 700;
+        font-size: 13px;
+        border-top: 2px solid #0F172A;
+    }
+    .strength-table tfoot td.num { text-align: right; }
+    .strength-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: var(--surface-soft, #f3f5f7);
+        border: 1px solid var(--border, #d9e0e6);
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text, #263238);
+    }
+}
+
+/* ============================================================
+   STUDENT RECORDS CARD ï¿½ filters + table in one contained card,
+   with a shorter scrollable table on desktop.
+   ============================================================ */
+@media (min-width: 641px) {
+    .records-card .student-filters {
+        padding: 2px 2px 12px;
+        margin-bottom: 10px;
+        border-bottom: 1px solid var(--border, #E2E8F0);
+    }
+    .records-card .table-container {
+        max-height: 520px;
+        overflow-y: auto;
+        border-radius: 8px;
+    }
+    .records-card .table-container th,
+    .records-card .table-container td {
+        padding: 7px 10px;
+        font-size: 12.5px;
+    }
+    .records-card .sticky-actions {
+        margin: 8px 0;
+    }
+}
+
+/* ============================================================
+   STUDENTS TOP ROW ï¿½ strength table (left) + filters (right).
+   Column dividers drawn on the strength table.
+   ============================================================ */
+@media (min-width: 641px) {
+    .students-top-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+        margin-top: 14px;
+    }
+    .students-top-row .strength-card {
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+        flex: 0 0 auto;
+    }
+    .students-top-row .filters-card {
+        flex: 1 1 auto;
+        min-width: 0;
+        padding: 16px 18px;
+    }
+    .students-top-row .filters-card .student-filters {
+        padding: 0;
+        margin: 0;
+        border: none;
+    }
+    /* Vertical lines between the number columns */
+    .strength-table th.num,
+    .strength-table td.num {
+        border-left: 1px solid #E2E8F0;
+    }
+    .strength-table thead th.num { border-left-color: #334155; }
+    .strength-table tfoot td.num { border-left-color: #334155; }
+}
+
+/* ============================================================
+   CLASS GENDER CHART ï¿½ stacked under the filters card, fills the
+   empty space beside the strength table.
+   ============================================================ */
+@media (min-width: 641px) {
+    .students-side-col {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+    .students-side-col .filters-card { padding: 16px 18px; }
+    .gender-chart-card { padding: 16px 18px; }
+    .gender-chart { display: flex; flex-direction: column; gap: 5px; }
+    .gender-chart-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 20px;
+    }
+    .gender-chart-label {
+        width: 46px;
+        flex-shrink: 0;
+        font-size: 11px;
+        font-weight: 700;
+        color: #475569;
+    }
+    .gender-chart-bars { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .gender-chart-bars .bar {
+        display: block;
+        height: 7px;
+        border-radius: 3px;
+        min-width: 2px;
+        transition: width .3s ease;
+    }
+    .gender-chart-bars .bar.boys { background: #2563EB; }
+    .gender-chart-bars .bar.girls { background: #DB2777; }
+    .gender-chart-num {
+        width: 44px;
+        flex-shrink: 0;
+        text-align: right;
+        font-size: 11px;
+        font-weight: 700;
+        color: #64748B;
+        font-variant-numeric: tabular-nums;
+    }
+}
+
+/* ============================================================
+   CLASS GENDER CHART ï¿½ vertical bars (boys / girls per class).
+   ============================================================ */
+@media (min-width: 641px) {
+    .gender-chart-card { overflow-x: auto; }
+    .gender-chart-v {
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        height: 300px;
+        padding-top: 18px;
+        border-bottom: 1px solid #CBD5E1;
+        background: repeating-linear-gradient(to top, transparent 0, transparent 104px, #EEF2F6 105px);
+    }
+    .gender-chart-col {
+        flex: 1 1 0;
+        min-width: 18px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        height: 100%;
+    }
+    .gender-chart-col-values {
+        display: flex;
+        gap: 2px;
+        font-size: 11px;
+        font-weight: 700;
+        height: 20px;
+        line-height: 20px;
+    }
+    .gender-chart-col-values .v.boys { color: #1D4ED8; }
+    .gender-chart-col-values .v.girls { color: #BE185D; }
+    .gender-chart-col-bars {
+        position: relative;
+        flex: 1;
+        width: 100%;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        gap: 2px;
+    }
+    .gender-chart-col-bars .grid-line {
+        position: absolute;
+        left: 0; right: 0; top: 50%;
+        border-top: 1px dashed #E2E8F0;
+        z-index: 0;
+    }
+    .gender-chart-col-bars .vbar {
+        position: relative;
+        z-index: 1;
+        width: 38%;
+        max-width: 13px;
+        min-height: 2px;
+        height: var(--pct, 0%);
+        border-radius: 4px 4px 0 0;
+    }
+    .gender-chart-col-bars .vbar.boys { background: #2563EB; }
+    .gender-chart-col-bars .vbar.girls { background: #DB2777; }
+    .gender-chart-col-label {
+        margin-top: 6px;
+        font-size: 10px;
+        font-weight: 700;
+        color: #475569;
+        white-space: nowrap;
+        transform: rotate(-35deg);
+        transform-origin: center;
+        height: 30px;
+    }
+}
+
+/* ---- PHONES: class gender chart reflows into compact rows.
+   Scoped under .m-app (added by MobileShell only on phones) so it does not
+   depend on a media query matching â€” guaranteed to apply on mobile. ---- */
+.m-app .gender-chart-card { padding: 14px; }
+.m-app .gender-chart-v {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 7px;
+    height: auto;
+    padding-top: 0;
+    border-bottom: none;
+    background: none;
+}
+.m-app .gender-chart-col {
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    height: auto;
+}
+.m-app .gender-chart-col-values {
+    order: 3;
+    width: 48px;
+    height: auto;
+    line-height: 1.3;
+    font-size: 11px;
+    flex-direction: column;
+    gap: 0;
+    text-align: right;
+}
+.m-app .gender-chart-col-bars {
+    flex: 1;
+    width: auto;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    align-items: stretch;
+}
+.m-app .gender-chart-col-bars .grid-line { display: none; }
+.m-app .gender-chart-col-bars .vbar {
+    width: var(--pct, 0%);
+    max-width: none;
+    height: 9px;
+    min-height: 3px;
+    border-radius: 3px;
+}
+.m-app .gender-chart-col-label {
+    order: 1;
+    width: 48px;
+    margin: 0;
+    font-size: 11px;
+    transform: none;
+    height: auto;
+}
+
+/* ---- PHONES: tighten the strength-table stacked cards ---- */
+.m-app .strength-table tr { padding: 8px 10px; gap: 2px; }
+.m-app .strength-table td { padding: 3px 6px; font-size: 12px; }
+.m-app .strength-table td::before { font-size: 10px; margin-right: 6px; }
+.m-app .strength-card .strength-chip { font-size: 10px; padding: 4px 8px; }
+
+/* ============================================================
+   HIDE the class strength table and gender chart on phones —
+   they are desktop/Windows-only. The search & filter card stays.
+   .m-app is added by MobileShell only on phone-sized screens.
+   ============================================================ */
+.m-app .strength-card,
+.m-app .gender-chart-card,
+.m-app .students-side-col .gender-chart-card {
+    display: none !important;
+}

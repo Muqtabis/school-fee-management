@@ -24,7 +24,7 @@ const buildReceiptModel = async (paymentId) => {
     try {
         const studentRes = await api.get(`/students/${payment.studentId}`);
         const student = studentRes.data;
-        prevDues = Number(student?.previousDues || 0);
+        prevDues = Math.max(0, Number(student?.previousDues || 0) - Number(student?.previousDuesConcession || 0));
         concession = Number(student?.concessionAmount || 0);
 
         const historyRes = await api.get(`/payments/history/student/${payment.studentId}`);
@@ -72,7 +72,7 @@ const buildReceiptModel = async (paymentId) => {
                         const n = (li.componentName || "").toLowerCase().trim();
                         if (n.includes("previous")) pastPaidMap["previous dues"] += li.amount;
                         else if (n.includes("tuition") || n.includes("tution") || n.includes("term")) pastPaidMap["tuition fee"] += li.amount;
-                        else pastPaidMap[n] = (pastPaidMap[n] || 0) + li.amount;
+                        else unassignedPastPool += Number(li.amount || 0);
                     });
                 } else {
                     unassignedPastPool += Number(p.amount || 0);

@@ -6,7 +6,7 @@ import { printReceipt } from "../utils/receipt";
 const formatMoney = (val) =>
     Number(val || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-function SummaryTable({ payments = [], onReverse, onEdit }) {
+function SummaryTable({ payments = [], onReverse, onEdit, onEditReason }) {
     const formatDate = (date) => {
         if (!date) return "-";
         return new Date(date).toLocaleDateString("en-IN");
@@ -78,7 +78,7 @@ function SummaryTable({ payments = [], onReverse, onEdit }) {
                                     <td data-label="Status">{payment.status === "reversed" ? <span className="payment-badge mode-default">Reversed</span> : <span className="payment-badge mode-upi">Completed</span>}</td>
                                     <td data-label="">
                                         <div className="action-buttons">
-                                            {payment.status !== "reversed" && payment.editCount < 1 && <button className="edit-btn" onClick={() => onEdit(payment)}>Edit</button>}
+                                            {payment.status !== "reversed" && (Number(payment.editCount || 0) < 1) && <button className="edit-btn" onClick={() => onEdit(payment)}>Edit</button>}
                                             {payment.status !== "reversed" && <button className="receipt-btn" onClick={() => printReceipt(payment.id)}>Receipt</button>}
                                             {payment.status !== "reversed" && <button className="delete-btn" onClick={() => onReverse(payment)}>Reverse</button>}
                                         </div>
@@ -87,7 +87,12 @@ function SummaryTable({ payments = [], onReverse, onEdit }) {
                                 {payment.status === "reversed" && (
                                     <tr>
                                         <td colSpan="10" style={{ background: "var(--danger-bg)", padding: "7px 14px", fontSize: "12px", fontWeight: 600, color: "var(--danger)" }}>
-                                            Reversed{payment.voidedAt ? ` on ${formatDate(payment.voidedAt)}` : ""} — Reason: {payment.voidReason || "Not recorded"}
+                                            <span style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                                                <span>Reversed{payment.voidedAt ? ` on ${formatDate(payment.voidedAt)}` : ""} — Reason: {payment.voidReason || "Not recorded"}</span>
+                                                {onEditReason && (
+                                                    <button type="button" className="edit-btn" onClick={() => onEditReason(payment)}>Edit reason</button>
+                                                )}
+                                            </span>
                                         </td>
                                     </tr>
                                 )}
