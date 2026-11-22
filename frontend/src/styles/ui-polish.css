@@ -660,7 +660,7 @@ tr.tc-selected td { font-weight: 700; }
 .m-app .strength-card .strength-chip { font-size: 10px; padding: 4px 8px; }
 
 /* ============================================================
-   HIDE the class strength table and gender chart on phones —
+   HIDE the class strength table and gender chart on phones ï¿½
    they are desktop/Windows-only. The search & filter card stays.
    .m-app is added by MobileShell only on phone-sized screens.
    ============================================================ */
@@ -668,4 +668,123 @@ tr.tc-selected td { font-weight: 700; }
 .m-app .gender-chart-card,
 .m-app .students-side-col .gender-chart-card {
     display: none !important;
+}
+
+/* ============================================================
+/* ============================================================
+/* ============================================================
+   LOGIN â€” single horizontal card on Windows/desktop.
+   Mobile keeps the original centred card (base rules below).
+   ============================================================ */
+@media (min-width: 900px) {
+    .login-shell {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 24px;
+        background: linear-gradient(160deg, #f6f8fb, #eef2f7);
+        box-sizing: border-box;
+    }
+    .login-shell .login-card {
+        display: flex;
+        flex-direction: row;
+        width: 100%;
+        max-width: 940px;
+        min-height: 540px;
+        max-height: 92vh;
+        margin: 0;
+        padding: 0;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(23,54,93,.14);
+        background: #ffffff;
+        overflow: hidden;
+    }
+    .login-shell .login-brand {
+        display: flex !important;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        width: 46%;
+        padding: 48px;
+        box-sizing: border-box;
+        text-align: left;
+        color: #17365d;
+        background: linear-gradient(160deg, #f8fafc, #eef2f7);
+        border-right: 1px solid #e6ebf1;
+    }
+    .login-shell .login-brand img {
+        width: 100px; height: 100px;
+        object-fit: contain;
+        margin-bottom: 26px;
+    }
+    .login-shell .login-brand h1 {
+        margin: 0;
+        font-family: var(--font-display, Georgia, serif);
+        font-size: 30px;
+        font-weight: 700;
+        line-height: 1.2;
+        color: #17365d;
+    }
+    .login-shell .login-brand h1::after {
+        content: "";
+        display: block;
+        width: 40px; height: 3px;
+        background: #a9824b;
+        border-radius: 2px;
+        margin: 16px auto 0;
+    }
+    .login-shell .login-brand p.lead {
+        margin: 14px 0 0;
+        font-size: 13.5px;
+        line-height: 1.7;
+        color: #6b7b8c;
+        max-width: 330px;
+    }
+    .login-shell .card-form {
+        width: 54%;
+        padding: 48px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        background: #ffffff;
+    }
+    .login-shell .login-card .brand-mobile { display: none !important; }
+    .login-shell .login-card h2 {
+        font-family: inherit;
+        font-size: 22px;
+        font-weight: 700;
+        color: #17365d;
+    }
+    .login-shell .login-card form input {
+        border-radius: 8px !important;
+        border-color: #e0e6ed !important;
+    }
+    .login-shell .login-card form input:focus {
+        border-color: #a9824b !important;
+        box-shadow: 0 0 0 3px rgba(169,130,75,.12) !important;
+    }
+}
+@media (max-width: 899px) {
+    .login-brand { display: none !important; }
+}
+
+/* ---- LOGIN base (mobile single column; desktop override above) ---- */
+.login-shell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: #f5f6f8;
+    padding: 20px;
+    box-sizing: border-box;
+}
+.login-card {
+    width: 100%;
+    max-width: 380px;
+    padding: 35px;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
 }

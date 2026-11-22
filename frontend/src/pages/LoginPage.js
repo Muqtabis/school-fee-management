@@ -222,53 +222,36 @@ export default function LoginPage() {
 
     return (
 
-        <div
+        <div className="login-shell"
             style={{
-
-                minHeight: "100vh",
-
-                display: "flex",
-
-                alignItems: "center",
-
-                justifyContent: "center",
-
-                background: "#f5f6f8",
-
-                padding: "20px",
 
                 fontFamily:
                     "Arial, Helvetica, sans-serif"
 
             }}
         >
-
-            <div
+            <div className="login-card"
                 style={{
-
-                    width: "100%",
-
-                    maxWidth: "380px",
 
                     background: "#ffffff",
 
-                    padding: "35px",
-
-                    borderRadius: "10px",
-
-                    boxSizing: "border-box",
-
-                    boxShadow:
-                        "0 4px 20px rgba(0,0,0,0.08)"
+                    boxSizing: "border-box"
 
                 }}
             >
+                <aside className="login-brand">
+                    <img src="/logo.png" alt="The Age School Logo"
+                        onError={(e) => { e.target.style.display = "none"; }} />
+                    <h1>THE AGE SCHOOL</h1>
+                    <p className="lead">Institute of Pre, Primary and Secondary Education</p>
+                </aside>
 
+                <div className="card-form">
                 {/* =================================================
-                    SCHOOL HEADER
+                    SCHOOL HEADER (mobile only — desktop shows brand panel)
                 ================================================= */}
 
-                <div
+                <div className="brand-mobile"
                     style={{
 
                         textAlign: "center",
@@ -805,6 +788,7 @@ export default function LoginPage() {
                 `}
 
             </style>
+                </div>
 
         </div>
 
