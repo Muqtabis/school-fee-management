@@ -31,8 +31,10 @@ const PORT = Number(process.env.PORT) || 5000;
 app.use(
     cors({
         origin: [
-            "http://localhost:3000",
-            "https://wonderful-hill-06e76ae10.7.azurestaticapps.net" // Your Azure Frontend
+           "http://localhost:3000",
+            "https://wonderful-hill-06e76ae10.7.azurestaticapps.net", // Your Azure Frontend
+            "https://theageschool.org",
+            "https://www.theageschool.org"
         ],
         credentials: true
     })
