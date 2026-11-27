@@ -112,7 +112,9 @@ function computeStudentResult({ subjects, marksBySubject, bands }) {
 
     const subjectResults = (subjects || []).map((s) => {
         const entry = marksBySubject.get(s.subjectId) || {};
-        const status = normalizeStatus(entry.markStatus, entry.isAbsent);
+        // Optional subjects (no exam held) are treated as not-applicable so
+        // they never contribute to totals, grades or pass/fail.
+        const status = s.isOptional ? "not_applicable" : normalizeStatus(entry.markStatus, entry.isAbsent);
         const maxMarks = Number(s.maxMarks) || 0;
         const passMarks = resolvePassMarks(s.passMarks, maxMarks);
 

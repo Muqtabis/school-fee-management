@@ -205,6 +205,15 @@ function requirePage(pageKey) {
         }
 
 
+        // Notice Board is a default page for every logged-in user —
+        // no explicit grant needed (kept out of the access checklist).
+        if (pageKey === "notices") {
+
+            return next();
+
+        }
+
+
         try {
 
             const rows = await allQuery(

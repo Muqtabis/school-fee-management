@@ -24,6 +24,12 @@ const PAGES = [
         description: "Main overview with key metrics, summaries, and quick actions."
     },
     {
+        key: "notices",
+        label: "Notice Board",
+        path: "/notices",
+        description: "Post and manage school announcements for all staff members."
+    },
+    {
         key: "archived_students",
         label: "Archived Students",
         path: "/archived-students",
@@ -37,7 +43,7 @@ const PAGES = [
     },
     {
         key: "fee_concessions",
-        label: "Fee Concessions",
+        label: "Fee Concession",
         path: "/fee-concessions",
         description: "Manage student fee categories (Regular, RTE, Management, Others) and grant fee waivers."
     },
@@ -49,21 +55,21 @@ const PAGES = [
     },
     {
         key: "payments",
-        label: "Payments",
+        label: "Collection",
         path: "/payments",
         description: "Record fee payments, view receipts, and track payment history."
     },
     {
         key: "expenses",
-        label: "Expenses",
+        label: "Payment",
         path: "/expenses",
-        description: "Log school expenses, track budgets, and manage vendor payments."
+        description: "Log school payments, track budgets, and manage vendor payments."
     },
     {
         key: "incomes",
-        label: "Incomes",
+        label: "Receipt",
         path: "/incomes",
-        description: "Record non-fee school income (donations, grants, events) with admin-managed categories."
+        description: "Record non-fee school receipts (donations, grants, events) with admin-managed categories."
     },
     {
         key: "reports",
@@ -73,7 +79,7 @@ const PAGES = [
     },
     {
         key: "defaulters",
-        label: "Fee Defaulters",
+        label: "Defaulters",
         path: "/defaulters",
         description: "Students with outstanding fee balances and contact details."
     },
@@ -156,6 +162,12 @@ const PAGES = [
         description: "Enter exam marks, manage co-scholastic grades, and lock submissions."
     },
     {
+        key: "tests",
+        label: "Tests",
+        path: "/tests",
+        description: "Record class-wise tests with date, maximum and minimum marks."
+    },
+    {
         key: "teacher_attendance",
         label: "Staff Attendance",
         path: "/teacher-attendance",
@@ -194,13 +206,15 @@ const STAFF_ROLE_PAGES = [
     "payments",
     "expenses",
     "incomes",
-    "teacher_attendance"
+    "teacher_attendance",
+    "tests"
 ];
 
 const TEACHER_ROLE_PAGES = [
     "marks_entry",
     "teacher_attendance",
-    "student_attendance"
+    "student_attendance",
+    "tests"
 ];
 
 // Pages that can NEVER be granted to principal/manager —

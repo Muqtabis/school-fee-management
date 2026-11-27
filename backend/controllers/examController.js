@@ -17,6 +17,27 @@ const { MARK_STATUSES } = require("../utils/grading");
 // overall performance comment (dynamic progress card, Part 2).
 // A supporting teacher is explicitly given the same class-level
 // working power, without ever displacing the real class teacher.
+// Group key used by both exam lists: same name + type + academic year
+// become ONE parent exam, even when created as separate definitions for
+// different classes. The year prevents merging across sessions.
+const examGroupKey = (e) => [
+    String(e.name ?? e.examName ?? "").trim().toLowerCase(),
+    String(e.examType ?? "").trim().toLowerCase(),
+    e.academicYearId || 0
+].join("|");
+
+// Newest start date first, then name, then class. Blank dates fall back
+// to createdAt so undated exams still sort sensibly.
+const compareExamGroups = (a, b) => {
+    const ad = a.sortDate || a.startDate || a.createdAt || "";
+    const bd = b.sortDate || b.startDate || b.createdAt || "";
+    if (ad !== bd) return bd.localeCompare(ad);
+    const an = String(a.name ?? a.examName ?? "");
+    const bn = String(b.name ?? b.examName ?? "");
+    if (an !== bn) return an.localeCompare(bn);
+    return String(a.className ?? "").localeCompare(String(b.className ?? ""));
+};
+
 async function isClassTeacher(user, className) {
     if (!user || user.role === "admin") return false;
     const rows = await allQuery(
@@ -84,6 +105,7 @@ async function getEffectiveSubjects(examId, className) {
         `SELECT s.id AS subjectId, s.subjectName,
                 COALESCE(es.maxMarks, s.maxMarks) AS maxMarks,
                 es.passMarks AS passMarks,
+                COALESCE(es.isOptional, 0) AS isOptional,
                 es.examDate, es.startTime, es.endTime, es.room, es.instructions,
                 COALESCE(es.teacherId, sta.teacherId) AS teacherId,
                 COALESCE(u.name, u2.name) AS teacherName
@@ -121,16 +143,14 @@ async function marksEntered(examId) {
 }
 
 // Which subjectIds may THIS user edit for the exam (spec items 6, 10).
-// Admin, principal and manager: all (they work like admin). Class teacher
-// of the exam's class: all subjects (owns the class). Otherwise a teacher
-// gets ONLY the subjects for which they are the resolved subject teacher
-// (per-exam override, else standing assignment — already resolved into
-// `subjects[].teacherId` by getEffectiveSubjects). Returns a Set of subjectIds.
-async function teacherEditableSubjectIds(user, exam, subjects) {
+// Admin, principal and manager: all (they work like admin).
+// Every other teacher — INCLUDING a teacher who is also the class teacher
+// or supporting teacher — gets ONLY the subjects whose resolved subject
+// teacher (per-exam override, else standing assignment) is this user.
+// Class-teacher status grants ACCESS to the exam via canTeachClass, not
+// permission to edit subjects they don't teach. Returns a Set of subjectIds.
+function teacherEditableSubjectIds(user, exam, subjects) {
     if (isExamManager(user)) return new Set(subjects.map((s) => s.subjectId));
-    if (await isClassTeacher(user, exam.className)) {
-        return new Set(subjects.map((s) => s.subjectId));
-    }
     const mine = subjects.filter((s) => s.teacherId != null && Number(s.teacherId) === Number(user.id));
     return new Set(mine.map((s) => s.subjectId));
 }
@@ -255,6 +275,55 @@ exports.createExam = async (req, res) => {
     } catch (error) {
         console.error("Create Exam Error:", error);
         res.status(500).json({ success: false, message: "Unable to create exam." });
+    }
+};
+
+// =====================================================
+// DELETE EXAM DEFINITION (admin / principal only)
+// Removes the parent definition and every per-class exam
+// under it. Child rows (marks, subjects, results, notices,
+// corrections, co-scholastic, term meta) cascade via FK.
+// =====================================================
+exports.deleteExamDefinition = async (req, res) => {
+    const definitionId = Number(req.params.definitionId);
+    if (!Number.isInteger(definitionId) || definitionId <= 0) {
+        return res.status(400).json({ success: false, message: "Invalid exam ID." });
+    }
+
+    try {
+        const defs = await allQuery(
+            `SELECT id, name FROM exam_definitions WHERE id = ?`,
+            [definitionId]
+        );
+        if (defs.length === 0) {
+            return res.status(404).json({ success: false, message: "Exam not found." });
+        }
+
+        const childExams = await allQuery(
+            `SELECT id FROM exams WHERE examDefinitionId = ?`,
+            [definitionId]
+        );
+
+        // Cascade handles the child rows; delete exams explicitly so legacy
+        // databases without the examDefinitionId FK are cleaned up too.
+        await runQuery(`DELETE FROM exams WHERE examDefinitionId = ?`, [definitionId]);
+        await runQuery(`DELETE FROM exam_definitions WHERE id = ?`, [definitionId]);
+
+        await logAudit({
+            userId: req.user.id,
+            action: "EXAM_DELETED",
+            entityType: "exam_definition",
+            entityId: definitionId,
+            details: { name: defs[0].name, classExamsRemoved: childExams.length }
+        }).catch((e) => console.error("Audit Error:", e));
+
+        res.json({
+            success: true,
+            message: `Exam "${defs[0].name}" and its ${childExams.length} class exam(s) were deleted.`
+        });
+    } catch (error) {
+        console.error("Delete Exam Error:", error);
+        res.status(500).json({ success: false, message: "Unable to delete exam." });
     }
 };
 
@@ -414,7 +483,7 @@ exports.getExamDefinitions = async (req, res) => {
             allowedClasses = new Set(rows.map((r) => r.className));
         }
 
-        const out = [];
+        const groups = new Map();
         for (const d of defs) {
             let children = await allQuery(
                 `SELECT id, className, status FROM exams WHERE examDefinitionId = ? ORDER BY className`,
@@ -424,13 +493,41 @@ exports.getExamDefinitions = async (req, res) => {
                 children = children.filter((c) => allowedClasses.has(c.className));
                 if (children.length === 0) continue; // not this teacher's exam
             }
-            out.push({
-                ...d,
-                classes: children,
-                classCount: children.length,
-                statuses: [...new Set(children.map((c) => c.status))]
-            });
+
+            const key = examGroupKey(d);
+            let g = groups.get(key);
+            if (!g) {
+                g = {
+                    ...d,
+                    classes: [],
+                    statuses: [],
+                    definitionIds: [],
+                    definitions: [],
+                    startDate: d.startDate || null,
+                    endDate: d.endDate || null
+                };
+                groups.set(key, g);
+            }
+            for (const c of children) {
+                if (!g.classes.some((x) => x.id === c.id)) g.classes.push(c);
+            }
+            g.statuses = [...new Set([...g.statuses, ...children.map((c) => c.status)])];
+            g.definitionIds.push(d.id);
+            g.definitions.push({ id: d.id, classes: children.map((c) => c.className) });
+            if (d.startDate && (!g.startDate || d.startDate < g.startDate)) g.startDate = d.startDate;
+            if (d.endDate && (!g.endDate || d.endDate > g.endDate)) g.endDate = d.endDate;
+            if (d.createdAt && (!g.createdAt || d.createdAt > g.createdAt)) g.createdAt = d.createdAt;
+            const sd = d.startDate || d.createdAt || "";
+            if (sd && (!g.sortDate || sd > g.sortDate)) g.sortDate = sd;
         }
+
+        const out = [...groups.values()].map((g) => ({
+            ...g,
+            groupKey: examGroupKey(g),
+            classCount: g.classes.length,
+            isGrouped: g.definitionIds.length > 1
+        }));
+        out.sort(compareExamGroups);
 
         res.json({ success: true, definitions: out });
     } catch (error) {
@@ -594,10 +691,11 @@ exports.updateExamSubjects = async (req, res) => {
             const subjectId = Number(e.subjectId);
             if (!validIds.has(subjectId)) continue;
 
-            const maxMarks = Number(e.maxMarks);
-            if (!Number.isFinite(maxMarks) || maxMarks <= 0) continue;
+            const isOptional = e.isOptional ? 1 : 0;
+            const maxMarks = isOptional ? 0 : Number(e.maxMarks);
+            if (!Number.isFinite(maxMarks) || maxMarks < 0 || (!isOptional && maxMarks === 0)) continue;
 
-            let passMarks = e.passMarks === "" || e.passMarks === null || e.passMarks === undefined
+            let passMarks = isOptional || e.passMarks === "" || e.passMarks === null || e.passMarks === undefined
                 ? null : Number(e.passMarks);
             if (passMarks !== null && (!Number.isFinite(passMarks) || passMarks < 0 || passMarks > maxMarks)) {
                 return res.status(400).json({
@@ -615,18 +713,19 @@ exports.updateExamSubjects = async (req, res) => {
 
             await runQuery(
                 `INSERT INTO exam_subjects
-                   (examId, subjectId, maxMarks, passMarks, examDate, startTime, endTime, room, instructions, teacherId)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   (examId, subjectId, maxMarks, passMarks, isOptional, examDate, startTime, endTime, room, instructions, teacherId)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(examId, subjectId) DO UPDATE SET
                    maxMarks = excluded.maxMarks,
                    passMarks = excluded.passMarks,
+                   isOptional = excluded.isOptional,
                    examDate = excluded.examDate,
                    startTime = excluded.startTime,
                    endTime = excluded.endTime,
                    room = excluded.room,
                    instructions = excluded.instructions,
                    teacherId = excluded.teacherId`,
-                [examId, subjectId, maxMarks, passMarks, examDate, startTime, endTime, room, instructions, teacherId]
+                [examId, subjectId, maxMarks, passMarks, isOptional, examDate, startTime, endTime, room, instructions, teacherId]
             );
             saved++;
         }
@@ -661,7 +760,8 @@ exports.getExams = async (req, res) => {
             exams = await allQuery(
                 `SELECT e.id, e.examName, e.className, e.status, e.examDefinitionId,
                         e.createdAt, e.lockedAt, e.publishedAt, d.examType,
-                        d.examCategory, d.term
+                        d.examCategory, d.term, d.academicYearId,
+                        d.startDate, d.endDate
                  FROM exams e
                  LEFT JOIN exam_definitions d ON d.id = e.examDefinitionId
                  ORDER BY e.id DESC`
@@ -673,7 +773,8 @@ exports.getExams = async (req, res) => {
             exams = await allQuery(
                 `SELECT e.id, e.examName, e.className, e.status, e.examDefinitionId,
                         e.createdAt, e.lockedAt, e.publishedAt, d.examType,
-                        d.examCategory, d.term
+                        d.examCategory, d.term, d.academicYearId,
+                        d.startDate, d.endDate
                  FROM exams e
                  LEFT JOIN exam_definitions d ON d.id = e.examDefinitionId
                  WHERE e.className IN (
@@ -690,7 +791,42 @@ exports.getExams = async (req, res) => {
                 [req.user.id, req.user.id]
             );
         }
-        res.json({ success: true, exams });
+        // Merge same-name/same-type exams (possibly different classes)
+        // into one parent so Marks Entry shows a single entry per exam.
+        const groups = new Map();
+        for (const e of exams) {
+            const key = examGroupKey(e);
+            let g = groups.get(key);
+            if (!g) {
+                g = {
+                    ...e,
+                    groupKey: key,
+                    examIds: [],
+                    classes: [],
+                    statuses: [],
+                    startDate: e.startDate || null,
+                    endDate: e.endDate || null
+                };
+                groups.set(key, g);
+            }
+            g.examIds.push(e.id);
+            g.classes.push({ id: e.id, className: e.className, status: e.status });
+            if (!g.statuses.includes(e.status)) g.statuses.push(e.status);
+            if (e.startDate && (!g.startDate || e.startDate < g.startDate)) g.startDate = e.startDate;
+            if (e.endDate && (!g.endDate || e.endDate > g.endDate)) g.endDate = e.endDate;
+            if (e.createdAt && (!g.createdAt || e.createdAt > g.createdAt)) g.createdAt = e.createdAt;
+            const sd = e.startDate || e.createdAt || "";
+            if (sd && (!g.sortDate || sd > g.sortDate)) g.sortDate = sd;
+        }
+        const out = [...groups.values()].map((g) => ({
+            ...g,
+            classCount: g.classes.length,
+            className: g.classes.map((c) => c.className).join(", "),
+            status: g.statuses.includes("open") ? "open" : g.statuses[0],
+            isGrouped: g.examIds.length > 1
+        }));
+        out.sort(compareExamGroups);
+        res.json({ success: true, exams: out });
     } catch (error) {
         console.error("Get Exams Error:", error);
         res.status(500).json({ success: false, message: "Unable to load exams." });
@@ -732,33 +868,21 @@ exports.getExamMarks = async (req, res) => {
         const allSubjects = await getEffectiveSubjects(examId, exam.className);
         const editableIds = await teacherEditableSubjectIds(req.user, exam, allSubjects);
 
-        // Authorization: admin sees the whole grid; a teacher may open the
-        // exam only if they are the resolved subject teacher for at least
-        // one subject in it (Part 6/10). No subject -> no access.
-        if (req.user.role !== "admin" && editableIds.size === 0) {
-            return res.status(403).json({ success: false, message: "You are not assigned to any subject in this class." });
+        // Access: exam managers, teachers assigned to at least one subject in
+        // the class, and class/supporting teachers all may OPEN the exam.
+        // Editing is still limited to their assigned subjects by editableIds.
+        if (!isExamManager(req.user) && !(await canTeachClass(req.user, exam.className))) {
+            return res.status(403).json({ success: false, message: "You are not assigned to this class." });
         }
 
-        // Teachers only SEE subjects they may edit (spec item 6); admin sees all.
-        const visible = req.user.role === "admin"
-            ? allSubjects
-            : allSubjects.filter((s) => editableIds.has(s.subjectId));
+        // Every subject is visible; non-assigned ones are READ-ONLY via canEdit.
+        const subjects = allSubjects.map((s) => ({ ...s, canEdit: editableIds.has(s.subjectId) }));
 
-        const subjects = visible.map((s) => ({ ...s, canEdit: editableIds.has(s.subjectId) }));
-
-        // Read-side authorization (spec item 6): a teacher may only SEE the
-        // subjects they teach, so the marks payload is scoped to those same
-        // subjects — otherwise the response would leak colleagues' marks for
-        // other subjects in this class. Admin sees every subject's marks.
-        const visibleIds = new Set(visible.map((s) => s.subjectId));
-        const allMarks = await allQuery(
+        const marks = await allQuery(
             `SELECT studentId, subjectId, marksObtained, isAbsent, markStatus
              FROM exam_marks WHERE examId = ?`,
             [examId]
         );
-        const marks = req.user.role === "admin"
-            ? allMarks
-            : allMarks.filter((m) => visibleIds.has(m.subjectId));
 
         res.json({
             success: true,

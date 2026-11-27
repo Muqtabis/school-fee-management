@@ -19,6 +19,7 @@ import ClassManagementPage from "./pages/ClassManagementPage";
 import TeacherManagementPage from "./pages/TeacherManagementPage";
 import StudentAttendancePage from "./pages/StudentAttendancePage";
 import ExamResultsPage from "./pages/ExamResultsPage";
+import TestsPage from "./pages/TestsPage";
 import ResultsOverviewPage from "./pages/ResultsOverviewPage";
 import AttendanceOverviewPage from "./pages/AttendanceOverviewPage";
 import MarksEntryPage from "./pages/MarksEntryPage";
@@ -27,6 +28,7 @@ import MyAttendancePage from "./pages/MyAttendancePage";
 import MySchedulePage from "./pages/MySchedulePage";
 import TimetablePage from "./pages/TimetablePage";
 import DefaultersPage from "./pages/DefaultersPage";
+import NoticeBoardPage from "./pages/NoticeBoardPage";
 import TransferCertificatePage from "./pages/TransferCertificatePage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import DialogHost from "./components/DialogHost";
@@ -63,10 +65,13 @@ function App() {
                     <Route path="/incomes" element={<ProtectedRoute pageKey="incomes"><IncomesPage /></ProtectedRoute>} />
                     <Route path="/reports" element={<ProtectedRoute pageKey="reports"><ReportsPage /></ProtectedRoute>} />
                     <Route path="/defaulters" element={<ProtectedRoute pageKey="defaulters"><DefaultersPage /></ProtectedRoute>} />
+                    <Route path="/notices" element={<ProtectedRoute pageKey="notices"><NoticeBoardPage /></ProtectedRoute>} />
                     <Route path="/class-management" element={<ProtectedRoute pageKey="class_management"><ClassManagementPage /></ProtectedRoute>} />
                     <Route path="/teacher-management" element={<ProtectedRoute pageKey="teacher_management"><TeacherManagementPage /></ProtectedRoute>} />
                     <Route path="/timetable" element={<ProtectedRoute pageKey="timetable"><TimetablePage /></ProtectedRoute>} />
                     <Route path="/exam-results" element={<ProtectedRoute pageKey="exam_results"><ExamResultsPage /></ProtectedRoute>} />
+
+                    <Route path="/tests" element={<ProtectedRoute pageKey="tests"><TestsPage /></ProtectedRoute>} />
                     <Route path="/results-overview" element={<ProtectedRoute pageKey="results_overview"><ResultsOverviewPage /></ProtectedRoute>} />
                     <Route path="/attendance-overview" element={<ProtectedRoute pageKey="attendance_overview"><AttendanceOverviewPage /></ProtectedRoute>} />
                     <Route path="/marks-entry" element={<ProtectedRoute pageKey="marks_entry"><MarksEntryPage /></ProtectedRoute>} />

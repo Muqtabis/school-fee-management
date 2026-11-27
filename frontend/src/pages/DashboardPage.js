@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import DashboardCard from "../components/DashboardCard";
+import OverlayDialog from "../components/OverlayDialog";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 
@@ -10,22 +11,21 @@ import { useAuth } from "../context/AuthContext";
 // actionable, so the dashboard becomes a control panel.
 const CARD_ROUTES = {
     "Students": "/students",
-    "Teachers": "/teacher-management",
+    "Staff": "/teacher-management",
     "Total Fees": "/fees",
-    "Fee Collection": "/payments",
+    "Fee Collected": "/payments",
     "Pending Fees": "/payments",
-    "Fee Concessions": "/fee-concessions",
-    "TC Conceded Fee": "/fee-concessions",
-    "School Expenses": "/expenses",
-    "School Incomes": "/incomes",
+    "Concession": "/fee-concessions",
+    "School Payment": "/expenses",
+    "School Receipt": "/incomes",
     "Net Balance": "/reports",
-    "Total Payments": "/payments",
-    "Expense Transactions": "/expenses"
+    "Collection": "/payments",
+    "Payment Transaction": "/expenses"
 };
 
 // Default card order. Users can reorder from the Customize panel; any new
 // cards added later are appended automatically to saved orders.
-const ALL_CARDS = ["Net Balance", "Students", "Teachers", "Total Fees", "Fee Concessions", "TC Conceded Fee", "Fee Collection", "Pending Fees", "School Expenses", "School Incomes", "Total Payments", "Expense Transactions"];
+const ALL_CARDS = ["Net Balance", "Students", "Staff", "Total Fees", "Concession", "Fee Collected", "Pending Fees", "School Payment", "School Receipt", "Collection", "Payment Transaction"];
 
 function DashboardPage() {
     const navigate = useNavigate();
@@ -33,7 +33,7 @@ function DashboardPage() {
 
     // Principal and manager get a restricted dashboard: only
     // head-count cards (Students, Teachers). Every money figure
-    // — fees, collection, pending, concessions, expenses — is
+    // — fees, collection, pending, concessions, payments — is
     // hidden (and zeroed server-side too).
     const isRestrictedRole =
         user?.role === "principal" || user?.role === "manager";
@@ -54,10 +54,16 @@ function DashboardPage() {
         totalIncomes: 0,
         totalIncomeAmount: 0,
         netBalance: 0,
-        tcConcededFee: 0,
-        tcCollected: 0
+        tcCollected: 0,
+        staffBreakdown: []
     });
 
+    const [staffDialog, setStaffDialog] = useState(false);
+    const [staffList, setStaffList] = useState([]);
+    const [staffLoading, setStaffLoading] = useState(false);
+    const [classStrength, setClassStrength] = useState([]);
+    const [activeCount, setActiveCount] = useState(0);
+    const [notices, setNotices] = useState([]);
     const [recentPayments, setRecentPayments] = useState([]);
     const [recentExpenses, setRecentExpenses] = useState([]);
     const [activity, setActivity] = useState([]);
@@ -106,16 +112,18 @@ function DashboardPage() {
             // One role-guarded call for all summary numbers.
             const paymentSummary = await api.get("/dashboard/summary");
 
-            // TC Conceded Fee = sum of the remaining amounts waived at the
-            // time transfer certificates were issued. Fetched on every load
-            // so new TCs immediately reflect here. Roles without the TC page
-            // grant simply fall back to 0 (card is hidden for them anyway).
-            let tcConcededFee = 0;
+            // Class-wise strength for the two panels below (non-fatal).
             try {
-                const tcRes = await api.get("/documents/records");
-                const recs = Array.isArray(tcRes.data?.records) ? tcRes.data.records : [];
-                tcConcededFee = recs.reduce((s, r) => s + Number(r.remainingAmount || 0), 0);
-            } catch (e) { /* non-fatal: keep 0 */ }
+                const cs = await api.get("/students/counts");
+                setClassStrength(Array.isArray(cs.data?.byClass) ? cs.data.byClass : []);
+                setActiveCount(Number(cs.data?.counts?.active || 0));
+            } catch (e) { setClassStrength([]); setActiveCount(0); }
+
+            // Latest school notices (non-fatal).
+            try {
+                const nres = await api.get("/notices");
+                setNotices(Array.isArray(nres.data) ? nres.data.slice(0, 3) : []);
+            } catch (e) { setNotices([]); }
 
             // Recent lists only exist for roles allowed to see
             // financial data; restricted roles skip these calls
@@ -145,7 +153,7 @@ function DashboardPage() {
                 totalIncomes: Number(paymentSummary.data.totalIncomes || 0),
                 totalIncomeAmount: Number(paymentSummary.data.totalIncomeAmount || 0),
                 netBalance: Number(paymentSummary.data.netBalance || 0),
-                tcConcededFee: canSeeFinancial ? tcConcededFee : 0,
+                staffBreakdown: Array.isArray(paymentSummary.data.staffBreakdown) ? paymentSummary.data.staffBreakdown : [],
                 tcCollected: Number(paymentSummary.data.tcCollected || 0)
             });
 
@@ -172,6 +180,33 @@ function DashboardPage() {
             setLoading(false);
         }
     };
+
+    const openStaff = async () => {
+        setStaffDialog(true);
+        setStaffLoading(true);
+        try {
+            const r = await api.get("/dashboard/staff");
+            setStaffList(Array.isArray(r.data?.staff) ? r.data.staff : []);
+        } catch (e) { setStaffList([]); }
+        finally { setStaffLoading(false); }
+    };
+    const roleLabel = (role) => ({
+        admin: "Admin", principal: "Principal", manager: "Manager",
+        accountant: "Accountant", teacher: "Teacher", supporting_teacher: "Support Teacher"
+    }[role] || role);
+
+    const classRank = (name) => {
+        const s = String(name || "").toLowerCase();
+        if (s.startsWith("lkg")) return 0;
+        if (s.startsWith("ukg")) return 1;
+        return 10 + (parseInt(String(name).match(/\d+/)?.[0] || "999", 10) || 999);
+    };
+    const sortedByClass = useMemo(
+        () => [...classStrength].sort((a, b) => classRank(a.className) - classRank(b.className) || String(a.className).localeCompare(String(b.className), undefined, { numeric: true })),
+        [classStrength]
+    );
+    const boysTotal = sortedByClass.reduce((s, r) => s + Number(r.boys || 0), 0);
+    const girlsTotal = sortedByClass.reduce((s, r) => s + Number(r.girls || 0), 0);
 
     const money = value => `₹ ${Number(value || 0).toLocaleString("en-IN")}`;
 
@@ -218,19 +253,20 @@ function DashboardPage() {
     const cardMeta = {
         "Net Balance": { value: money(summary.netBalance), icon: "💵", color: "var(--p-slate)", financial: true },
         "Students": { value: summary.totalStudents, icon: "👨‍🎓", color: "var(--navy)", financial: false },
-        "Teachers": { value: summary.totalTeachers, icon: "🧑‍🏫", color: "var(--navy)", financial: false },
-        "Total Fees": { value: money(Math.max(0, summary.netFee - summary.tcCollected)), icon: "📚", color: "var(--navy)", financial: true },
-        "Fee Concessions": { value: money(summary.totalConcessions), icon: "🏷️", color: "var(--p-slate)", financial: true },
-        "TC Conceded Fee": { value: money(summary.tcConcededFee), icon: "🎓", color: "var(--p-slate)", financial: true },
-        "Fee Collection": { value: money(summary.totalCollection), icon: "💰", color: "var(--p-slate)", financial: true },
+        "Staff": { value: summary.totalTeachers, color: "var(--navy)", financial: false, onClick: openStaff },
+        // Net demand after concession: equals Fee Collection + Pending Fees.
+        "Total Fees": { value: money(summary.netFee), icon: "📚", color: "var(--navy)", financial: true },
+        "Concession": { value: money(summary.totalConcessions), icon: "🏷️", color: "var(--p-slate)", financial: true },
+        "Fee Collected": { value: money(summary.totalCollection), icon: "💰", color: "var(--p-slate)", financial: true },
         "Pending Fees": { value: money(summary.pendingFees), icon: "⚠️", color: "var(--danger)", financial: true },
-        "School Expenses": { value: money(summary.totalExpenseAmount), icon: "💸", color: "var(--p-slate)", financial: true },
-        "School Incomes": { value: money(summary.totalIncomeAmount), icon: "📈", color: "var(--p-slate)", financial: true },
-        "Total Payments": { value: summary.totalPayments, icon: "🧾", color: "var(--p-slate)", financial: true },
-        "Expense Transactions": { value: summary.totalExpenses, icon: "📋", color: "var(--p-slate)", financial: true }
+        "School Payment": { value: money(summary.totalExpenseAmount), icon: "💸", color: "var(--p-slate)", financial: true },
+        "School Receipt": { value: money(summary.totalIncomeAmount), icon: "📈", color: "var(--p-slate)", financial: true },
+        "Collection": { value: summary.totalPayments, icon: "🧾", color: "var(--p-slate)", financial: true },
+        "Payment Transaction": { value: summary.totalExpenses, icon: "📋", color: "var(--p-slate)", financial: true }
     };
 
     return (
+        <>
         <div className="dashboard">
             <Sidebar />
             <div className="main-content">
@@ -281,9 +317,81 @@ function DashboardPage() {
                                 return (
                                     <DashboardCard key={name} title={name} value={c.value} icon={c.icon}
                                         color={c.color} chipColor="var(--gold-light)"
-                                        onClick={() => navigate(CARD_ROUTES[name])} />
+                                        onClick={c.onClick || (() => navigate(CARD_ROUTES[name]))} />
                                 );
                             })}
+                    </div>
+
+                    {/* Class strength table + gender chart */}
+                    <div className="students-top-row">
+                        <div className="settings-card strength-card">
+                            <div style={{ marginBottom: 10 }}>
+                                <strong style={{ fontSize: 14 }}>Class-wise Student Strength</strong>
+                                <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                                    <span className="strength-chip">Classes: {sortedByClass.length}</span>
+                                    <span className="strength-chip" style={{ color: "#1D4ED8" }}>Boys: {boysTotal}</span>
+                                    <span className="strength-chip" style={{ color: "#BE185D" }}>Girls: {girlsTotal}</span>
+                                    <span className="strength-chip">On roll: {activeCount}</span>
+                                </div>
+                            </div>
+                            <div className="table-container">
+                                <table className="stack-sm strength-table">
+                                    <thead><tr><th>Class</th><th className="num">Boys</th><th className="num">Girls</th><th className="num">Total</th></tr></thead>
+                                    <tbody>
+                                        {sortedByClass.length === 0 ? (
+                                            <tr><td colSpan="4"><div className="empty-state"><strong>No class data</strong><span>Add students to see class strength.</span></div></td></tr>
+                                        ) : sortedByClass.map((r) => (
+                                            <tr key={r.className}>
+                                                <td data-label="Class"><strong>{r.className}</strong></td>
+                                                <td data-label="Boys" className="num boys">{r.boys || 0}</td>
+                                                <td data-label="Girls" className="num girls">{r.girls || 0}</td>
+                                                <td data-label="Total" className="num"><strong>{Number(r.boys || 0) + Number(r.girls || 0)}</strong></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr>
+                                            <td data-label="Class"><strong>TOTAL</strong></td>
+                                            <td data-label="Boys" className="num"><strong>{boysTotal}</strong></td>
+                                            <td data-label="Girls" className="num"><strong>{girlsTotal}</strong></td>
+                                            <td data-label="Total" className="num"><strong>{boysTotal + girlsTotal}</strong></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                            <small style={{ display: "block", marginTop: 8, fontSize: 11, color: "#64748B" }}>
+                                Active students only. {activeCount - boysTotal - girlsTotal} student(s) have no gender recorded and are not counted in Boys/Girls.
+                            </small>
+                        </div>
+
+                        <div className="students-side-col">
+                            <div className="settings-card gender-chart-card">
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                                    <strong style={{ fontSize: 14 }}>Class-wise Gender Chart</strong>
+                                    <span className="strength-chip" style={{ color: "#1D4ED8" }}>■ Boys {boysTotal}</span>
+                                    <span className="strength-chip" style={{ color: "#BE185D" }}>■ Girls {girlsTotal}</span>
+                                </div>
+                                <div className="gender-chart-v">
+                                    {sortedByClass.map((r) => {
+                                        const b = Number(r.boys || 0), g = Number(r.girls || 0);
+                                        const scale = Math.max(b, g, 1);
+                                        return (
+                                            <div className="gender-chart-col" key={r.className} title={`${r.className} — Boys ${b}, Girls ${g}`}>
+                                                <div className="gender-chart-col-values">
+                                                    <span className="v boys">{b}</span><span className="v girls">{g}</span>
+                                                </div>
+                                                <div className="gender-chart-col-bars">
+                                                    <span className="grid-line" />
+                                                    <span className="vbar boys" style={{ "--pct": (b / scale * 100) + "%" }} />
+                                                    <span className="vbar girls" style={{ "--pct": (g / scale * 100) + "%" }} />
+                                                </div>
+                                                <span className="gender-chart-col-label">{r.className}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Tables Section (financial roles only) */}
@@ -321,14 +429,14 @@ function DashboardPage() {
 
                             {/* Recent Expenses Table */}
                             <div className="dashboard-table">
-                                <h3>Recent School Expenses</h3>
+                                <h3>Recent School Payments</h3>
                                 {recentExpenses.length === 0 ? (
-                                    <p className="empty-note">No expenses recorded yet.</p>
+                                    <p className="empty-note">No payments recorded yet.</p>
                                 ) : (
                                     <table className="stack-sm">
                                         <thead>
                                             <tr>
-                                                <th>Expense</th>
+                                                <th>Payment</th>
                                                 <th>Category</th>
                                                 <th>Amount</th>
                                                 <th>Date</th>
@@ -337,7 +445,7 @@ function DashboardPage() {
                                         <tbody>
                                             {recentExpenses.map(expense => (
                                                 <tr key={expense.id}>
-                                                    <td data-label="Expense">{expense.expenseName}</td>
+                                                    <td data-label="Payment">{expense.expenseName}</td>
                                                     <td data-label="Category">{expense.category}</td>
                                                     <td data-label="Amount">{money(expense.amount)}</td>
                                                     <td data-label="Date">{dateFmt(expense.expenseDate)}</td>
@@ -348,6 +456,22 @@ function DashboardPage() {
                                 )}
                             </div>
 
+                        </div>
+                    )}
+
+                    {/* Latest school notices */}
+                    {notices.length > 0 && (
+                        <div className="dashboard-table" style={{ marginTop: "24px" }}>
+                            <h3>📢 Latest Notices</h3>
+                            {notices.map((n) => (
+                                <div key={n.id} style={{ padding: "10px 0", borderBottom: "1px solid #E2E8F0" }}>
+                                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                                        <strong style={{ fontSize: 13 }}>{n.pinned ? "📌 " : ""}{n.title}</strong>
+                                        <span className="payment-badge mode-default">{n.audience}</span>
+                                    </div>
+                                    <p style={{ margin: "5px 0 0", fontSize: 12, color: "#475569", whiteSpace: "pre-wrap" }}>{n.body}</p>
+                                </div>
+                            ))}
                         </div>
                     )}
 
@@ -374,6 +498,53 @@ function DashboardPage() {
                 </div>
             </div>
         </div>
+
+        {staffDialog && (
+            <OverlayDialog onClose={() => setStaffDialog(false)} ariaLabel="Staff members">
+                <div className="student-modal" style={{ maxWidth: "560px", maxHeight: "88vh", overflowY: "auto" }}>
+                    <div className="modal-header" style={{ position: "sticky", top: 0, background: "#fff", zIndex: 10 }}>
+                        <div>
+                            <h2>Staff Members ({staffList.length})</h2>
+                            <p>All staff accounts and their roles</p>
+                        </div>
+                        <button type="button" className="close-btn" onClick={() => setStaffDialog(false)}>✕</button>
+                    </div>
+                    <div style={{ padding: "20px" }}>
+                        {summary.staffBreakdown.length > 0 && (
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
+                                {summary.staffBreakdown.map((r) => (
+                                    <span key={r.role} className="payment-badge mode-default" style={{ fontSize: 11 }}>
+                                        {roleLabel(r.role)} {r.total}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                        {staffLoading ? <p className="empty-note">Loading…</p> : staffList.length === 0 ? (
+                            <p className="empty-note">No staff found.</p>
+                        ) : (
+                            <div className="table-container">
+                                <table className="stack-sm">
+                                    <thead><tr><th>Name</th><th>Email</th><th>Role</th></tr></thead>
+                                    <tbody>
+                                        {staffList.map((s) => (
+                                            <tr key={s.id}>
+                                                <td data-label="Name"><strong>{s.name || "-"}</strong></td>
+                                                <td data-label="Email">{s.email || "-"}</td>
+                                                <td data-label="Role"><span className="payment-badge mode-default">{roleLabel(s.role)}</span></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                    <div className="modal-actions" style={{ padding: "12px 20px" }}>
+                        <button type="button" className="cancel-btn" onClick={() => setStaffDialog(false)}>Close</button>
+                    </div>
+                </div>
+            </OverlayDialog>
+        )}
+        </>
     );
 }
 

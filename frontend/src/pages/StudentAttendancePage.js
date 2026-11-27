@@ -5,13 +5,15 @@ import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
+import HolidayCalendarDropdown from "../components/HolidayCalendarDropdown";
 
 
 const STATUS_OPTIONS = [
     { value: "present", label: "Present" },
     { value: "absent", label: "Absent" },
     { value: "half_day", label: "Half-day" },
-    { value: "leave", label: "Leave" }
+    { value: "leave", label: "Leave" },
+    { value: "holiday", label: "Holiday" }
 ];
 
 // Marking dropdown includes a blank "not marked yet" default. Anyone
@@ -27,7 +29,8 @@ const STATUS_CLASS = {
     present: "att-present",
     absent: "att-absent",
     half_day: "att-half",
-    leave: "att-leave"
+    leave: "att-leave",
+    holiday: "att-holiday"
 };
 
 function today() {
@@ -68,6 +71,7 @@ function StudentAttendancePage() {
     const [saving, setSaving] = useState(false);
     const [classesLoaded, setClassesLoaded] = useState(false);
     const [dateLocked, setDateLocked] = useState(false);
+    const [dateHoliday, setDateHoliday] = useState(null);
     const [lockBusy, setLockBusy] = useState(false);
 
     // History filters.
@@ -115,6 +119,7 @@ function StudentAttendancePage() {
             }));
             setRows(seeded);
             setDateLocked(Boolean(res.data.locked));
+            setDateHoliday(res.data.holiday || null);
         } catch (error) {
             toast(error.response?.data?.message || "Unable to load attendance.");
             setRows([]);
@@ -232,11 +237,12 @@ function StudentAttendancePage() {
                 <Navbar />
 
                 <div className="page-content">
-                    <div className="page-header">
+                    <div className="page-header" style={{ alignItems: "flex-start" }}>
                         <div>
                             <h2>Student Attendance</h2>
-                            <p>Mark daily attendance for your class and search past records. Only your class-teacher classes appear here.</p>
+                            <p style={{ maxWidth: 680 }}>Mark daily attendance for your class and search past records. Only your class-teacher classes appear here.</p>
                         </div>
+                        <HolidayCalendarDropdown isAdmin={user?.role === "admin"} onChanged={() => loadRoster(selectedClass, date)} />
                     </div>
 
                     {classesLoaded && classes.length === 0 ? (
@@ -297,13 +303,19 @@ function StudentAttendancePage() {
                                         <label style={{ fontWeight: 600 }}>Date</label>
                                         <input type="date" value={date} max={today()} onChange={(e) => setDate(e.target.value)} />
 
-                                        {rows.length > 0 && !dateLocked && (
+                                        {rows.length > 0 && !dateLocked && !dateHoliday?.isHoliday && (
                                             <div style={{ display: "flex", gap: "8px", marginLeft: "auto", flexWrap: "wrap" }}>
                                                 <button type="button" onClick={() => markAll("present")}>All Present</button>
                                                 <button type="button" onClick={() => markAll("absent")}>All Absent</button>
                                             </div>
                                         )}
                                     </div>
+
+                                    {dateHoliday?.isHoliday && (
+                                        <div style={{ marginTop: "12px", padding: "12px 14px", borderRadius: 8, background: "#F1F5F9", border: "1px solid #CBD5E1", color: "#475569" }}>
+                                            <strong>Holiday — {dateHoliday.name}</strong> ({dateHoliday.type === "weekly" ? "weekly" : "occasional"}). Attendance is not required for this date.
+                                        </div>
+                                    )}
 
                                     {dateLocked && (
                                         <p style={{ color: "#b45309", marginTop: "12px" }}>
@@ -337,7 +349,7 @@ function StudentAttendancePage() {
                                                             <td data-label="Status">
                                                                 <select
                                                                     value={r.status}
-                                                                    disabled={dateLocked}
+                                                                    disabled={dateLocked || dateHoliday?.isHoliday}
                                                                     onChange={(e) => setField(r.studentId, "status", e.target.value)}
                                                                 >
                                                                     {MARK_OPTIONS.map((o) => (
@@ -350,7 +362,7 @@ function StudentAttendancePage() {
                                                                     type="text"
                                                                     value={r.remark}
                                                                     placeholder="Optional"
-                                                                    disabled={dateLocked}
+                                                                    disabled={dateLocked || dateHoliday?.isHoliday}
                                                                     onChange={(e) => setField(r.studentId, "remark", e.target.value)}
                                                                 />
                                                             </td>
@@ -361,7 +373,7 @@ function StudentAttendancePage() {
                                         </table>
                                     </div>
 
-                                    {rows.length > 0 && (
+                                    {rows.length > 0 && !dateHoliday?.isHoliday && (
                                         <div style={{ marginTop: "18px", display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
                                             <button type="button" className="primary-btn" onClick={save} disabled={saving || dateLocked}>
                                                 {saving ? "Saving..." : "Save Attendance"}

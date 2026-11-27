@@ -495,6 +495,7 @@ function StudentsPage() {
                             <option value="roll">Sort: Roll No.</option>
                             <option value="name">Sort: Name (A–Z)</option>
                         </select>
+                        <button type="button" className="clear-btn" onClick={() => { setSearchKeyword(""); setSelectedClass("All"); setSelectedCategory("All"); setSortBy("roll"); }}>Clear</button>
                         {/* Classes are now created and managed on the dedicated
                             Class Management page. */}
                         <button type="button" className="clear-btn" onClick={() => setShowCols((v) => !v)}>Columns ▾</button>

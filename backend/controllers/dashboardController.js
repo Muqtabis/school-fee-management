@@ -72,8 +72,10 @@ exports.summary = async (req, res) => {
                    AND (s.status IS NULL OR s.status = 'active')`,
                 [year.id]
             ),
+            // All staff members (admin, principal, manager, accountant,
+            // teacher, supporting_teacher) — every user account is staff.
             one(
-                `SELECT COUNT(*) AS total FROM users WHERE role = 'teacher'`
+                `SELECT COUNT(*) AS total FROM users`
             ),
             // All fee items for the active year. "carry_forward"/"previous"
             // items are skipped here because previous-year dues are added
@@ -172,6 +174,15 @@ exports.summary = async (req, res) => {
 
         // "Total Fees" is the sum of everything owed: current-year fee items
         // plus previous-year dues (matching Reports and the student profile).
+        // Staff breakdown by role (every user account is a staff member).
+        const staffBreakdown = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT role, COUNT(*) AS total FROM users GROUP BY role ORDER BY role`,
+                [],
+                (err, rows) => (err ? reject(err) : resolve(rows || []))
+            );
+        });
+
         const totalFee = Number(feeRow.totalFee || 0) + Number(prevDuesRow.total || 0);
         const totalConcessions = Number(concessionRow.totalConcessions || 0);
         const totalCollection = Number(paymentRow.totalCollection || 0);
@@ -187,6 +198,7 @@ exports.summary = async (req, res) => {
             // Head counts — visible to everyone.
             totalStudents: Number(studentRow.total || 0),
             totalTeachers: Number(teacherRow.total || 0),
+            staffBreakdown: staffBreakdown.map((r) => ({ role: r.role, total: Number(r.total || 0) })),
             // Financial figures — zeroed for principal / manager.
             totalPayments: restricted ? 0 : Number(paymentRow.totalPayments || 0),
             totalFee: restricted ? 0 : totalFee,
@@ -208,4 +220,16 @@ exports.summary = async (req, res) => {
             message: "Unable to load dashboard summary."
         });
     }
+};
+
+// Full staff list for the dashboard Staff card (read-only).
+exports.staffList = (req, res) => {
+    db.all(
+        `SELECT id, name, email, role, createdAt FROM users ORDER BY role, name`,
+        [],
+        (err, rows) => {
+            if (err) return res.status(500).json({ success: false, message: "Unable to load staff." });
+            res.json({ success: true, staff: rows || [] });
+        }
+    );
 };

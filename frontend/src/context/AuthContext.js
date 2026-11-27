@@ -163,6 +163,7 @@ export default function AuthProvider({ children }) {
             if (pageKey === "settings") return true;
             if (pageKey === "my_attendance") return true;
             if (pageKey === "my_schedule") return true;
+            if (pageKey === "notices") return true;
             return allowedPages.includes(pageKey);
         },
         [user, allowedPages]

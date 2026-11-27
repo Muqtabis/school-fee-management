@@ -31,15 +31,6 @@ function DashboardCard({
       aria-label={interactive ? `${title} — open` : undefined}
     >
       <div className="card-header">
-        <div
-          className="card-icon"
-          style={{
-            backgroundColor: chipColor || color
-          }}
-        >
-          {icon}
-        </div>
-
         <div className="card-details">
           <h3>{title}</h3>
           <h1>{value}</h1>

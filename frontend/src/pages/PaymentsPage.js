@@ -111,6 +111,24 @@ function PaymentsPage() {
     const [reversing, setReversing] = useState(false);
     const [editPayment, setEditPayment] = useState(null);
     const [reverseRequests, setReverseRequests] = useState([]);
+    const [editRequests, setEditRequests] = useState([]);
+
+    const fetchEditRequests = async () => {
+        if (!isApprover) return;
+        try {
+            const res = await api.get("/payments/edit-requests");
+            setEditRequests(Array.isArray(res.data) ? res.data : []);
+        } catch (error) { console.error("Unable to load edit requests:", error); }
+    };
+
+    const reviewEditRequest = async (id, action) => {
+        try {
+            const res = await api.post(`/payments/edit-requests/${id}/${action}`, {});
+            toast(res.data?.message || "Request updated.");
+            fetchPayments();
+            fetchEditRequests();
+        } catch (error) { toast(error.response?.data?.message || "Unable to review request."); }
+    };
 
     const fetchReverseRequests = async () => {
         if (!isApprover) return;
@@ -271,7 +289,47 @@ function PaymentsPage() {
                                 Reverse Requests <span className="exam-badge">{reverseRequests.length}</span>
                             </button>
                         )}
+                        {isApprover && (
+                            <button
+                                type="button"
+                                className={`exam-tab ${paymentTab === "editRequests" ? "exam-tab-active" : ""}`}
+                                onClick={() => { setPaymentTab("editRequests"); fetchEditRequests(); }}
+                            >
+                                Edit Requests <span className="exam-badge">{editRequests.length}</span>
+                            </button>
+                        )}
                     </div>
+
+                    {paymentTab === "editRequests" && isApprover && (
+                        <div className="settings-card" style={{ marginTop: "14px" }}>
+                            <h3 style={{ margin: "0 0 12px 0" }}>Pending Edit Requests ({editRequests.length})</h3>
+                            {editRequests.length === 0 ? (
+                                <p style={{ color: "#64748B", fontSize: "13px" }}>No pending edit requests.</p>
+                            ) : (
+                                <div className="table-container">
+                                    <table className="compact-table stack-sm">
+                                        <thead>
+                                            <tr><th>Student</th><th>Current → Proposed</th><th>Reason</th><th>Requested by</th><th>Action</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {editRequests.map((r) => (
+                                                <tr key={r.id}>
+                                                    <td data-label="Student">{r.studentName || "-"} {r.rollNumber ? `(Roll ${r.rollNumber})` : ""}</td>
+                                                    <td data-label="Amount">₹{Number(r.currentAmount || 0).toLocaleString("en-IN")} → ₹{Number(r.proposedAmount || 0).toLocaleString("en-IN")}</td>
+                                                    <td data-label="Reason">{r.reason || "-"}</td>
+                                                    <td data-label="Requested by">{r.displayRequester || r.requestedByName || r.requestedBy || "-"}</td>
+                                                    <td data-label="Action">
+                                                        <button className="save-btn" onClick={() => reviewEditRequest(r.id, "approve")}>Approve</button>
+                                                        <button className="cancel-btn" onClick={() => reviewEditRequest(r.id, "reject")}>Reject</button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {paymentTab === "requests" && isApprover && (
                         <div className="settings-card" style={{ marginTop: "14px" }}>
@@ -327,7 +385,7 @@ function PaymentsPage() {
             </button>
 
             {showForm && (
-                <PaymentForm editPayment={editPayment} onClose={handleFormClose} />
+                <PaymentForm editPayment={editPayment} onClose={handleFormClose} onEdit={openEditPayment} isApprover={isApprover} />
             )}
 
             <PromptDialog

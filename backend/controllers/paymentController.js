@@ -414,6 +414,192 @@ exports.editPayment = (req, res) => {
 };
 
 // =====================================================
+
+// =====================================================
+// PAYMENT EDIT REQUESTS
+// Non-approvers submit a proposed edit with a reason;
+// admin/principal approve (apply the edit) or reject.
+// =====================================================
+
+// Apply an edit to a payment using already-validated values.
+// `done(err, info)` is called after the transaction settles.
+function applyPaymentEdit(payment, values, actorId, done) {
+    const { amount, paymentMode, paymentDate, remarks, lineItems } = values;
+    const hasLineItems = Array.isArray(lineItems) && lineItems.length > 0;
+    const newAmount = hasLineItems
+        ? lineItems.reduce((s, li) => s + Number(li.amount || 0), 0)
+        : Number(amount);
+    if (!Number.isFinite(newAmount) || newAmount <= 0) return done(new Error("Payment amount must be greater than zero."));
+
+    const updateFields = ["amount = ?", "editCount = ?"];
+    const updateVals = [newAmount, Number(payment.editCount || 0) + 1];
+    if (typeof paymentMode !== "undefined") { updateFields.push("paymentMode = ?"); updateVals.push(paymentMode); }
+    if (typeof paymentDate !== "undefined") { updateFields.push("paymentDate = ?"); updateVals.push(paymentDate); }
+    if (typeof remarks !== "undefined") { updateFields.push("remarks = ?"); updateVals.push(remarks || ""); }
+    updateVals.push(payment.id);
+
+    db.run("BEGIN", (bErr) => {
+        if (bErr) return done(bErr);
+        db.run(`UPDATE payments SET ${updateFields.join(", ")} WHERE id = ?`, updateVals, function (uErr) {
+            if (uErr) { db.run("ROLLBACK", () => {}); return done(uErr); }
+            if (!hasLineItems) {
+                return db.run("COMMIT", (cErr) => done(cErr, { newAmount }));
+            }
+            db.run(`DELETE FROM payment_line_items WHERE paymentId = ?`, [payment.id], (dErr) => {
+                if (dErr) { db.run("ROLLBACK", () => {}); return done(dErr); }
+                let i = 0;
+                const next = () => {
+                    if (i >= lineItems.length) return db.run("COMMIT", (cErr) => done(cErr, { newAmount }));
+                    const li = lineItems[i++];
+                    db.run(
+                        `INSERT INTO payment_line_items (paymentId, componentName, amount, mode, paidOn, reference, remark) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                        [payment.id, String(li.componentName || "Fee"), Number(li.amount || 0), li.mode || paymentMode || payment.paymentMode,
+                         li.paidOn || paymentDate || payment.paymentDate, li.reference || "", li.remark || ""],
+                        (iErr) => {
+                            if (iErr) { db.run("ROLLBACK", () => {}); return done(iErr); }
+                            next();
+                        }
+                    );
+                };
+                next();
+            });
+        });
+    });
+}
+
+exports.requestEdit = (req, res) => {
+    const paymentId = Number(req.params.id);
+    const body = req.body || {};
+    const reason = String(body.reason || "").trim();
+    if (!paymentId) return res.status(400).json({ success: false, message: "Invalid payment ID." });
+    if (reason.length < 10 || /^(.)\1+$/.test(reason)) return res.status(400).json({ success: false, message: "Please enter a clear reason (at least 10 characters)." });
+
+    const values = {
+        amount: Number(body.amount),
+        paymentMode: String(body.paymentMode || ""),
+        paymentDate: String(body.paymentDate || "").slice(0, 10),
+        remarks: String(body.remarks || ""),
+        lineItems: Array.isArray(body.lineItems) ? body.lineItems : []
+    };
+    if (!Number.isFinite(values.amount) || values.amount <= 0) return res.status(400).json({ success: false, message: "Payment amount must be greater than zero." });
+
+    db.get(`SELECT * FROM payments WHERE id = ?`, [paymentId], (err, payment) => {
+        if (err) return res.status(500).json({ success: false, message: "Database error." });
+        if (!payment) return res.status(404).json({ success: false, message: "Payment not found." });
+        if (payment.status === "reversed") return res.status(409).json({ success: false, message: "A reversed payment cannot be edited." });
+        if (Number(payment.editCount || 0) >= 1) return res.status(409).json({ success: false, message: "This payment has already been edited once." });
+
+        // Admin / principal edit directly (same as before).
+        if (APPROVER_ROLES.includes(req.user.role)) {
+            return applyPaymentEdit(payment, values, req.user.id, (e, info) => {
+                if (e) return res.status(500).json({ success: false, message: e.message || "Unable to edit payment." });
+                logAudit({ userId: req.user.id, action: "PAYMENT_EDITED", entityType: "payment", entityId: paymentId,
+                    details: { oldAmount: payment.amount, newAmount: info.newAmount, direct: true } }).catch(() => {});
+                res.json({ success: true, message: "Payment edited successfully.", applied: true });
+            });
+        }
+
+        // Staff: check for an existing pending request.
+        db.get(`SELECT id FROM payment_edit_requests WHERE paymentId = ? AND status = 'pending'`, [paymentId], (rErr, existing) => {
+            if (rErr) return res.status(500).json({ success: false, message: "Database error." });
+            if (existing) return res.status(409).json({ success: false, message: "An edit request is already pending for this payment." });
+            // Name may be missing from older tokens — resolve it from the users table.
+            db.get(`SELECT name, email FROM users WHERE id = ?`, [req.user.id], (uErr, requester) => {
+                const requesterName = req.user.name || requester?.name || requester?.email || "";
+            db.run(
+                `INSERT INTO payment_edit_requests
+                 (paymentId, requestedBy, requestedByName, reason, proposedAmount, proposedMode, proposedDate, proposedRemarks, proposedLineItems, status, createdAt)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+                [paymentId, req.user.id, requesterName, reason, values.amount, values.paymentMode, values.paymentDate,
+                 values.remarks, JSON.stringify(values.lineItems), new Date().toISOString()],
+                function (iErr) {
+                    if (iErr) return res.status(500).json({ success: false, message: "Unable to submit edit request." });
+                    logAudit({ userId: req.user.id, action: "PAYMENT_EDIT_REQUESTED", entityType: "payment", entityId: paymentId,
+                        details: { reason, oldAmount: payment.amount, proposedAmount: values.amount } }).catch(() => {});
+                    res.json({ success: true, requested: true, message: "Edit request submitted for admin approval." });
+                }
+            );
+        });
+    });
+    });
+};
+
+exports.getEditRequests = (req, res) => {
+    db.all(
+        `SELECT r.*, p.amount AS currentAmount, p.paymentMode AS currentMode, p.paymentDate AS currentDate,
+                s.studentName, s.rollNumber, s.className,
+                COALESCE(NULLIF(r.requestedByName, ''), u.name, u.email, '') AS displayRequester
+         FROM payment_edit_requests r
+         JOIN payments p ON p.id = r.paymentId
+         LEFT JOIN students s ON p.studentId = s.id
+         LEFT JOIN users u ON u.id = r.requestedBy
+         WHERE r.status = 'pending'
+         ORDER BY r.createdAt DESC`,
+        [],
+        (err, rows) => {
+            if (err) return res.status(500).json({ success: false, message: "Unable to load edit requests." });
+            const shaped = (rows || []).map((r) => {
+                let lineItems = [];
+                try { lineItems = JSON.parse(r.proposedLineItems || "[]"); } catch (e) { lineItems = []; }
+                return { ...r, lineItems };
+            });
+            res.json(shaped);
+        }
+    );
+};
+
+exports.approveEditRequest = (req, res) => {
+    const requestId = Number(req.params.id);
+    if (!requestId) return res.status(400).json({ success: false, message: "Invalid request ID." });
+    db.get(`SELECT * FROM payment_edit_requests WHERE id = ?`, [requestId], (err, request) => {
+        if (err) return res.status(500).json({ success: false, message: "Database error." });
+        if (!request) return res.status(404).json({ success: false, message: "Request not found." });
+        if (request.status !== "pending") return res.status(409).json({ success: false, message: "This request was already reviewed." });
+        db.get(`SELECT * FROM payments WHERE id = ?`, [request.paymentId], (pErr, payment) => {
+            if (pErr || !payment) return res.status(404).json({ success: false, message: "Payment not found." });
+            if (Number(payment.editCount || 0) >= 1) {
+                return db.run(`UPDATE payment_edit_requests SET status='rejected', reviewedBy=?, reviewedAt=? WHERE id=?`,
+                    [req.user.id, new Date().toISOString(), requestId], () =>
+                    res.status(409).json({ success: false, message: "Payment was already edited — request auto-rejected." }));
+            }
+            let lineItems = [];
+            try { lineItems = JSON.parse(request.proposedLineItems || "[]"); } catch (e) { lineItems = []; }
+            const values = {
+                amount: request.proposedAmount,
+                paymentMode: request.proposedMode,
+                paymentDate: request.proposedDate,
+                remarks: request.proposedRemarks,
+                lineItems
+            };
+            applyPaymentEdit(payment, values, req.user.id, (e, info) => {
+                if (e) return res.status(500).json({ success: false, message: e.message || "Unable to apply edit." });
+                db.run(`UPDATE payment_edit_requests SET status='approved', reviewedBy=?, reviewedAt=? WHERE id=?`,
+                    [req.user.id, new Date().toISOString(), requestId], (uErr) => {
+                        if (uErr) return res.status(500).json({ success: false, message: "Unable to update request." });
+                        logAudit({ userId: req.user.id, action: "PAYMENT_EDIT_APPROVED", entityType: "payment", entityId: payment.id,
+                            details: { reason: request.reason, requestedBy: request.requestedByName, oldAmount: payment.amount, newAmount: info.newAmount } }).catch(() => {});
+                        res.json({ success: true, message: "Edit request approved and applied." });
+                    });
+            });
+        });
+    });
+};
+
+exports.rejectEditRequest = (req, res) => {
+    const requestId = Number(req.params.id);
+    if (!requestId) return res.status(400).json({ success: false, message: "Invalid request ID." });
+    db.get(`SELECT id, status FROM payment_edit_requests WHERE id = ?`, [requestId], (err, request) => {
+        if (err) return res.status(500).json({ success: false, message: "Database error." });
+        if (!request) return res.status(404).json({ success: false, message: "Request not found." });
+        if (request.status !== "pending") return res.status(409).json({ success: false, message: "This request was already reviewed." });
+        db.run(`UPDATE payment_edit_requests SET status='rejected', reviewedBy=?, reviewedAt=? WHERE id=?`,
+            [req.user.id, new Date().toISOString(), requestId], (uErr) => {
+                if (uErr) return res.status(500).json({ success: false, message: "Unable to reject request." });
+                res.json({ success: true, message: "Edit request rejected." });
+            });
+    });
+};
+
 // STUDENT FEE HISTORY (FIXED: FETCHES ASSOCIATED LINE ITEMS)
 // =====================================================
 exports.studentFeeHistory = async (req, res) => {
@@ -649,18 +835,35 @@ exports.getDefaulters = async (req, res) => {
         const paidBy = {};
         paidRows.forEach((r) => { paidBy[r.feeAccountId] = Number(r.paid || 0); });
 
+        // Follow-up tracker records for this academic year
+        const followRows = await allQ(
+            `SELECT studentId, status, promiseDate, note, updatedAt FROM defaulter_followups WHERE academicYear = ?`,
+            [year.name]
+        );
+        const followBy = {};
+        followRows.forEach((f) => { followBy[f.studentId] = f; });
+
+        const today = new Date().toISOString().slice(0, 10);
         const defaulters = students.map((s) => {
             const standard = Number(demandBy[s.feeAccountId] || 0);
             const net = Math.max(0, standard - Number(s.concessionAmount || 0));
             const demand = Math.max(0, Number(s.previousDues || 0) - Number(s.previousDuesConcession || 0)) + net;
             const paid = Number(paidBy[s.feeAccountId] || 0);
             const balance = Math.max(0, demand - paid);
+            const f = followBy[s.studentId] || {};
             return {
                 ...s,
                 totalDemand: demand,
                 totalPaid: paid,
                 balance,
-                bucket: balance === 0 ? "clear" : paid === 0 ? "unpaid" : "partial"
+                bucket: balance === 0 ? "clear" : paid === 0 ? "unpaid" : "partial",
+                followUp: {
+                    status: f.status || "not_contacted",
+                    promiseDate: f.promiseDate || null,
+                    note: f.note || "",
+                    updatedAt: f.updatedAt || null,
+                    due: !!f.promiseDate && f.promiseDate <= today
+                }
             };
         }).filter((s) => s.balance > 0 && s.totalDemand > 0);
 
@@ -668,12 +871,47 @@ exports.getDefaulters = async (req, res) => {
             count: defaulters.length,
             totalOutstanding: defaulters.reduce((t, s) => t + s.balance, 0),
             unpaid: defaulters.filter((s) => s.bucket === "unpaid").length,
-            partial: defaulters.filter((s) => s.bucket === "partial").length
+            partial: defaulters.filter((s) => s.bucket === "partial").length,
+            followUpDue: defaulters.filter((s) => s.followUp.due).length,
+            followed: defaulters.filter((s) => s.followUp.status !== "not_contacted").length
         };
         res.json({ success: true, academicYear: year.name, summary, defaulters });
     } catch (error) {
         console.error("Defaulters Error:", error);
         res.status(500).json({ success: false, message: "Unable to load defaulters." });
+    }
+};
+
+// Save / update a defaulter's recovery follow-up (admin/accountant/principal/manager).
+exports.saveFollowUp = async (req, res) => {
+    try {
+        const studentId = Number(req.params.studentId);
+        const status = String(req.body?.status || "not_contacted").trim();
+        const promiseDate = req.body?.promiseDate ? String(req.body.promiseDate).slice(0, 10) : null;
+        const note = String(req.body?.note || "").trim();
+        const ALLOWED = ["not_contacted", "called", "notice_given", "promised"];
+        if (!studentId || studentId <= 0) return res.status(400).json({ success: false, message: "Invalid student ID." });
+        if (!ALLOWED.includes(status)) return res.status(400).json({ success: false, message: "Invalid follow-up status." });
+
+        const year = await new Promise((resolve, reject) => {
+            db.get(`SELECT name FROM academic_years WHERE status='active' ORDER BY id DESC LIMIT 1`, [], (e, r) => e ? reject(e) : resolve(r));
+        });
+        if (!year) return res.status(404).json({ success: false, message: "No active academic year." });
+
+        await runQ(
+            `INSERT INTO defaulter_followups (studentId, academicYear, status, promiseDate, note, updatedBy, updatedAt)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(studentId, academicYear) DO UPDATE SET
+               status=excluded.status, promiseDate=excluded.promiseDate, note=excluded.note,
+               updatedBy=excluded.updatedBy, updatedAt=excluded.updatedAt`,
+            [studentId, year.name, status, promiseDate, note, req.user.id, new Date().toISOString()]
+        );
+        logAudit({ userId: req.user.id, action: "DEFAULTER_FOLLOWUP_SAVED", entityType: "student", entityId: studentId,
+            details: { status, promiseDate, academicYear: year.name } }).catch(() => {});
+        res.json({ success: true, message: "Follow-up saved." });
+    } catch (error) {
+        console.error("Save follow-up error:", error);
+        res.status(500).json({ success: false, message: "Unable to save follow-up." });
     }
 };
 
@@ -752,12 +990,124 @@ exports.reportSummary = async (req, res) => {
         const averagePayment = totalPayments > 0 ? totalCollection / totalPayments : 0;
         const highestPayment = totalPayments > 0 ? Math.max(...activePayments.map(p => Number(p.amount || 0))) : 0;
 
+        // Mode breakdown from each payment's LINE ITEMS so a payment collected
+        // through multiple modes (e.g. "Cash, UPI") is split into its real modes
+        // instead of creating a combined "Cash, UPI" bucket.
+        const lineModeRows = await allQ(`
+            SELECT li.paymentId, li.mode, COALESCE(SUM(li.amount), 0) AS amount
+            FROM payment_line_items li
+            INNER JOIN payments p ON p.id = li.paymentId
+            INNER JOIN student_fee_accounts sfa ON sfa.id = p.feeAccountId
+            INNER JOIN student_enrollments se ON se.id = sfa.enrollmentId
+            WHERE se.academicYearId = ? AND (p.status IS NULL OR p.status != 'reversed')
+            GROUP BY li.paymentId, li.mode
+        `, [year.id]);
+        const modesByPayment = {};
+        lineModeRows.forEach((r) => { (modesByPayment[r.paymentId] = modesByPayment[r.paymentId] || []).push(r); });
         const modeMap = {};
         activePayments.forEach(payment => {
-            const mode = payment.paymentMode || "Other";
-            modeMap[mode] = (modeMap[mode] || 0) + Number(payment.amount || 0);
+            const amt = Number(payment.amount || 0);
+            const rows = modesByPayment[payment.id];
+            if (rows && rows.length) {
+                const sum = rows.reduce((t, r) => t + Number(r.amount || 0), 0);
+                rows.forEach((r) => {
+                    const mode = String(r.mode || payment.paymentMode || "Cash").trim();
+                    const share = sum > 0 ? amt * (Number(r.amount || 0) / sum) : amt / rows.length;
+                    modeMap[mode] = (modeMap[mode] || 0) + share;
+                });
+            } else {
+                const mode = String(payment.paymentMode || "Other").trim();
+                modeMap[mode] = (modeMap[mode] || 0) + amt;
+            }
         });
-        const modeCollection = Object.entries(modeMap).map(([mode, amount]) => ({ mode, amount }));
+        const modeCollection = Object.entries(modeMap)
+            .map(([mode, amount]) => ({ mode, amount: Number(amount.toFixed(2)) }))
+            .filter((m) => m.amount > 0)
+            .sort((a, b) => b.amount - a.amount);
+
+        // Component-level breakdown for the three big report cards:
+        // assessed (from fee items) and collected (from payment line items).
+        const assessedByComponent = {};
+        const sfiRows = await allQ(`
+            SELECT fc.componentName AS name,
+                   COALESCE(SUM(CASE WHEN sfi.itemType = 'carry_forward'
+                                      OR LOWER(COALESCE(fc.componentName,'')) LIKE '%previous%'
+                                      THEN 0 ELSE sfi.amount END), 0) AS amount
+            FROM student_fee_items sfi
+            INNER JOIN fee_components fc ON fc.id = sfi.componentId
+            INNER JOIN student_fee_accounts sfa ON sfa.id = sfi.feeAccountId
+            INNER JOIN student_enrollments se ON se.id = sfa.enrollmentId
+            INNER JOIN students st ON st.id = se.studentId
+            WHERE se.academicYearId = ? AND se.status = 'active'
+              AND (st.status IS NULL OR st.status = 'active')
+            GROUP BY fc.componentName
+        `, [year.id]);
+        // Normalize names case-insensitively so "TUTION FEE" and "Tuition Fee" merge.
+        const canon = (name) => String(name || "Fee").trim().toLowerCase()
+            .replace(/^tuition fee \(term \d+\)$/, "tuition fee")
+            .replace(/^tution fee$/, "tuition fee");
+        const labels = {};
+        const addAssessed = (name, amt) => { const k = canon(name); labels[k] = labels[k] || String(name || "Fee").trim(); assessedByComponent[k] = (assessedByComponent[k] || 0) + Number(amt || 0); };
+        sfiRows.forEach((r) => addAssessed(r.name, r.amount));
+
+        const collectedByComponent = {};
+        const lineRows = await allQ(`
+            SELECT li.componentName AS name, COALESCE(SUM(li.amount), 0) AS amount
+            FROM payment_line_items li
+            INNER JOIN payments p ON p.id = li.paymentId
+            INNER JOIN student_fee_accounts sfa ON sfa.id = p.feeAccountId
+            INNER JOIN student_enrollments se ON se.id = sfa.enrollmentId
+            WHERE se.academicYearId = ? AND (p.status IS NULL OR p.status != 'reversed')
+            GROUP BY li.componentName
+        `, [year.id]);
+        const addCollected = (name, amt) => { const k = canon(name); labels[k] = labels[k] || String(name || "Fee").trim(); collectedByComponent[k] = (collectedByComponent[k] || 0) + Number(amt || 0); };
+        lineRows.forEach((r) => addCollected(r.name, r.amount));
+
+        // Previous dues and effective concession as their own rows so the
+        // "Total Fees" card sums to the net demand used everywhere else.
+        const prevDuesTotal = await new Promise((resolve, reject) => {
+            db.get(
+                `SELECT COALESCE(SUM(MAX(COALESCE(s.previousDues, 0) - COALESCE(s.previousDuesConcession, 0), 0)), 0) AS t
+                 FROM student_enrollments se INNER JOIN students s ON s.id = se.studentId
+                 WHERE se.academicYearId = ? AND se.status = 'active'
+                   AND (s.status IS NULL OR s.status = 'active')`,
+                [year.id], (e, r) => (e ? reject(e) : resolve(Number(r.t || 0)))
+            );
+        });
+        const concessionTotal = await new Promise((resolve, reject) => {
+            db.get(
+                `SELECT COALESCE(SUM(MIN(s.concessionAmount, COALESCE(d.totalItems, 0))), 0) AS t
+                 FROM students s
+                 LEFT JOIN (
+                     SELECT se.studentId, COALESCE(SUM(CASE WHEN sfi.itemType = 'carry_forward'
+                        OR LOWER(COALESCE(fc.componentName,'')) LIKE '%previous%' THEN 0 ELSE sfi.amount END), 0) totalItems
+                     FROM student_enrollments se
+                     JOIN student_fee_accounts sfa ON sfa.enrollmentId = se.id
+                     JOIN student_fee_items sfi ON sfi.feeAccountId = sfa.id
+                     LEFT JOIN fee_components fc ON fc.id = sfi.componentId
+                     WHERE se.status = 'active' AND se.academicYearId = ? GROUP BY se.studentId
+                 ) d ON d.studentId = s.id
+                 WHERE (s.status IS NULL OR s.status = 'active') AND s.concessionAmount > 0`,
+                [year.id], (e, r) => (e ? reject(e) : resolve(Number(r.t || 0)))
+            );
+        });
+        labels["previous dues"] = "Previous Dues"; assessedByComponent["previous dues"] = prevDuesTotal;
+        labels["concession"] = "Concession"; assessedByComponent["concession"] = -concessionTotal;
+
+        // Reconcile collected line items with actual payment totals (legacy edits
+        // can leave line-item sums slightly out of sync with the payment amount).
+        const lineSum = Object.values(collectedByComponent).reduce((a, b) => a + b, 0);
+        const delta = Number((totalCollection - lineSum).toFixed(2));
+        if (Math.abs(delta) > 0.001) labels["adjustment"] = "Adjustment"; collectedByComponent["adjustment"] = delta;
+
+        const componentNames = Array.from(new Set([...Object.keys(assessedByComponent), ...Object.keys(collectedByComponent)])).sort();
+        const componentBreakdown = componentNames.map((key) => ({
+            key,
+            name: labels[key] || key,
+            assessed: Number(assessedByComponent[key] || 0),
+            collected: Number(collectedByComponent[key] || 0),
+            pending: Number((Number(assessedByComponent[key] || 0) - Number(collectedByComponent[key] || 0)).toFixed(2))
+        }));
 
         // Per-class assessed fee + active student counts (for the Reports
         // page "Remaining Balance" figures). Mirrors the ZIP bundle's
@@ -821,7 +1171,7 @@ exports.reportSummary = async (req, res) => {
             totalStudents, totalPayments, totalCollection,
             pendingFees: Math.max(0, feeTotal - totalCollection),
             totalFee: feeTotal,
-            averagePayment, highestPayment, modeCollection, classCollection,
+            averagePayment, highestPayment, modeCollection, classCollection, componentBreakdown,
             recentPayments: activePayments.slice(0, 10)
         });
     } catch (error) {

@@ -314,6 +314,7 @@ export default function TransferCertificatePage() {
                                     <option value="All">All Academic Years</option>
                                     {tcYears.map((y) => <option key={y} value={y}>{y}</option>)}
                                 </select>
+                                <button type="button" className="clear-btn" onClick={() => setYearFilter("All")}>Clear</button>
                                 <button type="button" className="clear-btn" onClick={() => loadTCs(yearFilter)}>Refresh</button>
                             </div>
                             <div className="table-container" style={{ marginTop: 10 }}>

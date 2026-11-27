@@ -88,5 +88,41 @@ router.get(
     attendanceController.getAttendanceOverview
 );
 
+// =====================================================
+// HOLIDAYS — weekly (Sunday) and occasional dates.
+// Reads follow the page gate; writes are admin-only.
+// =====================================================
+
+router.get(
+    "/holidays",
+    requirePage("teacher_attendance"),
+    attendanceController.getHolidays
+);
+
+router.post(
+    "/holidays",
+    requireRole("admin"),
+    attendanceController.createHoliday
+);
+
+router.post(
+    "/holidays/bulk",
+    requireRole("admin"),
+    attendanceController.createHolidays
+);
+
+router.delete(
+    "/holidays/:id",
+    requireRole("admin"),
+    attendanceController.deleteHoliday
+);
+
+// Mark the selected date as Holiday for all staff.
+router.post(
+    "/holiday",
+    requireRole("admin"),
+    attendanceController.markHoliday
+);
+
 
 module.exports = router;

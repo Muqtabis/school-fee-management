@@ -10,6 +10,9 @@ const incomeController =
 const financeReverse =
     require("../controllers/financeReverseController");
 
+const financeEdit =
+    require("../controllers/financeEditController");
+
 const {
     requireRole,
     requireAdmin,
@@ -120,6 +123,26 @@ router.post(
 // ADMIN + STAFF
 // =====================================================
 
+// Declared before "/:id" to avoid route collisions.
+router.post(
+    "/:id/edit-request",
+    financeEdit.requestIncomeEdit
+);
+router.get(
+    "/edit-requests",
+    requireRole("admin", "principal"),
+    financeEdit.getIncomeEditRequests
+);
+router.post(
+    "/edit-requests/:id/approve",
+    requireRole("admin", "principal"),
+    financeEdit.approveIncomeEdit
+);
+router.post(
+    "/edit-requests/:id/reject",
+    requireRole("admin", "principal"),
+    financeEdit.rejectIncomeEdit
+);
 router.get(
     "/:id",
     incomeController.getIncome

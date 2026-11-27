@@ -241,6 +241,7 @@ export default function LoginPage() {
             >
                 <aside className="login-brand">
                     <img src="/logo.png" alt="The Age School Logo"
+                        style={{ width: "150px", height: "150px", objectFit: "contain", display: "block", margin: "0 auto 20px" }}
                         onError={(e) => { e.target.style.display = "none"; }} />
                     <h1>THE AGE SCHOOL</h1>
                     <p className="lead">Institute of Pre, Primary and Secondary Education</p>
@@ -266,8 +267,8 @@ export default function LoginPage() {
                         src="/logo.png"
                         alt="The Age School Logo"
                         style={{
-                            width: "100px",
-                            height: "100px",
+                            width: "150px",
+                            height: "150px",
                             objectFit: "contain",
                             margin: "0 auto 12px",
                             display: "block"
@@ -299,6 +300,7 @@ export default function LoginPage() {
 
 
                     <p
+                        className="brand-tagline"
                         style={{
 
                             margin:

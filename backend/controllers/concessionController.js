@@ -243,21 +243,31 @@ exports.deleteConcession = async (req, res) => {
 exports.getPreviousDuesConcessions = (req, res) => {
     const { className } = req.query;
     let sql = `
-        SELECT id, studentName, rollNumber, className, fatherName, contact1, status,
-               previousDues, previousDuesConcession, previousDuesConcessionReason
-        FROM students
-        WHERE COALESCE(previousDues, 0) > 0
-          AND (status IS NULL OR status = 'active')
+        SELECT st.id, st.studentName, st.rollNumber, st.className, st.fatherName, st.contact1, st.status,
+               st.previousDues, st.previousDuesConcession, st.previousDuesConcessionReason,
+               COALESCE(paid.paidToward, 0) AS paidTowardDues
+        FROM students st
+        LEFT JOIN (
+            SELECT p.studentId, COALESCE(SUM(li.amount), 0) AS paidToward
+            FROM payment_line_items li
+            INNER JOIN payments p ON p.id = li.paymentId
+            WHERE (p.status IS NULL OR p.status != 'reversed')
+              AND LOWER(COALESCE(li.componentName, '')) LIKE '%previous%'
+            GROUP BY p.studentId
+        ) paid ON paid.studentId = st.id
+        WHERE COALESCE(st.previousDues, 0) > 0
+          AND (st.status IS NULL OR st.status = 'active')
     `;
     const params = [];
-    if (className && className !== "All") { sql += ` AND className = ?`; params.push(className); }
-    sql += ` ORDER BY className ASC, CAST(NULLIF(rollNumber, '') AS INTEGER) ASC, rollNumber ASC`;
+    if (className && className !== "All") { sql += ` AND st.className = ?`; params.push(className); }
+    sql += ` ORDER BY st.className ASC, CAST(NULLIF(st.rollNumber, '') AS INTEGER) ASC, st.rollNumber ASC`;
     db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ success: false, message: "Unable to load previous dues." });
-        res.json((rows || []).map((r) => ({
-            ...r,
-            remainingDues: Math.max(0, Number(r.previousDues || 0) - Number(r.previousDuesConcession || 0))
-        })));
+        res.json((rows || []).map((r) => {
+            const remaining = Math.max(0,
+                Number(r.previousDues || 0) - Number(r.previousDuesConcession || 0) - Number(r.paidTowardDues || 0));
+            return { ...r, remainingDues: remaining, cleared: remaining === 0 };
+        }));
     });
 };
 
@@ -274,8 +284,20 @@ exports.upsertPreviousDuesConcession = async (req, res) => {
         const student = await getStudentById(studentId);
         if (!student) return res.status(404).json({ success: false, message: "Student not found." });
         if (student.status === "archived") return res.status(409).json({ success: false, message: "Archived students cannot be edited. Restore the student first." });
-        if (amount > Number(student.previousDues || 0)) {
-            return res.status(400).json({ success: false, message: "Previous dues concession cannot exceed the student's previous dues." });
+        // Cap at what is actually still owed, after any payments toward dues.
+        const paidToward = await new Promise((resolve, reject) => {
+            db.get(
+                `SELECT COALESCE(SUM(li.amount), 0) AS t
+                 FROM payment_line_items li
+                 INNER JOIN payments p ON p.id = li.paymentId
+                 WHERE p.studentId = ? AND (p.status IS NULL OR p.status != 'reversed')
+                   AND LOWER(COALESCE(li.componentName, '')) LIKE '%previous%'`,
+                [studentId], (e, r) => (e ? reject(e) : resolve(Number(r.t || 0)))
+            );
+        });
+        const maxConcedable = Math.max(0, Number(student.previousDues || 0) - paidToward);
+        if (amount > maxConcedable) {
+            return res.status(400).json({ success: false, message: "Concession cannot exceed the dues still outstanding (Rs " + maxConcedable.toFixed(2) + ")." });
         }
 
         const changes = await new Promise((resolve, reject) => {

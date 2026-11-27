@@ -131,6 +131,12 @@ app.use(
     require("./routes/notifications")
 );
 
+// Notice Board (announcements visible on the dashboard)
+app.use(
+    "/notices",
+    require("./routes/notices")
+);
+
 // Examination & Results feature
 app.use(
     "/teachers",
@@ -140,6 +146,11 @@ app.use(
 app.use(
     "/exams",
     require("./routes/exams")
+);
+
+app.use(
+    "/tests",
+    require("./routes/tests")
 );
 
 app.use(

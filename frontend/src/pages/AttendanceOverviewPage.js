@@ -45,6 +45,9 @@ function AttendanceOverviewPage() {
 
     const [records, setRecords] = useState(null); // raw day rows, or null before first load
     const [loading, setLoading] = useState(false);
+    const [staffSummary, setStaffSummary] = useState([]);
+    const [staffLoading, setStaffLoading] = useState(false);
+    const [staffFilter, setStaffFilter] = useState("");
 
 
     // =====================================================
@@ -68,15 +71,32 @@ function AttendanceOverviewPage() {
     // LOAD THE REPORT
     // =====================================================
 
+    const loadStaff = async () => {
+        try {
+            setStaffLoading(true);
+            const res = await api.get("/attendance/summary", { params: { from, to } });
+            setStaffSummary(res.data.summary || []);
+        } catch (error) {
+            toast(error.response?.data?.message || "Unable to load staff attendance.");
+        } finally {
+            setStaffLoading(false);
+        }
+    };
+
+    // Staff overview is independent of the class picker — load it on mount.
+    useEffect(() => { loadStaff(); }, []);
+
     const load = async () => {
         if (!className) { toast("Choose a class first."); return; }
         setLoading(true);
         setRecords(null);
         try {
-            const res = await api.get("/student-attendance/report", {
-                params: { className, from, to }
-            });
+            const [res, staff] = await Promise.all([
+                api.get("/student-attendance/report", { params: { className, from, to } }),
+                api.get("/attendance/summary", { params: { from, to } })
+            ]);
             setRecords(res.data.records || []);
+            setStaffSummary(staff.data.summary || []);
         } catch (error) {
             toast(error.response?.data?.message || "Unable to load attendance.");
         } finally {
@@ -158,7 +178,26 @@ function AttendanceOverviewPage() {
                         </div>
                     </div>
 
-                    {/* SUMMARY */}
+                    {/* STAFF FILTERS — same card style as the class filter */}
+                    <div className="settings-card" style={{ marginTop: 18 }}>
+                        <div className="overview-filters">
+                            <select value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)}>
+                                <option value="">All staff</option>
+                                {staffSummary.map((s) => (
+                                    <option key={s.teacherId} value={s.teacherId}>{s.name}</option>
+                                ))}
+                            </select>
+                            <label>From</label>
+                            <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
+                            <label>To</label>
+                            <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
+                            <button type="button" className="primary-btn" onClick={loadStaff} disabled={staffLoading}>
+                                {staffLoading ? "Loading..." : "Load"}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* CLASS SUMMARY */}
                     {records === null ? (
                         <p style={{ marginTop: "20px", color: "#666" }}>
                             Choose a class and date range, then press Load.

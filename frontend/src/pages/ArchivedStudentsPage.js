@@ -152,6 +152,7 @@ export default function ArchivedStudentsPage() {
                                     <option value="All">All Academic Years</option>
                                     {tcYears.map((y) => <option key={y} value={y}>{y}</option>)}
                                 </select>
+                                <button type="button" className="clear-btn" onClick={() => setTcYear("All")}>Clear</button>
                                 <button type="button" className="clear-btn" onClick={() => loadTCs(tcYear)}>Refresh</button>
                             </div>
                             <div className="table-container" style={{ marginTop: 10 }}>

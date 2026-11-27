@@ -160,7 +160,7 @@ function IncomesPage() {
             ) {
 
                 console.error(
-                    "Income Error:",
+                    "Receipt Error:",
                     error
                 );
 
@@ -175,6 +175,7 @@ function IncomesPage() {
             fetchIncomes();
             fetchCategories();
             fetchReverseRequests();
+            fetchEditRequests();
 
         },
         []
@@ -365,6 +366,7 @@ function IncomesPage() {
     const [reverseTarget, setReverseTarget] = useState(null);
     const [reversing, setReversing] = useState(false);
     const [reverseRequests, setReverseRequests] = useState([]);
+    const [editRequests, setEditRequests] = useState([]);
     const [tab, setTab] = useState("completed");
 
     const fetchReverseRequests = async () => {
@@ -373,6 +375,23 @@ function IncomesPage() {
             const res = await api.get("/incomes/reverse-requests");
             setReverseRequests(Array.isArray(res.data) ? res.data : []);
         } catch (e) { console.error("Reverse requests error:", e); }
+    };
+
+    const fetchEditRequests = async () => {
+        if (!isApprover) return;
+        try {
+            const res = await api.get("/incomes/edit-requests");
+            setEditRequests(Array.isArray(res.data) ? res.data : []);
+        } catch (e) { console.error("Edit requests error:", e); }
+    };
+
+    const reviewEditRequest = async (id, action) => {
+        try {
+            const res = await api.post(`/incomes/edit-requests/${id}/${action}`, {});
+            toast(res.data?.message || "Request updated.");
+            fetchIncomes();
+            fetchEditRequests();
+        } catch (e) { toast(e.response?.data?.message || "Unable to review request."); }
     };
 
     const reviewRequest = async (id, action) => {
@@ -396,12 +415,12 @@ function IncomesPage() {
         setReversing(true);
         try {
             const res = await api.post(`/incomes/${reverseTarget.id}/reverse`, { reason });
-            toast(res.data?.message || (isApprover ? "Income reversed successfully." : "Reverse request submitted for admin approval."));
+            toast(res.data?.message || (isApprover ? "Receipt reversed successfully." : "Reverse request submitted for admin approval."));
             setReverseTarget(null);
             fetchIncomes();
             fetchReverseRequests();
         } catch (error) {
-            toast(error.response?.data?.message || "Unable to reverse income.");
+            toast(error.response?.data?.message || "Unable to reverse receipt.");
         } finally {
             setReversing(false);
         }
@@ -447,11 +466,11 @@ function IncomesPage() {
                         <div>
 
                             <h2>
-                                Incomes
+                                Receipt
                             </h2>
 
                             <p>
-                                Manage school incomes (added to the Net Balance)
+                                Manage school receipts (added to the Net Balance)
                             </p>
 
                         </div>
@@ -464,7 +483,7 @@ function IncomesPage() {
                             }
                         >
 
-                            + Add Income
+                            + Add Receipt
 
                         </button>
 
@@ -482,7 +501,7 @@ function IncomesPage() {
                         >
 
                             <h3>
-                                Active Income
+                                Active Receipt
                             </h3>
 
                             <h1>
@@ -531,7 +550,7 @@ function IncomesPage() {
 
                         <input
                             type="text"
-                            placeholder="Search incomes..."
+                            placeholder="Search receipts..."
                             value={
                                 search
                             }
@@ -612,6 +631,8 @@ function IncomesPage() {
                             )
                         }
 
+                        <button type="button" className="clear-btn" onClick={() => { setSearch(""); setCategory("all"); }}>Clear</button>
+
                     </div>
 
 
@@ -628,6 +649,9 @@ function IncomesPage() {
                                 <button type="button" className={`exam-tab ${tab === "requests" ? "exam-tab-active" : ""}`} onClick={() => { setTab("requests"); fetchReverseRequests(); }}>
                                     Reverse Requests <span className="exam-badge">{reverseRequests.length}</span>
                                 </button>
+                                <button type="button" className={`exam-tab ${tab === "editRequests" ? "exam-tab-active" : ""}`} onClick={() => { setTab("editRequests"); fetchEditRequests(); }}>
+                                    Edit Requests <span className="exam-badge">{editRequests.length}</span>
+                                </button>
                             </>
                         )}
                     </div>
@@ -640,11 +664,11 @@ function IncomesPage() {
                             ) : (
                                 <div className="table-container">
                                     <table className="compact-table stack-sm">
-                                        <thead><tr><th>Income</th><th>Amount</th><th>Requested by</th><th>Reason</th><th>Action</th></tr></thead>
+                                        <thead><tr><th>Receipt</th><th>Amount</th><th>Requested by</th><th>Reason</th><th>Action</th></tr></thead>
                                         <tbody>
                                             {reverseRequests.map((r) => (
                                                 <tr key={r.id}>
-                                                    <td data-label="Income">{r.incomeName || "-"}</td>
+                                                    <td data-label="Receipt">{r.incomeName || "-"}</td>
                                                     <td data-label="Amount">{money(r.amount)}</td>
                                                     <td data-label="Requested by">{r.requestedByName || "-"}</td>
                                                     <td data-label="Reason">{r.reason || "-"}</td>
@@ -661,7 +685,36 @@ function IncomesPage() {
                         </div>
                     )}
 
-                    {tab !== "requests" && (
+                    {tab === "editRequests" && isApprover && (
+                        <div className="settings-card" style={{ marginBottom: "18px" }}>
+                            <h3 style={{ margin: "0 0 12px 0" }}>Pending Edit Requests ({editRequests.length})</h3>
+                            {editRequests.length === 0 ? (
+                                <p style={{ color: "#64748B", fontSize: "13px" }}>No pending edit requests.</p>
+                            ) : (
+                                <div className="table-container">
+                                    <table className="compact-table stack-sm">
+                                        <thead><tr><th>Item</th><th>Current → Proposed</th><th>Reason</th><th>Requested by</th><th>Action</th></tr></thead>
+                                        <tbody>
+                                            {editRequests.map((r) => (
+                                                <tr key={r.id}>
+                                                    <td data-label="Item">{r.itemLabel || "-"}</td>
+                                                    <td data-label="Amount">₹{Number(r.amount || 0).toLocaleString("en-IN")} → ₹{Number(r.proposed?.amount || 0).toLocaleString("en-IN")}</td>
+                                                    <td data-label="Reason">{r.reason || "-"}</td>
+                                                    <td data-label="Requested by">{r.displayRequester || r.requestedByName || "-"}</td>
+                                                    <td data-label="Action">
+                                                        <button className="save-btn" onClick={() => reviewEditRequest(r.id, "approve")}>Approve</button>
+                                                        <button className="cancel-btn" onClick={() => reviewEditRequest(r.id, "reject")}>Reject</button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    {tab !== "requests" && tab !== "editRequests" && (
+
                     <div
                         className="table-container"
                     >
@@ -677,7 +730,7 @@ function IncomesPage() {
                                     </th>
 
                                     <th>
-                                        Income
+                                        Receipt
                                     </th>
 
                                     <th>
@@ -725,7 +778,7 @@ function IncomesPage() {
                                                 }}
                                             >
 
-                                                No Incomes Found
+                                                No Receipt Found
 
                                             </td>
 
@@ -758,7 +811,7 @@ function IncomesPage() {
                                                     </td>
 
 
-                                                    <td data-label="Income">
+                                                    <td data-label="Receipt">
                                                         {
                                                             income.incomeName
                                                         }
@@ -904,6 +957,7 @@ function IncomesPage() {
                 showForm && (
 
                     <IncomeForm
+                        isApprover={isApprover}
 
                         income={
                             selectedIncome
@@ -955,7 +1009,7 @@ function IncomesPage() {
                     reverseTarget
                         ? `Amount: ${money(reverseTarget.amount)}\n` +
                           `Category: ${reverseTarget.category || "-"}\n\n` +
-                          `The income will NOT be deleted.`
+                          `The receipt will NOT be deleted.`
                         : ""
                 }
                 multiline
@@ -1044,10 +1098,10 @@ function CategoryManagerModal({ categories, refreshCategories, onClose }) {
     );
 
     return (
-        <OverlayDialog onClose={onClose} ariaLabel="Manage income categories">
+        <OverlayDialog onClose={onClose} ariaLabel="Manage receipt categories">
             <div style={{ backgroundColor: "#ffffff", borderRadius: "14px", width: "100%", maxWidth: "520px", maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)" }}>
                 <div style={{ padding: "16px 20px", borderBottom: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <h2 style={{ fontSize: "17px", fontWeight: "700", color: "#0F172A", margin: 0 }}>Manage Income Categories</h2>
+                    <h2 style={{ fontSize: "17px", fontWeight: "700", color: "#0F172A", margin: 0 }}>Manage Receipt Category</h2>
                     <button onClick={onClose} style={{ background: "#F1F5F9", border: "none", fontSize: "14px", color: "#475569", cursor: "pointer", width: "28px", height: "28px", borderRadius: "50%", fontWeight: "bold" }}>✕</button>
                 </div>
                 <div style={{ padding: "20px", overflowY: "auto" }}>
@@ -1098,7 +1152,7 @@ function CategoryManagerModal({ categories, refreshCategories, onClose }) {
                         })}
                     </div>
                     <p style={{ fontSize: "12px", color: "#64748B", marginTop: "12px", lineHeight: 1.5 }}>
-                        A category that is still used by an income cannot be deleted. Renaming a category updates it on all of its existing incomes.
+                        A category that is still used by a receipt cannot be deleted. Renaming a category updates it on all of its existing receipts.
                     </p>
                 </div>
             </div>

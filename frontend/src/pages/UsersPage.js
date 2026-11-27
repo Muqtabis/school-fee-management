@@ -494,14 +494,14 @@ function UsersPage() {
                                                                             marginTop: "18px"
                                                                         }}
                                                                     >
-                                                                        {/* Settings is open to every user by
-                                                                            default — nothing to grant here. */}
-                                                                        {pageRegistry.filter((page) => page.key !== "settings" && grantableKeys.includes(page.key)).map((page) => (
+                                                                        {/* Settings and Notice Board are open to
+                                                                            every user by default — nothing to grant. */}
+                                                                        {pageRegistry.filter((page) => page.key !== "settings" && page.key !== "notices" && grantableKeys.includes(page.key)).map((page) => (
                                                                             <label
                                                                                 key={page.key}
                                                                                 style={{
                                                                                     display: "flex",
-                                                                                    alignItems: "center",
+                                                                                    alignItems: "flex-start",
                                                                                     gap: "8px",
                                                                                     padding: "8px 10px",
                                                                                     border: "1px solid #e2e2e2",
@@ -512,12 +512,15 @@ function UsersPage() {
                                                                             >
                                                                                 <input
                                                                                     type="checkbox"
+                                                                                    style={{ marginTop: 2, flexShrink: 0 }}
                                                                                     checked={accessKeys.includes(page.key)}
                                                                                     disabled={accessLocked}
                                                                                     onChange={() => toggleKey(page.key)}
                                                                                 />
-                                                                                <span>{page.label}</span>
-                                                                                <small style={{ color: "#64748B", fontSize: "12px", marginLeft: "8px" }}>({page.description})</small>
+                                                                                <span style={{ display: "block", minWidth: 0 }}>
+                                                                                    <strong style={{ display: "block", fontSize: "13px" }}>{page.label}</strong>
+                                                                                    <small style={{ display: "block", color: "#64748B", fontSize: "12px", marginTop: "2px", lineHeight: 1.35 }}>{page.description}</small>
+                                                                                </span>
                                                                             </label>
                                                                         ))}
                                                                     </div>

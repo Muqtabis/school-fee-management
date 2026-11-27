@@ -570,6 +570,27 @@ async function runInitializeDatabase() {
             )
         `);
 
+        // HOLIDAYS — weekly (Sunday) and occasional dates. Admin-managed.
+        await run(`
+            CREATE TABLE IF NOT EXISTS holidays (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                holidayDate TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                type TEXT NOT NULL DEFAULT 'occasional',
+                scope TEXT NOT NULL DEFAULT 'both',
+                createdBy INTEGER,
+                createdAt TEXT
+            )
+        `);
+
+        // Scope may be missing on older databases.
+        await addColumnIfMissing("holidays", "scope", "TEXT NOT NULL DEFAULT 'both'");
+
+        // Sundays are pre-coded: never stored as declarations or per-staff rows.
+        await run(`DELETE FROM holidays WHERE type = 'weekly' OR strftime('%w', holidayDate) = '0'`);
+        await run(`DELETE FROM teacher_attendance WHERE status = 'holiday' AND strftime('%w', attendanceDate) = '0'`);
+        await run(`DELETE FROM student_attendance WHERE status = 'holiday' AND strftime('%w', attendanceDate) = '0'`);
+
         // TEACHER ATTENDANCE — one row per (teacher, day).
         await run(`
             CREATE TABLE IF NOT EXISTS teacher_attendance (
@@ -683,6 +704,36 @@ async function runInitializeDatabase() {
                 createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(academicYearId) REFERENCES academic_years(id),
                 FOREIGN KEY(gradingScaleId) REFERENCES grading_scales(id)
+            )
+        `);
+
+        // TESTS — simple class-wise test records: date, max/min marks.
+        await run(`
+            CREATE TABLE IF NOT EXISTS tests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT,
+                className TEXT NOT NULL,
+                testDate TEXT NOT NULL,
+                maxMarks REAL NOT NULL,
+                minMarks REAL NOT NULL DEFAULT 0,
+                createdBy INTEGER,
+                createdAt TEXT
+            )
+        `);
+
+        // TEST MARKS — one row per (test, student, subject).
+        await run(`
+            CREATE TABLE IF NOT EXISTS test_marks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                testId INTEGER NOT NULL,
+                studentId INTEGER NOT NULL,
+                subjectId INTEGER NOT NULL,
+                marksObtained REAL,
+                isAbsent INTEGER NOT NULL DEFAULT 0,
+                updatedBy INTEGER,
+                updatedAt TEXT,
+                UNIQUE(testId, studentId, subjectId),
+                FOREIGN KEY(testId) REFERENCES tests(id) ON DELETE CASCADE
             )
         `);
 
@@ -993,6 +1044,99 @@ async function migrateDatabase() {
     await addColumnIfMissing("expenses", "voidedBy", "INTEGER");
     await addColumnIfMissing("expenses", "voidReason", "TEXT");
     await addColumnIfMissing("payments", "editCount", "INTEGER NOT NULL DEFAULT 0");
+
+    // Edit requests for expenses / incomes (labelled Payment / Receipt).
+    await run(`
+        CREATE TABLE IF NOT EXISTS expense_edit_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            expenseId INTEGER NOT NULL,
+            requestedBy INTEGER,
+            requestedByName TEXT,
+            reason TEXT NOT NULL,
+            proposed TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            reviewedBy INTEGER,
+            reviewedAt TEXT,
+            createdAt TEXT,
+            FOREIGN KEY(expenseId) REFERENCES expenses(id)
+        )
+    `);
+    await run(`
+        CREATE TABLE IF NOT EXISTS income_edit_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            incomeId INTEGER NOT NULL,
+            requestedBy INTEGER,
+            requestedByName TEXT,
+            reason TEXT NOT NULL,
+            proposed TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            reviewedBy INTEGER,
+            reviewedAt TEXT,
+            createdAt TEXT,
+            FOREIGN KEY(incomeId) REFERENCES incomes(id)
+        )
+    `);
+
+    // Payment edit requests — non-approvers propose changes; admin/principal approve.
+    await run(`
+        CREATE TABLE IF NOT EXISTS payment_edit_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            paymentId INTEGER NOT NULL,
+            requestedBy INTEGER,
+            requestedByName TEXT,
+            reason TEXT NOT NULL,
+            proposedAmount REAL,
+            proposedMode TEXT,
+            proposedDate TEXT,
+            proposedRemarks TEXT,
+            proposedLineItems TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            reviewedBy INTEGER,
+            reviewedAt TEXT,
+            createdAt TEXT,
+            FOREIGN KEY(paymentId) REFERENCES payments(id)
+        )
+    `);
+
+    // Notice Board — announcements posted by staff for parents/staff/students.
+    await run(`
+        CREATE TABLE IF NOT EXISTS notices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            audience TEXT NOT NULL DEFAULT 'all',
+            publishDate TEXT,
+            expiryDate TEXT,
+            pinned INTEGER NOT NULL DEFAULT 0,
+            createdBy INTEGER,
+            createdByName TEXT,
+            createdAt TEXT
+        )
+    `);
+    await run(`
+        CREATE TABLE IF NOT EXISTS notice_reads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            noticeId INTEGER NOT NULL,
+            userId INTEGER NOT NULL,
+            readAt TEXT,
+            UNIQUE(noticeId, userId)
+        )
+    `);
+
+    // Fee recovery tracker — one follow-up record per student per academic year.
+    await run(`
+        CREATE TABLE IF NOT EXISTS defaulter_followups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            studentId INTEGER NOT NULL,
+            academicYear TEXT,
+            status TEXT NOT NULL DEFAULT 'not_contacted',
+            promiseDate TEXT,
+            note TEXT,
+            updatedBy INTEGER,
+            updatedAt TEXT,
+            UNIQUE(studentId, academicYear)
+        )
+    `);
     await addColumnIfMissing("expenses", "editCount", "INTEGER NOT NULL DEFAULT 0");
     await addColumnIfMissing("incomes", "status", "TEXT NOT NULL DEFAULT 'completed'");
     await addColumnIfMissing("incomes", "voidedAt", "TEXT");
@@ -1031,6 +1175,8 @@ async function migrateDatabase() {
     await addColumnIfMissing("exam_subjects", "room", "TEXT");
     await addColumnIfMissing("exam_subjects", "instructions", "TEXT");
     await addColumnIfMissing("exam_subjects", "teacherId", "INTEGER");
+    // Optional subject: no exam is held, max marks = 0, excluded from results.
+    await addColumnIfMissing("exam_subjects", "isOptional", "INTEGER NOT NULL DEFAULT 0");
 
     // Richer per-mark status: present | absent | exempted | medical_leave |
     // not_applicable. The legacy isAbsent flag is kept in sync for old code.

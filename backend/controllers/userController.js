@@ -1292,6 +1292,12 @@ exports.getMyPages = async (req, res) => {
             pageKeys.push("settings");
         }
 
+        // Notice Board is a default page for every user — it is
+        // kept out of the assignable registry just like settings.
+        if (req.user.role !== "admin" && !pageKeys.includes("notices")) {
+            pageKeys.push("notices");
+        }
+
         res.json({
             success: true,
             pageKeys

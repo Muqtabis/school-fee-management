@@ -77,6 +77,11 @@ router.put(
     requireRole("admin", "principal"),
     examController.updateExamDefinition
 );
+router.delete(
+    "/definitions/:definitionId",
+    requireRole("admin", "principal"),
+    examController.deleteExamDefinition
+);
 
 // A student's structured result history across exams.
 router.get("/students/:studentId/results", examAdmin, resultController.getStudentResultHistory);

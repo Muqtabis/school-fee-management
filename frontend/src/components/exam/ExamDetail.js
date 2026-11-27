@@ -180,6 +180,7 @@ function ExamDetail({ definition, onBack, onChanged }) {
         if (!selected) return;
         const subjects = config.map((s) => ({
             subjectId: s.subjectId,
+            isOptional: !!s.isOptional,
             maxMarks: Number(s.maxMarks),
             passMarks: s.passMarks === "" ? null : Number(s.passMarks),
             teacherId: s.teacherId === "" ? null : Number(s.teacherId),
@@ -413,18 +414,19 @@ function ExamDetail({ definition, onBack, onChanged }) {
                                                     <th>Max</th>
                                                     <th>Pass</th>
                                                     <th>Teacher</th>
+                                                    <th>Optional</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {config.length === 0 ? (
-                                                    <tr><td colSpan="4">No subjects for this class.</td></tr>
+                                                    <tr><td colSpan="5">No subjects for this class.</td></tr>
                                                 ) : config.map((s) => (
                                                     <tr key={s.subjectId}>
                                                         <td>{s.subjectName}</td>
                                                         <td>
                                                             <input
                                                                 type="number" min="1" value={s.maxMarks}
-                                                                disabled={!configMeta.editable}
+                                                                disabled={!configMeta.editable || !!s.isOptional}
                                                                 onChange={(e) => setConfigCell(s.subjectId, { maxMarks: e.target.value })}
                                                                 style={{ width: "80px" }}
                                                             />
@@ -433,7 +435,7 @@ function ExamDetail({ definition, onBack, onChanged }) {
                                                             <input
                                                                 type="number" min="0" value={s.passMarks}
                                                                 placeholder="auto"
-                                                                disabled={!configMeta.editable}
+                                                                disabled={!configMeta.editable || !!s.isOptional}
                                                                 onChange={(e) => setConfigCell(s.subjectId, { passMarks: e.target.value })}
                                                                 style={{ width: "80px" }}
                                                             />
@@ -450,13 +452,24 @@ function ExamDetail({ definition, onBack, onChanged }) {
                                                                 ))}
                                                             </select>
                                                         </td>
+                                                        <td style={{ textAlign: "center" }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!s.isOptional}
+                                                                disabled={!configMeta.editable}
+                                                                title="No exam held for this subject — max marks 0, excluded from results"
+                                                                onChange={(e) => setConfigCell(s.subjectId, e.target.checked
+                                                                    ? { isOptional: 1, maxMarks: 0, passMarks: "" }
+                                                                    : { isOptional: 0, maxMarks: s.maxMarks > 0 ? s.maxMarks : 100 })}
+                                                            />
+                                                        </td>
                                                     </tr>
                                                 ))}
                                             </tbody>
                                         </table>
                                     </div>
                                     <p style={{ fontSize: "12px", color: "#777", marginTop: "8px" }}>
-                                        Leave pass marks blank to use the default (33% of max).
+                                        Leave pass marks blank to use the default (33% of max). Optional subjects get 0 max marks and are excluded from results.
                                     </p>
                                     {configMeta.editable && config.length > 0 && (
                                         <button type="button" className="primary-btn" onClick={() => saveConfig(false)} disabled={savingConfig}>

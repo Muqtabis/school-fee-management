@@ -159,7 +159,6 @@ function MenuLink({ page, allowed, go }) {
             disabled={!isAllowed}
             onClick={() => go(page.path)}
         >
-            <span className="m-menu-icon">{page.icon}</span>
             <span>{page.label}</span>
             {!isAllowed && <small>no access</small>}
         </button>

@@ -30,6 +30,13 @@ router.get(
     dashboardController.summary
 );
 
+// Full staff list for the dashboard Staff card.
+router.get(
+    "/staff",
+    requireRole("admin", "accountant", "principal", "manager"),
+    dashboardController.staffList
+);
+
 // Recent activity feed (read-only, role-filtered).
 router.get(
     "/activity",

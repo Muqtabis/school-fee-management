@@ -2,8 +2,9 @@ import { toast } from "../services/notify";
 import { useEffect, useState, useMemo, useRef } from "react";
 import api from "../services/api";
 import useModalBehavior from "./useModalBehavior";
+import { printReceipt } from "../utils/receipt";
 
-function PaymentForm({ onClose, editPayment }) {
+function PaymentForm({ onClose, editPayment, onEdit, isApprover }) {
     const [editLineItems, setEditLineItems] = useState([]);
     const [students, setStudents] = useState([]);
     const [classes, setClasses] = useState([]);
@@ -12,6 +13,10 @@ function PaymentForm({ onClose, editPayment }) {
     const [activeYear, setActiveYear] = useState(null);
     const [loadingSummary, setLoadingSummary] = useState(false);
     const [loading, setLoading] = useState(false);
+    // After a successful save the form stays open and shows the saved receipts.
+    const [savedReceipts, setSavedReceipts] = useState([]);
+    const [editReason, setEditReason] = useState("");
+    const [editRequestSent, setEditRequestSent] = useState(false);
 
     const [selectedComponents, setSelectedComponents] = useState({});
 
@@ -257,23 +262,39 @@ function PaymentForm({ onClose, editPayment }) {
     // BUILD CLEAN COMPONENT LIST (VANISHES IF PAID 100%)
     // =====================================================
     const componentBreakdown = useMemo(() => {
-        // EDIT MODE: build the component list from this payment's saved line
-        // items so every original component stays editable (even when fully
-        // paid), with the ORIGINAL per-component amounts as the max.
+        // EDIT MODE: keep every original component editable (even if fully
+        // paid), but allow raising it up to what the student actually owes —
+        // the ledger's outstanding amount, not the old line-item amount.
         if (editPayment) {
+            const ledger = parsedLedger || {
+                studentPrevDues: Math.max(0, Number(selectedStudent?.previousDues || 0) - Number(selectedStudent?.previousDuesConcession || 0)),
+                netTuition: 0, rawAdditionalItems: [], paidMap: {}
+            };
+            const capFor = (name, original) => {
+                const lower = String(name).toLowerCase();
+                let outstanding = 0;
+                if (lower.includes("previous")) outstanding = ledger.studentPrevDues || 0;
+                else if (lower.includes("tuition") || lower.includes("tution") || lower.includes("term")) outstanding = ledger.netTuition || 0;
+                else {
+                    const found = (ledger.rawAdditionalItems || []).find((i) => String(i.name).toLowerCase() === lower);
+                    outstanding = found ? Number(found.amount || 0) : 0;
+                }
+                return Math.max(Number(original || 0), Number(outstanding || 0));
+            };
             let prev = 0;
             let tuition = null;
             const additional = [];
             editLineItems.forEach((li) => {
                 const name = li.componentName || "Fee";
                 const amt = Number(li.amount || 0);
+                const cap = capFor(name, amt);
                 const lower = name.toLowerCase();
                 if (lower.includes("previous")) {
-                    prev += amt;
+                    prev = cap;
                 } else if (lower.includes("tuition") || lower.includes("tution") || lower.includes("term")) {
-                    tuition = { name, total: amt, paid: 0, amount: amt };
+                    tuition = { name, total: cap, paid: 0, amount: cap };
                 } else {
-                    additional.push({ name, total: amt, amount: amt });
+                    additional.push({ name, total: cap, amount: cap });
                 }
             });
             return { previousDues: prev, tuition, additionalItems: additional };
@@ -496,17 +517,39 @@ function PaymentForm({ onClose, editPayment }) {
         // — so the receipt rows and the total are corrected together.
         if (editPayment) {
             if (lineItems.length === 0) return toast("Please keep at least one fee component.");
+            // Staff requests: the proposed amount is the single component so the
+            // approved edit actually applies the new amount (not the old rows).
+            const effectiveLineItems = !isApprover
+                ? [{ componentName: editLineItems[0]?.componentName || "Fee Collection",
+                     amount: Number(formData.amount || 0), mode: formData.paymentMode || "Cash",
+                     paidOn: formData.paymentDate, reference: "", remark: "" }]
+                : lineItems;
+            const payload = {
+                reason: editReason.trim(),
+                amount: Number(formData.amount),
+                paymentMode: formData.paymentMode,
+                paymentDate: formData.paymentDate,
+                remarks: formData.remarks,
+                lineItems: effectiveLineItems
+            };
+            if (!isApprover && (payload.reason.length < 10 || /^(.)\1+$/.test(payload.reason))) {
+                return toast("Please enter a clear reason (at least 10 characters).");
+            }
             try {
                 setLoading(true);
-                await api.post(`/payments/${editPayment.id}/edit`, {
-                    amount: Number(formData.amount),
-                    paymentMode: formData.paymentMode,
-                    paymentDate: formData.paymentDate,
-                    remarks: formData.remarks,
-                    lineItems
-                });
-                toast("Payment edited successfully.");
-                onClose();
+                // Approvers edit directly; staff submit a request for approval.
+                const res = await api.post(
+                    isApprover ? `/payments/${editPayment.id}/edit` : `/payments/${editPayment.id}/edit-request`,
+                    payload
+                );
+                if (res.data?.requested) {
+                    toast("Edit request submitted for admin approval.");
+                    setSavedReceipts([]);
+                    setEditRequestSent(true);
+                } else {
+                    toast("Payment edited successfully.");
+                    setSavedReceipts([{ id: editPayment.id, amount: Number(formData.amount || 0), date: formData.paymentDate, mode: formData.paymentMode }]);
+                }
             } catch (error) {
                 toast(error.response?.data?.message || "Unable to edit payment.");
             } finally {
@@ -545,12 +588,13 @@ function PaymentForm({ onClose, editPayment }) {
             let recorded = 0;
             let lastError = null;
             const failedDates = [];
+            const receipts = [];
             for (const date of dates) {
                 const items = groups[date];
                 const amount = items.reduce((s, li) => s + Number(li.amount || 0), 0);
                 const modes = Array.from(new Set(items.map((i) => i.mode).filter(Boolean)));
                 try {
-                    await api.post("/payments", {
+                    const res = await api.post("/payments", {
                         studentId: formData.studentId,
                         paymentDate: date,
                         amount: Number(amount.toFixed(2)),
@@ -558,6 +602,7 @@ function PaymentForm({ onClose, editPayment }) {
                         remarks: formData.remarks,
                         lineItems: items
                     });
+                    receipts.push({ id: res.data?.id, amount: Number(amount.toFixed(2)), date, mode: modes.join(", ") || "Cash" });
                     recorded++;
                 } catch (err) {
                     lastError = err;
@@ -567,15 +612,17 @@ function PaymentForm({ onClose, editPayment }) {
 
             if (recorded === 0) {
                 toast(lastError?.response?.data?.message || "Unable to save payment.");
-            } else if (failedDates.length > 0) {
-                toast(`${recorded} receipt(s) recorded. Could not record: ${failedDates.join(", ")} — please retry those.`);
+            } else {
+                setSavedReceipts(receipts);
+                if (failedDates.length > 0) {
+                    toast(`${recorded} receipt(s) recorded. Could not record: ${failedDates.join(", ")} — please retry those.`);
+                } else {
+                    toast(`${recorded} receipt${recorded > 1 ? "s" : ""} recorded successfully.`);
+                }
                 fetchFeeSummary(formData.studentId);
                 setMultiEntries([]);
                 setSelectedComponents({});
                 setFormData((f) => ({ ...f, amount: "" }));
-            } else {
-                toast(`${recorded} receipt${recorded > 1 ? "s" : ""} recorded successfully.`);
-                onClose();
             }
         } catch (error) {
             console.error("Payment error:", error);
@@ -601,6 +648,72 @@ function PaymentForm({ onClose, editPayment }) {
                     </div>
                     <button type="button" className="close-btn" onClick={onClose}>✕</button>
                 </div>
+
+                {editPayment && !isApprover ? (
+                    <form className="payment-form" onSubmit={handleSubmit} style={{ padding: "22px" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 18 }}>
+                            <div style={{ padding: 14, borderRadius: 10, border: "1px solid #E2E8F0", background: "#F8FAFC" }}>
+                                <span style={{ fontSize: 11, color: "#64748B", fontWeight: 700, textTransform: "uppercase" }}>Payment collected</span>
+                                <div style={{ fontSize: 26, fontWeight: 700, color: "#17365d", marginTop: 6 }}>{money(editPayment.amount)}</div>
+                                <small style={{ color: "#64748B" }}>Receipt #{editPayment.id} · {editPayment.paymentDate || "-"}</small>
+                            </div>
+                            <div style={{ padding: 14, borderRadius: 10, border: "1px solid #a9824b", background: "#f6f0e6" }}>
+                                <label style={{ fontSize: 11, color: "#92400E", fontWeight: 700, textTransform: "uppercase" }}>Actual amount to collect *</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={formData.amount}
+                                    onChange={(e) => setFormData((f) => ({ ...f, amount: e.target.value }))}
+                                    placeholder="Enter corrected amount"
+                                    style={{ width: "100%", marginTop: 6, padding: "8px 10px", fontSize: 16, borderRadius: 8, border: "1px solid #d8e1e8", boxSizing: "border-box" }}
+                                    required
+                                />
+                            </div>
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 14 }}>
+                            <label>Payment mode</label>
+                            <select name="paymentMode" value={formData.paymentMode} onChange={handleChange}>
+                                {["Cash", "UPI", "Card", "Bank Transfer", "Cheque"].map((m) => <option key={m}>{m}</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 14 }}>
+                            <label>Date</label>
+                            <input type="date" name="paymentDate" value={formData.paymentDate} onChange={handleChange} />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 14 }}>
+                            <label>Reason for edit * <span style={{ color: "#b91c1c" }}>(at least 10 characters)</span></label>
+                            <textarea rows={3} value={editReason} onChange={(e) => setEditReason(e.target.value)} placeholder="e.g. Wrong amount entered — please correct to the actual cash received" required />
+                        </div>
+                        {editRequestSent && (
+                            <div style={{ marginBottom: 12, padding: 12, borderRadius: 8, background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", fontSize: 13 }}>
+                                ✓ Edit request submitted. An admin/principal will review it.
+                            </div>
+                        )}
+                        <div className="modal-actions" style={{ marginTop: 8 }}>
+                            <button type="button" className="cancel-btn" onClick={onClose}>Close</button>
+                            <button type="submit" className="save-btn" disabled={loading || Number(formData.amount) <= 0 || editReason.trim().length < 10}>
+                                {loading ? "Sending..." : "Send Request"}
+                            </button>
+                        </div>
+                    </form>
+                ) : (
+                <>
+                {savedReceipts.length > 0 && (
+                    <div style={{ margin: "14px 20px 0", padding: 14, borderRadius: 10, border: "1px solid #BBF7D0", background: "#F0FDF4" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+                            <strong style={{ color: "#15803D", fontSize: 14 }}>✓ Payment recorded</strong>
+                            <span style={{ fontSize: 12, color: "#15803D" }}>{savedReceipts.length} receipt{savedReceipts.length > 1 ? "s" : ""} saved — you can print now or close.</span>
+                        </div>
+                        {savedReceipts.map((r, i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderTop: "1px solid #D1FAE5", flexWrap: "wrap" }}>
+                                <span style={{ fontSize: 12, color: "#475569" }}>Receipt #{r.id} · {money(r.amount)} · {r.date} · {r.mode}</span>
+                                <button type="button" className="receipt-btn" onClick={() => printReceipt(r.id)}>🧾 Print Receipt</button>
+                                {onEdit && <button type="button" className="edit-btn" onClick={() => onEdit({ id: r.id, studentId: formData.studentId, className: formData.className, paymentMode: r.mode, paymentDate: r.date })}>Edit</button>}
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 <div className="fee-summary" style={{ marginBottom: "16px" }}>
                     <div><span>Active Academic Year</span><strong>{activeYear?.name || "Not configured"}</strong></div>
@@ -860,6 +973,24 @@ function PaymentForm({ onClose, editPayment }) {
                         <textarea name="remarks" rows="2" value={formData.remarks} onChange={handleChange} placeholder="Optional notes..." />
                     </div>
 
+                    {editPayment && (
+                        <div className="form-group">
+                            <label>Reason for edit {!isApprover && <span style={{ color: "#b91c1c" }}>* required, at least 10 characters</span>}</label>
+                            <textarea
+                                rows={2}
+                                value={editReason}
+                                onChange={(e) => setEditReason(e.target.value)}
+                                placeholder={isApprover ? "Optional reason for the audit log" : "e.g. Wrong amount entered — please correct to the actual cash received"}
+                            />
+                        </div>
+                    )}
+
+                    {editRequestSent && (
+                        <div style={{ marginTop: 12, padding: 12, borderRadius: 8, background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", fontSize: 13 }}>
+                            ✓ Edit request submitted. An admin/principal will review it — you can close this form.
+                        </div>
+                    )}
+
                     <div className="modal-actions" style={{ marginTop: "18px" }}>
                         <button type="button" className="cancel-btn" onClick={onClose}>Cancel</button>
                         <button type="submit" className="save-btn" disabled={loading || !activeYear || (!editPayment && (loadingSummary || Number(formData.amount) <= 0))}>
@@ -867,6 +998,8 @@ function PaymentForm({ onClose, editPayment }) {
                         </button>
                     </div>
                 </form>
+                </>
+                )}
             </div>
         </div>
     );

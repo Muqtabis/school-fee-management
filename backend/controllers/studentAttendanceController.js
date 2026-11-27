@@ -1,9 +1,10 @@
 const { runQuery, allQuery } = require("../db");
 const logAudit = require("../utils/auditLogger");
+const { holidayInfo, countSundays } = require("./attendanceController");
 
 
 // Allowed daily statuses (mirrors teacher attendance).
-const STATUSES = ["present", "absent", "half_day", "leave"];
+const STATUSES = ["present", "absent", "half_day", "leave", "holiday"];
 
 function isValidDate(value) {
     return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -110,8 +111,13 @@ exports.getClassAttendance = async (req, res) => {
         );
 
         const locked = await isClassDayLocked(className, date);
+        const holiday = await holidayInfo(date, "students");
+        const records = rows.map((r) => ({
+            ...r,
+            status: r.status || (holiday.isHoliday ? "holiday" : "")
+        }));
 
-        res.json({ success: true, className, date, locked, records: rows });
+        res.json({ success: true, className, date, locked, holiday, records });
     } catch (error) {
         console.error("Get Class Attendance Error:", error);
         res.status(500).json({ success: false, message: "Unable to load attendance." });
@@ -152,6 +158,14 @@ exports.saveClassAttendance = async (req, res) => {
             return res.status(423).json({
                 success: false,
                 message: `Attendance for ${className} on ${date} is locked. Unlock the day before saving changes.`
+            });
+        }
+
+        const holiday = await holidayInfo(date, "students");
+        if (holiday.isHoliday) {
+            return res.status(423).json({
+                success: false,
+                message: `${holiday.name} is a holiday — attendance is not required. Remove the holiday declaration first if classes were held.`
             });
         }
 
@@ -342,6 +356,36 @@ exports.getClassAttendanceReport = async (req, res) => {
             params
         );
 
+        // Sundays are pre-coded holidays for students too.
+        const sundayDates = [];
+        if (from && to && from <= to) {
+            const start = new Date(`${from}T00:00:00Z`).getTime();
+            const end = new Date(`${to}T00:00:00Z`).getTime();
+            for (let t = start; t <= end; t += 86400000) {
+                if (new Date(t).getUTCDay() === 0) sundayDates.push(new Date(t).toISOString().slice(0, 10));
+            }
+        }
+        if (sundayDates.length > 0) {
+            const classStudents = await allQuery(
+                `SELECT id, studentName, rollNumber FROM students
+                 WHERE className = ? AND (status IS NULL OR status = 'active')`,
+                [className]
+            );
+            const synthetic = [];
+            for (const d of sundayDates) {
+                for (const s of classStudents) {
+                    if (Number.isInteger(studentId) && s.id !== studentId) continue;
+                    synthetic.push({
+                        id: `sunday-${d}-${s.id}`,
+                        studentId: s.id, studentName: s.studentName, rollNumber: s.rollNumber,
+                        attendanceDate: d, status: "holiday", remark: "Sunday — weekly holiday", updatedAt: null
+                    });
+                }
+            }
+            rows.push(...synthetic);
+            rows.sort((a, b) => b.attendanceDate.localeCompare(a.attendanceDate) || String(a.rollNumber).localeCompare(String(b.rollNumber)));
+        }
+
         res.json({ success: true, className, records: rows });
     } catch (error) {
         console.error("Student Attendance Report Error:", error);
@@ -391,7 +435,8 @@ exports.getClassAttendanceSummary = async (req, res) => {
                     SUM(CASE WHEN sa.status = 'absent'   THEN 1 ELSE 0 END) AS absent,
                     SUM(CASE WHEN sa.status = 'half_day' THEN 1 ELSE 0 END) AS half_day,
                     SUM(CASE WHEN sa.status = 'leave'    THEN 1 ELSE 0 END) AS leave,
-                    COUNT(sa.id) AS markedDays
+                    SUM(CASE WHEN sa.status = 'holiday'  THEN 1 ELSE 0 END) AS holiday,
+                    SUM(CASE WHEN sa.status <> 'holiday' THEN 1 ELSE 0 END) AS markedDays
              FROM students s
              LEFT JOIN student_attendance sa ON ${joinClauses.join(" AND ")}
              WHERE s.className = ? AND (s.status IS NULL OR s.status = 'active')
@@ -400,7 +445,12 @@ exports.getClassAttendanceSummary = async (req, res) => {
             [...params, className]
         );
 
-        res.json({ success: true, className, from, to, summary: rows });
+        const sundays = countSundays(from, to);
+        const summary = rows.map((r) => ({
+            ...r,
+            holiday: Number(r.holiday || 0) + sundays
+        }));
+        res.json({ success: true, className, from, to, sundays, summary });
     } catch (error) {
         console.error("Student Attendance Summary Error:", error);
         res.status(500).json({ success: false, message: "Unable to load attendance summary." });

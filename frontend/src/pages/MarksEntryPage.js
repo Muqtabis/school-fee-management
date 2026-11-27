@@ -26,6 +26,7 @@ function MarksEntryPage() {
     const [loading, setLoading] = useState(true);
 
     const [selectedExam, setSelectedExam] = useState(null);
+    const [selectedGroup, setSelectedGroup] = useState(null);
     const [students, setStudents] = useState([]);
     const [subjects, setSubjects] = useState([]);
     const [editable, setEditable] = useState(false);
@@ -90,6 +91,7 @@ function MarksEntryPage() {
 
     const closeExam = () => {
         setSelectedExam(null);
+        setSelectedGroup(null);
         setStudents([]);
         setSubjects([]);
         setMarks({});
@@ -229,7 +231,7 @@ function MarksEntryPage() {
                         </div>
                     </div>
 
-                    {!selectedExam && (
+                    {!selectedExam && !selectedGroup && (
                         <div className="table-container">
                             <table className="compact-table stack-sm">
                                 <thead>
@@ -247,18 +249,44 @@ function MarksEntryPage() {
                                         <tr><td colSpan="4">No exams assigned to your classes yet.</td></tr>
                                     ) : exams.map((exam) => (
                                         <tr key={exam.id}>
-                                            <td data-label="Exam">{exam.examName}</td>
+                                            <td data-label="Exam">{exam.examName}{exam.isGrouped ? <span className="exam-badge" style={{ marginLeft: 6 }}>{exam.classCount} exams</span> : null}</td>
                                             <td data-label="Class">{exam.className}</td>
-                                            <td data-label="Status">{STATUS_LABEL[exam.status] || exam.status}</td>
+                                            <td data-label="Status">{(exam.statuses || [exam.status]).map((s) => STATUS_LABEL[s] || s).join(", ")}</td>
                                             <td data-label="Action">
-                                                <button type="button" onClick={() => openExam(exam)}>
-                                                    {exam.status === "open" ? "Enter Marks" : "View Marks"}
+                                                <button type="button" onClick={() => {
+                                                    if (exam.isGrouped) setSelectedGroup(exam);
+                                                    else openExam(exam);
+                                                }}>
+                                                    {exam.isGrouped ? "Open" : (exam.status === "open" ? "Enter Marks" : "View Marks")}
                                                 </button>
                                             </td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
+                        </div>
+                    )}
+
+                    {!selectedExam && selectedGroup && (
+                        <div className="settings-card">
+                            <div className="exam-row-between">
+                                <h3 style={{ margin: 0 }}>{selectedGroup.examName} — classes</h3>
+                                <button type="button" onClick={() => setSelectedGroup(null)}>← Back to exams</button>
+                            </div>
+                            <p style={{ color: "#666" }}>Choose a class to enter or view marks.</p>
+                            <div className="cards" style={{ margin: 0 }}>
+                                {(selectedGroup.classes || []).map((c) => (
+                                    <div key={c.id} className="dashboard-card" style={{ flex: "1 1 220px" }}>
+                                        <h3>{c.className}</h3>
+                                        <span className={"exam-badge exam-badge-" + c.status}>{STATUS_LABEL[c.status] || c.status}</span>
+                                        <div style={{ marginTop: 12 }}>
+                                            <button type="button" onClick={() => openExam(c)}>
+                                                {c.status === "open" ? "Enter Marks" : "View Marks"}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
 
@@ -300,13 +328,12 @@ function MarksEntryPage() {
                                                 <tr>
                                                     <th>Roll</th>
                                                     <th>Student</th>
-                                                    {editableSubjects.map((subj) => (
-                                                        <th key={subj.subjectId}>
+                                                    {subjects.map((subj) => (
+                                                        <th key={subj.subjectId} style={!subj.canEdit ? { opacity: 0.65 } : undefined}>
                                                             {subj.subjectName}
                                                             <span style={{ display: "block", color: "#888", fontWeight: "normal", fontSize: "11px" }}>
                                                                 max {subj.maxMarks}
-                                                                {subj.passMarks !== null && subj.passMarks !== undefined && subj.passMarks !== ""
-                                                                    ? ` · pass ${subj.passMarks}` : ""}
+                                                                {!subj.canEdit ? " · read only" : ""}
                                                             </span>
                                                         </th>
                                                     ))}
@@ -317,16 +344,16 @@ function MarksEntryPage() {
                                                     <tr key={s.id}>
                                                         <td data-label="Roll">{s.rollNumber || "-"}</td>
                                                         <td data-label="Student">{s.studentName}</td>
-                                                        {editableSubjects.map((subj) => {
+                                                        {subjects.map((subj) => {
                                                             const cell = marks[s.id]?.[subj.subjectId] || { value: "", status: "present" };
-                                                            const invalid = isCellInvalid(subj, cell);
+                                                            const invalid = subj.canEdit && isCellInvalid(subj, cell);
                                                             return (
-                                                                <td key={subj.subjectId} data-label={subj.subjectName}>
+                                                                <td key={subj.subjectId} data-label={subj.subjectName} style={!subj.canEdit ? { background: "#F8FAFC" } : undefined}>
                                                                     <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                                                                         <input
                                                                             type="number" min="0" max={subj.maxMarks}
                                                                             value={cell.value}
-                                                                            disabled={!editable || cell.status !== "present"}
+                                                                            disabled={!editable || !subj.canEdit || cell.status !== "present"}
                                                                             className={invalid ? "exam-cell-invalid" : ""}
                                                                             placeholder={cell.status !== "present" ? "—" : ""}
                                                                             onChange={(e) => setCell(s.id, subj.subjectId, { value: e.target.value })}
@@ -334,7 +361,7 @@ function MarksEntryPage() {
                                                                         />
                                                                         <select
                                                                             value={cell.status}
-                                                                            disabled={!editable}
+                                                                            disabled={!editable || !subj.canEdit}
                                                                             onChange={(e) => setCell(s.id, subj.subjectId, {
                                                                                 status: e.target.value,
                                                                                 value: e.target.value === "present" ? cell.value : ""

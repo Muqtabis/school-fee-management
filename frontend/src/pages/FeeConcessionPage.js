@@ -364,6 +364,7 @@ function FeeConcessionPage() {
                                 <option value="All">All Academic Years</option>
                                 {tcYears.map((y) => <option key={y} value={y}>{y}</option>)}
                             </select>
+                            <button type="button" className="clear-btn" onClick={() => setTcYear("All")}>Clear</button>
                         </div>
                         <p className="tc-concession-note">Remaining amounts recorded when transfer certificates were issued. This section cannot be edited.</p>
                         <div className="table-container">
@@ -402,24 +403,33 @@ function FeeConcessionPage() {
                                     return <option key={c.id} value={displayClass}>{displayClass}</option>;
                                 })}
                             </select>
+                            <button type="button" className="clear-btn" onClick={() => setPrevDuesClass("All")}>Clear</button>
                             <button type="button" className="clear-btn" onClick={loadPrevDues}>Refresh</button>
                         </div>
                         <p className="tc-concession-note">Only students carrying previous-year dues appear here. Concede part or all of their dues — the remaining amount is what they must pay before a TC. Archived students cannot be edited.</p>
                         <div className="table-container">
                             <table className="stack-sm">
-                                <thead><tr><th>Student</th><th>Class</th><th>Previous Dues</th><th>Conceded</th><th>Remaining</th><th>Reason</th><th style={{ textAlign: "right" }}>Action</th></tr></thead>
+                                <thead><tr><th>Student</th><th>Class</th><th>Previous Dues</th><th>Paid</th><th>Conceded</th><th>Remaining</th><th>Reason</th><th style={{ textAlign: "right" }}>Action</th></tr></thead>
                                 <tbody>
                                     {prevDuesStudents.length === 0 ? (
-                                        <tr><td colSpan="7"><div className="empty-state"><strong>No previous dues</strong><span>No students are carrying previous-year dues.</span></div></td></tr>
+                                        <tr><td colSpan="8"><div className="empty-state"><strong>No previous dues</strong><span>No students are carrying previous-year dues.</span></div></td></tr>
                                     ) : prevDuesStudents.map((s) => (
-                                        <tr key={s.id}>
+                                        <tr key={s.id} style={s.cleared ? { opacity: 0.7 } : {}}>
                                             <td data-label="Student"><strong>{s.studentName || "-"}</strong><br /><small style={{ color: "#64748B" }}>Roll {s.rollNumber || "-"} · {s.fatherName || "-"}</small></td>
                                             <td data-label="Class">{s.className || "-"}</td>
                                             <td data-label="Previous Dues">{money(s.previousDues)}</td>
+                                            <td data-label="Paid"><strong style={{ color: "#1D4ED8" }}>{money(s.paidTowardDues)}</strong></td>
                                             <td data-label="Conceded"><strong className="positive-balance">{money(s.previousDuesConcession)}</strong></td>
-                                            <td data-label="Remaining"><strong className={Number(s.remainingDues) > 0 ? "negative-balance" : "positive-balance"}>{money(s.remainingDues)}</strong></td>
+                                            <td data-label="Remaining">
+                                                {s.cleared
+                                                    ? <span className="payment-badge mode-upi">CLEARED</span>
+                                                    : <strong className="negative-balance">{money(s.remainingDues)}</strong>}
+                                            </td>
                                             <td data-label="Reason">{s.previousDuesConcessionReason || "-"}</td>
-                                            <td data-label="Action" style={{ textAlign: "right" }}><button type="button" className="edit-btn" onClick={() => openPrevDialog(s)}>Edit</button></td>
+                                            <td data-label="Action" style={{ textAlign: "right" }}>
+                                                {s.cleared ? <span style={{ color: "#94A3B8", fontSize: 12 }}>—</span>
+                                                    : <button type="button" className="edit-btn" onClick={() => openPrevDialog(s)}>Edit</button>}
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -495,6 +505,8 @@ function FeeConcessionPage() {
                             />
                             Only with concession
                         </label>
+
+                        <button type="button" className="clear-btn" onClick={() => { setSearchKeyword(""); setSelectedClass("All"); setSelectedCategory("All"); setSortBy("roll"); setConcessionsOnly(false); }}>Clear</button>
                     </div>
 
                     <div className="table-container">

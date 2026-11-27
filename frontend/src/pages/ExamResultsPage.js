@@ -162,6 +162,7 @@ function ExamResultsPage() {
     const [editTreatAsFinal, setEditTreatAsFinal] = useState(false);
     const [editSelectedClasses, setEditSelectedClasses] = useState([]);
     const [savingEdit, setSavingEdit] = useState(false);
+    const [deletingId, setDeletingId] = useState(null);
 
     const openEdit = (d) => {
         // Map the saved definition back to an assessment slot.
@@ -208,7 +209,7 @@ function ExamResultsPage() {
             setSavingEdit(true);
             const slot = assessmentSlot(editForm.slot);
             const isFinalExam = editTreatAsFinal && slot.value === "t2_sa";
-            const res = await api.put(`/exams/definitions/${editingDef.id}`, {
+            const shared = {
                 examName: editForm.examName.trim(),
                 examType: isFinalExam ? "final" : slot.examType,
                 examCategory: isFinalExam ? "final" : slot.examCategory,
@@ -217,11 +218,21 @@ function ExamResultsPage() {
                 academicYearId: activeYear?.id || null,
                 gradingScaleId: editForm.gradingScaleId || null,
                 startDate: editForm.startDate || null,
-                endDate: editForm.endDate || null,
-                classNames: editSelectedClasses
-            });
-            const skipped = res.data?.skipped || [];
-            let msg = res.data?.message || "Exam updated successfully.";
+                endDate: editForm.endDate || null
+            };
+            // A grouped parent may span several definitions (one per class
+            // batch). Apply the shared fields to each, keeping its own
+            // classes intact.
+            const targets = editingDef.definitionIds || [editingDef.id];
+            const results = await Promise.all(targets.map((id, i) => {
+                const ownClasses = editingDef.definitions?.[i]?.classes;
+                return api.put(`/exams/definitions/${id}`, {
+                    ...shared,
+                    classNames: Array.isArray(ownClasses) && ownClasses.length ? ownClasses : editSelectedClasses
+                });
+            }));
+            const skipped = results.flatMap((r) => r.data?.skipped || []);
+            let msg = results[0]?.data?.message || "Exam updated successfully.";
             if (skipped.length) msg += "\n\nSkipped:\n" + skipped.map((s) => "• " + s.className + ": " + s.reason).join("\n");
             toast(msg);
             setEditingDef(null);
@@ -230,6 +241,26 @@ function ExamResultsPage() {
             toast(error.response?.data?.message || "Unable to update exam.");
         } finally {
             setSavingEdit(false);
+        }
+    };
+
+    const deleteExam = async (d) => {
+        const ok = window.confirm(
+            `Delete exam "${d.name}"?\n\nThis removes all its class exams, marks and results. This cannot be undone.`
+        );
+        if (!ok) return;
+        try {
+            setDeletingId(d.id);
+            const targets = d.definitionIds || [d.id];
+            const results = await Promise.all(targets.map((id) => api.delete(`/exams/definitions/${id}`)));
+            toast(results[0]?.data?.message || "Exam deleted.");
+            if (targets.includes(openDef?.id)) setOpenDef(null);
+            if (targets.includes(editingDef?.id)) setEditingDef(null);
+            loadDefinitions();
+        } catch (error) {
+            toast(error.response?.data?.message || "Unable to delete exam.");
+        } finally {
+            setDeletingId(null);
         }
     };
 
@@ -390,6 +421,8 @@ function ExamResultsPage() {
                                     <th>Type</th>
                                     <th>Category</th>
                                     <th>Academic Year</th>
+                                    <th>Start Date</th>
+                                    <th>End Date</th>
                                     <th>Classes</th>
                                     <th>Status</th>
                                     <th></th>
@@ -397,15 +430,20 @@ function ExamResultsPage() {
                             </thead>
                             <tbody>
                                 {loading ? (
-                                    <tr><td colSpan="7">Loading...</td></tr>
+                                    <tr><td colSpan="9">Loading...</td></tr>
                                 ) : definitions.length === 0 ? (
-                                    <tr><td colSpan="7">No exams yet.</td></tr>
+                                    <tr><td colSpan="9">No exams yet.</td></tr>
                                 ) : definitions.map((d) => (
                                     <tr key={d.id}>
-                                        <td>{d.name}</td>
+                                        <td>
+                                            {d.name}
+                                            {d.isGrouped && <span className="exam-badge" style={{ marginLeft: 6 }}>{d.classCount} exams</span>}
+                                        </td>
                                         <td>{examTypeLabel(d.examType)}</td>
                                         <td>{examCategoryLabel(d.examCategory)}</td>
                                         <td>{d.academicYear || "—"}</td>
+                                        <td>{d.startDate ? new Date(d.startDate).toLocaleDateString("en-IN") : "—"}</td>
+                                        <td>{d.endDate ? new Date(d.endDate).toLocaleDateString("en-IN") : "—"}</td>
                                         <td>{d.classCount} ({(d.classes || []).map((c) => c.className).join(", ")})</td>
                                         <td>
                                             {(d.statuses || []).map((s) => (
@@ -416,9 +454,14 @@ function ExamResultsPage() {
                                         </td>
                                         <td>
                                             {canEditExam && (
-                                                <button type="button" className="edit-btn" style={{ marginRight: "8px" }} onClick={() => openEdit(d)}>
-                                                    Edit
-                                                </button>
+                                                <>
+                                                    <button type="button" className="edit-btn" style={{ marginRight: "8px" }} onClick={() => openEdit(d)}>
+                                                        Edit
+                                                    </button>
+                                                    <button type="button" className="delete-btn" style={{ marginRight: "8px" }} disabled={deletingId === d.id} onClick={() => deleteExam(d)}>
+                                                        {deletingId === d.id ? "Deleting..." : "Delete"}
+                                                    </button>
+                                                </>
                                             )}
                                             <button type="button" className="primary-btn" onClick={() => setOpenDef(d)}>
                                                 Open

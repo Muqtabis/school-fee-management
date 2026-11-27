@@ -457,15 +457,16 @@ function TeacherManagementPage() {
                                                 <th>Absent</th>
                                                 <th>Half-day</th>
                                                 <th>Leave</th>
+                                                <th>Holidays</th>
                                                 <th>Days Marked</th>
                                                 <th>Present %</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {sumLoading ? (
-                                                <tr><td colSpan="8" style={{ textAlign: "center" }}>Loading...</td></tr>
+                                                <tr><td colSpan="9" style={{ textAlign: "center" }}>Loading...</td></tr>
                                             ) : summary.length === 0 ? (
-                                                <tr><td colSpan="8" style={{ textAlign: "center" }}>No teachers found.</td></tr>
+                                                <tr><td colSpan="9" style={{ textAlign: "center" }}>No teachers found.</td></tr>
                                             ) : (
                                                 summary.map((s) => {
                                                     const present = Number(s.present) || 0;
@@ -483,6 +484,7 @@ function TeacherManagementPage() {
                                                             <td data-label="Absent"><span className="att-badge att-absent">{Number(s.absent) || 0}</span></td>
                                                             <td data-label="Half-day"><span className="att-badge att-half">{half}</span></td>
                                                             <td data-label="Leave"><span className="att-badge att-leave">{Number(s.leave) || 0}</span></td>
+                                                            <td data-label="Holidays"><span className="att-badge att-holiday">{Number(s.holiday) || 0}</span></td>
                                                             <td data-label="Days Marked">{marked}</td>
                                                             <td data-label="Present %">{pct === null ? <span style={{ color: "#888" }}>—</span> : `${pct}%`}</td>
                                                         </tr>

@@ -121,6 +121,11 @@ router.get(
     paymentController.getDefaulters
 );
 
+router.put(
+    "/defaulters/:studentId/followup",
+    paymentController.saveFollowUp
+);
+
 
 // REVERSE REQUESTS (admin / principal only)
 // Declared before "/:id" routes to avoid route collisions.
@@ -150,6 +155,30 @@ router.post(
 // ADMIN + STAFF
 // =====================================================
 
+// Declared before "/:id" to avoid route collisions.
+// Edit requests (staff submit; admin/principal review).
+router.post(
+    "/:id/edit-request",
+    paymentController.requestEdit
+);
+router.get(
+    "/edit-requests",
+    requireRole("admin", "principal"),
+    paymentController.getEditRequests
+);
+router.post(
+    "/edit-requests/:id/approve",
+    requireRole("admin", "principal"),
+    paymentController.approveEditRequest
+);
+router.post(
+    "/edit-requests/:id/reject",
+    requireRole("admin", "principal"),
+    paymentController.rejectEditRequest
+);
+
+
+
 router.get(
     "/:id",
     paymentController.getPayment
@@ -176,7 +205,6 @@ router.post(
     "/:id/edit",
     paymentController.editPayment
 );
-
 
 // =====================================================
 // REVERSE PAYMENT

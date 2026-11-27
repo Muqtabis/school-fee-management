@@ -51,7 +51,7 @@ async function buildResults(exam) {
         const result = computeStudentResult({ subjects, marksBySubject, bands });
 
         // Missing cells (present-expected subjects with no entry at all).
-        const missing = subjects.filter((s) => !marksBySubject.has(s.subjectId)).length;
+        const missing = subjects.filter((s) => !s.isOptional && !marksBySubject.has(s.subjectId)).length;
 
         return { student, result, missing };
     });

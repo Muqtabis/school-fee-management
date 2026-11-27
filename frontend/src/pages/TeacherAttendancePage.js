@@ -5,13 +5,15 @@ import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import api from "../services/api";
+import HolidayCalendarDropdown from "../components/HolidayCalendarDropdown";
 
 
 const STATUS_OPTIONS = [
     { value: "present", label: "Present" },
     { value: "absent", label: "Absent" },
     { value: "half_day", label: "Half-day" },
-    { value: "leave", label: "Leave" }
+    { value: "leave", label: "Leave" },
+    { value: "holiday", label: "Holiday" }
 ];
 
 // Marking dropdown includes a blank "not marked yet" default. Anyone
@@ -27,7 +29,17 @@ const STATUS_CLASS = {
     present: "att-present",
     absent: "att-absent",
     half_day: "att-half",
-    leave: "att-leave"
+    leave: "att-leave",
+    holiday: "att-holiday"
+};
+
+// Calendar day colours mirror the history status badges.
+const DAY_COLORS = {
+    present: { background: "#DCFCE7", color: "#15803D", border: "1px solid #86EFAC" },
+    absent: { background: "#FEE2E2", color: "#B91C1C", border: "1px solid #FCA5A5" },
+    half_day: { background: "#FEF9C3", color: "#A16207", border: "1px solid #FDE047" },
+    leave: { background: "#E0E7FF", color: "#4338CA", border: "1px solid #C7D2FE" },
+    holiday: { background: "#F1F5F9", color: "#475569", border: "1px solid #CBD5E1" }
 };
 
 function today() {
@@ -39,12 +51,13 @@ function monthStart() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-
 function TeacherAttendancePage() {
     const { user } = useAuth();
     const isHistoryAllowed = user?.role === "admin" || user?.role === "principal";
     // Only admin and principal may lock/unlock a day's attendance.
     const canManageLock = user?.role === "admin" || user?.role === "principal";
+    // Only admin may correct attendance for a past date from History.
+    const isAdmin = user?.role === "admin";
 
     const [activeTab, setActiveTab] = useState("mark");
     const [roleFilter, setRoleFilter] = useState("All");
@@ -52,7 +65,10 @@ function TeacherAttendancePage() {
     const [date, setDate] = useState(today());
     const [rows, setRows] = useState([]);   // [{ teacherId, name, email, role, status, remark, isLocked }]
     const [dateLocked, setDateLocked] = useState(false);
+    const [dateHoliday, setDateHoliday] = useState(null);
     const [lockBusy, setLockBusy] = useState(false);
+    const [holidayBusy, setHolidayBusy] = useState(false);
+    const [calendarOpen, setCalendarOpen] = useState(false);
 
     // Filter logic for roles
     const filteredRows = useMemo(() => {
@@ -71,6 +87,8 @@ function TeacherAttendancePage() {
     const [histStatus, setHistStatus] = useState("");         // "" = all statuses
     const [history, setHistory] = useState([]);
     const [historyLoading, setHistoryLoading] = useState(false);
+    const [summary, setSummary] = useState([]);
+    const [summaryLoading, setSummaryLoading] = useState(false);
 
 
     const loadDate = useCallback(async (forDate) => {
@@ -84,6 +102,7 @@ function TeacherAttendancePage() {
             }));
             setRows(seeded);
             setDateLocked(Boolean(res.data.locked));
+            setDateHoliday(res.data.holiday || null);
         } catch (error) {
             toast(error.response?.data?.message || "Unable to load attendance.");
         } finally {
@@ -140,19 +159,43 @@ function TeacherAttendancePage() {
     };
 
 
+    const markHolidayForDate = async () => {
+        try {
+            setHolidayBusy(true);
+            const res = await api.post("/attendance/holiday", { date });
+            toast(res.data.message || "Date marked as holiday.");
+            await loadDate(date);
+        } catch (error) {
+            toast(error.response?.data?.message || "Unable to mark holiday.");
+        } finally {
+            setHolidayBusy(false);
+        }
+    };
+
     const loadHistory = async () => {
         try {
             setHistoryLoading(true);
+            setSummaryLoading(true);
             const params = { from, to };
             if (histTeacherId) params.teacherId = histTeacherId;
-            const res = await api.get("/attendance/report", { params });
-            setHistory(res.data.records || []);
+            const [report, stats] = await Promise.all([
+                api.get("/attendance/report", { params }),
+                api.get("/attendance/summary", { params: { from, to } })
+            ]);
+            setHistory(report.data.records || []);
+            setSummary(stats.data.summary || []);
         } catch (error) {
             toast(error.response?.data?.message || "Unable to load history.");
         } finally {
             setHistoryLoading(false);
+            setSummaryLoading(false);
         }
     };
+
+    // Load the default range as soon as History is opened.
+    useEffect(() => {
+        if (activeTab === "history" && history.length === 0 && !historyLoading) loadHistory();
+    }, [activeTab]);
 
     const filteredHistory = useMemo(() => {
         let filtered = history;
@@ -170,11 +213,21 @@ function TeacherAttendancePage() {
         return filtered;
     }, [history, histStatus, histRoleFilter]);
 
-    const counts = useMemo(() => {
-        const c = { present: 0, absent: 0, half_day: 0, leave: 0 };
-        filteredHistory.forEach((h) => { if (c[h.status] !== undefined) c[h.status]++; });
-        return c;
-    }, [filteredHistory]);
+    // Same per-staff summary shown on the Teacher Management page.
+    const visibleSummary = useMemo(() => {
+        let list = summary;
+        if (histTeacherId) list = list.filter((s) => s.teacherId === Number(histTeacherId));
+        if (histRoleFilter === "Teachers") list = list.filter((s) => s.role === "teacher" || s.role === "supporting_teacher");
+        if (histRoleFilter === "Staff") list = list.filter((s) => ["accountant", "principal", "manager", "supporting_staff"].includes(s.role));
+        return list;
+    }, [summary, histTeacherId, histRoleFilter]);
+
+    // Admin can correct a past date directly from a history row.
+    const editHistoryDate = (attendanceDate) => {
+        setDate(attendanceDate);
+        setActiveTab("mark");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    };
 
 
     return (
@@ -185,11 +238,12 @@ function TeacherAttendancePage() {
                 <Navbar />
 
                 <div className="page-content">
-                    <div className="page-header">
+                    <div className="page-header" style={{ alignItems: "flex-start" }}>
                         <div>
                             <h2>Staff Attendance</h2>
-                            <p>Mark daily attendance for all staff — teachers, accountant, manager and every other user — and search past records.</p>
+                            <p style={{ maxWidth: 680 }}>Mark daily attendance for all staff — teachers, accountant, manager and every other user — and search past records.</p>
                         </div>
+                        <HolidayCalendarDropdown isAdmin={isAdmin} onChanged={() => loadDate(date)} />
                     </div>
 
                     <div className="exam-tabbar">
@@ -255,6 +309,20 @@ function TeacherAttendancePage() {
                                 </p>
                             )}
 
+                            {dateHoliday?.isHoliday && (
+                                <div style={{ marginTop: "12px", padding: "12px 14px", borderRadius: "8px", background: "#f1f5f9", border: "1px solid #cbd5e1", color: "#475569" }}>
+                                    <strong>Holiday — {dateHoliday.name}</strong> ({dateHoliday.type === "weekly" ? "weekly" : "occasional"}). Attendance is not required for this date.
+                                </div>
+                            )}
+
+                            {isAdmin && !dateHoliday?.isHoliday && !dateLocked && (
+                                <div style={{ marginTop: "12px" }}>
+                                    <button type="button" className="cancel-btn" onClick={markHolidayForDate} disabled={holidayBusy}>
+                                        {holidayBusy ? "Please wait..." : "Mark as Holiday"}
+                                    </button>
+                                </div>
+                            )}
+
                             <div className="table-container" style={{ marginTop: "18px" }}>
                                 <table className="compact-table stack-sm">
                                     <thead>
@@ -284,7 +352,7 @@ function TeacherAttendancePage() {
                                                     <td data-label="Status">
                                                         <select
                                                             value={r.status}
-                                                            disabled={dateLocked}
+                                                            disabled={dateLocked || dateHoliday?.isHoliday}
                                                             onChange={(e) => setField(r.teacherId, "status", e.target.value)}
                                                         >
                                                             {MARK_OPTIONS.map((o) => (
@@ -297,7 +365,7 @@ function TeacherAttendancePage() {
                                                             type="text"
                                                             value={r.remark}
                                                             placeholder="Optional"
-                                                            disabled={dateLocked}
+                                                            disabled={dateLocked || dateHoliday?.isHoliday}
                                                             onChange={(e) => setField(r.teacherId, "remark", e.target.value)}
                                                         />
                                                     </td>
@@ -308,7 +376,7 @@ function TeacherAttendancePage() {
                                 </table>
                             </div>
 
-                            {filteredRows.length > 0 && (
+                            {filteredRows.length > 0 && !dateHoliday?.isHoliday && (
                                 <div style={{ marginTop: "18px", display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
                                     <button
                                         type="button"
@@ -378,24 +446,53 @@ function TeacherAttendancePage() {
                                 </button>
                             </div>
 
-                            {history.length > 0 && (
-                                <div className="attendance-counts" style={{ marginTop: "15px", display: "flex", flexWrap: "wrap", gap: "15px", padding: "15px", backgroundColor: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
-                                    <div style={{ flex: 1, minWidth: "150px" }}>
-                                        <h4 style={{ margin: "0 0 10px 0", color: "#475569" }}>Attendance Summary ({histTeacherId ? teacherOptions.find(t => t.id == histTeacherId)?.name : "All Staff"})</h4>
-                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                                            <div className="att-badge att-present">Present: {counts.present}</div>
-                                            <div className="att-badge att-absent">Absent: {counts.absent}</div>
-                                            <div className="att-badge att-half">Half-day: {counts.half_day}</div>
-                                            <div className="att-badge att-leave">Leave: {counts.leave}</div>
-                                        </div>
-                                    </div>
-                                    <div style={{ flex: 1, minWidth: "200px", borderLeft: "1px solid #cbd5e1", paddingLeft: "15px" }}>
-                                        <h4 style={{ margin: "0 0 10px 0", color: "#475569" }}>Payroll Calc</h4>
-                                        <p style={{ margin: "2px 0", fontSize: "14px" }}>Total Days: {filteredHistory.length}</p>
-                                        <p style={{ margin: "2px 0", fontSize: "14px", fontWeight: "bold" }}>
-                                            Effective Paid Days: {counts.present + (counts.half_day * 0.5)}
-                                        </p>
-                                        <small style={{ color: "#64748b" }}>* Present + 0.5 per half-day</small>
+                            {(history.length > 0 || summary.length > 0) && (
+                                <div className="settings-card" style={{ marginTop: "15px" }}>
+                                    <h4 style={{ margin: "0 0 6px 0", color: "#475569" }}>Staff Attendance Summary</h4>
+                                    <p style={{ color: "#666", marginTop: 0, fontSize: "13px" }}>
+                                        Days present, absent, half-day and on leave for each staff member in the selected range.
+                                    </p>
+                                    <div className="table-container" style={{ marginTop: "14px" }}>
+                                        <table className="attendance-summary-table stack-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>Teacher</th>
+                                                    <th>Email</th>
+                                                    <th>Present</th>
+                                                    <th>Absent</th>
+                                                    <th>Half-day</th>
+                                                    <th>Leave</th>
+                                                    <th>Holidays</th>
+                                                    <th>Days Marked</th>
+                                                    <th>Present %</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {summaryLoading ? (
+                                                    <tr><td colSpan="9" style={{ textAlign: "center" }}>Loading...</td></tr>
+                                                ) : visibleSummary.length === 0 ? (
+                                                    <tr><td colSpan="9" style={{ textAlign: "center" }}>No staff found.</td></tr>
+                                                ) : visibleSummary.map((s) => {
+                                                    const present = Number(s.present) || 0;
+                                                    const half = Number(s.half_day) || 0;
+                                                    const marked = Number(s.markedDays) || 0;
+                                                    const pct = marked > 0 ? Math.round(((present + half * 0.5) / marked) * 100) : null;
+                                                    return (
+                                                        <tr key={s.teacherId}>
+                                                            <td data-label="Teacher">{s.name}</td>
+                                                            <td data-label="Email">{s.email}</td>
+                                                            <td data-label="Present"><span className="att-badge att-present">{present}</span></td>
+                                                            <td data-label="Absent"><span className="att-badge att-absent">{Number(s.absent) || 0}</span></td>
+                                                            <td data-label="Half-day"><span className="att-badge att-half">{half}</span></td>
+                                                            <td data-label="Leave"><span className="att-badge att-leave">{Number(s.leave) || 0}</span></td>
+                                                            <td data-label="Holidays"><span className="att-badge att-holiday">{Number(s.holiday) || 0}</span></td>
+                                                            <td data-label="Days Marked">{marked}</td>
+                                                            <td data-label="Present %">{pct === null ? <span style={{ color: "#888" }}>—</span> : `${pct}%`}</td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                             )}
@@ -408,18 +505,28 @@ function TeacherAttendancePage() {
                                             <th>Staff</th>
                                             <th>Status</th>
                                             <th>Remark</th>
+                                            {isAdmin && <th>Actions</th>}
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {filteredHistory.length === 0 ? (
-                                            <tr><td colSpan="4" style={{ textAlign: "center" }}>No records. Set filters and click Search.</td></tr>
+                                            <tr><td colSpan={isAdmin ? 5 : 4} style={{ textAlign: "center" }}>No records. Set filters and click Search.</td></tr>
                                         ) : (
                                             filteredHistory.map((h) => (
                                                 <tr key={h.id}>
-                                                    <td data-label="Date">{h.attendanceDate}</td>
+                                                    <td data-label="Date">
+                                                        <span className="att-badge" style={DAY_COLORS[h.status] || undefined}>{h.attendanceDate}</span>
+                                                    </td>
                                                     <td data-label="Staff">{h.teacherName}</td>
                                                     <td data-label="Status"><span className={`att-badge ${STATUS_CLASS[h.status] || ""}`}>{STATUS_LABEL[h.status] || h.status}</span></td>
                                                     <td data-label="Remark">{h.remark || "-"}</td>
+                                                    {isAdmin && (
+                                                        <td data-label="Actions">
+                                                            <button type="button" className="edit-btn" onClick={() => editHistoryDate(h.attendanceDate)}>
+                                                                Edit Attendance
+                                                            </button>
+                                                        </td>
+                                                    )}
                                                 </tr>
                                             ))
                                         )}

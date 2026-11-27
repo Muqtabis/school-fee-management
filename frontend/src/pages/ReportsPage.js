@@ -21,7 +21,8 @@ function ReportsPage() {
         totalStudents: 0,
         totalFee: 0,
         classCollection: [],
-        modeCollection: []
+        modeCollection: [],
+        componentBreakdown: []
     });
 
     const money = (value) =>
@@ -31,7 +32,7 @@ function ReportsPage() {
         })}`;
 
     // ---- Customizable summary cards (same UX as the Dashboard) ----
-    const REPORT_CARDS = ["Net Balance", "Total Receipts", "Total Fee Collected", "Remaining Fee Balance", "TC Conceded Fee", "Total Income", "Total Expenses"];
+    const REPORT_CARDS = ["Net Balance", "Total Fees", "Collection", "Fee Collected", "Pending Fees", "Concession", "Collection Mode", "School Receipt", "School Payment"];
     const [hiddenReportCards, setHiddenReportCards] = useState(() => {
         try { return JSON.parse(localStorage.getItem("report-hidden-cards") || "[]"); } catch (e) { return []; }
     });
@@ -113,7 +114,8 @@ function ReportsPage() {
                 totalStudents: Number(summary.totalStudents || students.length || 0),
                 totalFee: Number(summary.totalFee || 0),
                 classCollection: Array.isArray(summary.classCollection) ? summary.classCollection : [],
-                modeCollection: Array.isArray(summary.modeCollection) ? summary.modeCollection : []
+                modeCollection: Array.isArray(summary.modeCollection) ? summary.modeCollection : [],
+                componentBreakdown: Array.isArray(summary.componentBreakdown) ? summary.componentBreakdown : []
             });
 
             setRawExpenses(expenses);
@@ -255,7 +257,7 @@ function ReportsPage() {
         return Object.values(map).sort((a, b) => b.amount - a.amount);
     }, [filteredIncomes]);
 
-    // Net balance includes ALL inflow: fee collections + other incomes, minus expenses.
+    // Net balance includes ALL inflow: fee collections + other receipts, minus payments.
     const netBalance = totalCollection + totalIncomeAmount - totalExpenseAmount;
 
     // Filtered Class Collection Matrix
@@ -387,10 +389,10 @@ function ReportsPage() {
             { "Financial Metric / Parameter": "Total Fee Collections Received (₹)", "Value": totalCollection },
             { "Financial Metric / Parameter": "Total Outstanding Fees Due (₹)", "Value": classTotals.balance },
             { "Financial Metric / Parameter": "----------------------------------------", "Value": "----------------------------------------" },
-            { "Financial Metric / Parameter": "Total Operational Expenses (₹)", "Value": totalExpenseAmount },
+            { "Financial Metric / Parameter": "Total Payments (₹)", "Value": totalExpenseAmount },
             { "Financial Metric / Parameter": "Net Operational Balance (₹)", "Value": netBalance },
             { "Financial Metric / Parameter": "Total Payment Receipts Issued", "Value": filteredPayments.length },
-            { "Financial Metric / Parameter": "Total Expense Vouchers Logged", "Value": filteredExpenses.length }
+            { "Financial Metric / Parameter": "Total Payment Vouchers Logged", "Value": filteredExpenses.length }
         ];
         const wsSummary = XLSX.utils.json_to_sheet(summaryData);
         wsSummary["!cols"] = autoFitColumns(summaryData);
@@ -462,8 +464,8 @@ function ReportsPage() {
         const expenseRegisterData = filteredExpenses.map((e, idx) => ({
             "Sl No": idx + 1,
             "Voucher ID": `EXP-${e.id}`,
-            "Expense Date": e.expenseDate ? new Date(e.expenseDate).toLocaleDateString("en-IN") : "-",
-            "Expense Item / Purpose": e.expenseName || "-",
+            "Payment Date": e.expenseDate ? new Date(e.expenseDate).toLocaleDateString("en-IN") : "-",
+            "Payment Item / Purpose": e.expenseName || "-",
             "Category": e.category || "General",
             "Paid To (Recipient)": e.paidTo || "-",
             "Amount Paid (₹)": Number(e.amount || 0),
@@ -471,7 +473,7 @@ function ReportsPage() {
         }));
         const wsExpenses = XLSX.utils.json_to_sheet(expenseRegisterData);
         wsExpenses["!cols"] = autoFitColumns(expenseRegisterData);
-        XLSX.utils.book_append_sheet(workbook, wsExpenses, "Expense Ledger");
+        XLSX.utils.book_append_sheet(workbook, wsExpenses, "Payment Ledger");
 
         // TAB 5: CLASS RECOVERY MATRIX (per class + overall TOTAL row)
         const classMatrixData = classSummaryMatrix.map((c, idx) => ({
@@ -520,7 +522,7 @@ function ReportsPage() {
         "attendance-students": "Student_Attendance",
         "exams": "Exams_Results",
         "payments": "Payments",
-        "expenses": "Expenses"
+        "expenses": "Payments"
     };
 
     const downloadDataExport = async (key) => {
@@ -597,27 +599,51 @@ function ReportsPage() {
     const incomeHeight = `${(totalIncomeAmount / maximum) * 100}%`;
     const expenseHeight = `${(totalExpenseAmount / maximum) * 100}%`;
 
-    // All summary cards in one place so the Customize panel can show/hide and
-    // reorder them just like the Dashboard. Mode/category cards are dynamic.
+    // Cards: single card per concept. Breakdowns live INSIDE the card
+    // (rows array), so no extra cards are created for modes/categories.
     const reportCardDefs = {
-        "Net Balance": { value: money(netBalance), small: "Fees + incomes − expenses", tone: netBalance < 0 ? "negative-balance" : "positive-balance" },
-        "Total Receipts": { value: filteredPayments.length, small: selectedClass === "all" ? "All active receipts" : `Class ${selectedClass} receipts` },
-        "Total Fee Collected": {
+        "Net Balance": {
+            value: money(netBalance),
+            small: "Fees + receipts − payments",
+            tone: netBalance < 0 ? "negative-balance" : "positive-balance",
+            rows: [
+                { name: "Fee Collected", value: money(totalCollection) },
+                { name: "School Receipt", value: money(totalIncomeAmount) },
+                { name: "School Payment", value: "-" + money(totalExpenseAmount) }
+            ]
+        },
+        "Total Fees": { value: money(classTotals.assessed), small: "Assessed fee demand", tone: "" },
+        "Collection": { value: filteredPayments.length, small: selectedClass === "all" ? "All active receipts" : `Class ${selectedClass} receipts` },
+        "Fee Collected": {
             value: money(totalCollection),
             small: "Net cash/digital inflow",
             detail: `Current ${money(collectionSplit.continuing)} · Exited ${money(collectionSplit.exited)} · TC counter ${money(collectionSplit.tcCounter)}`
         },
-        "Remaining Fee Balance": { value: money(classTotals.balance), small: selectedClass === "all" ? "Outstanding across all classes" : `Outstanding for Class ${selectedClass}`, tone: classTotals.balance > 0 ? "negative-balance" : "positive-balance" },
-        "TC Conceded Fee": { value: money(tcConcededFee), small: "Amount conceded when TCs were issued" },
-        "Total Income": { value: money(totalIncomeAmount), small: `${filteredIncomes.length} income voucher(s)` },
-        "Total Expenses": { value: money(totalExpenseAmount), small: `${filteredExpenses.length} expense voucher(s)` }
+        "Pending Fees": { value: money(classTotals.balance), small: selectedClass === "all" ? "Outstanding across all classes" : `Outstanding for Class ${selectedClass}`, tone: classTotals.balance > 0 ? "negative-balance" : "positive-balance" },
+        "Concession": {
+            value: money(tcConcededFee),
+            small: "Concessions granted",
+            rows: [
+                { name: "TC Written Off", value: money(tcConcededFee) },
+                { name: "Previous Dues Conceded", value: money(0) }
+            ]
+        },
+        "Collection Mode": {
+            value: money(modeSummary.reduce((s, m) => s + Number(m.amount || 0), 0)),
+            small: "Fee collected through each mode",
+            rows: modeSummary.map((m) => ({ name: m.mode, value: money(m.amount) }))
+        },
+        "School Receipt": {
+            value: money(totalIncomeAmount),
+            small: `${filteredIncomes.length} receipt voucher(s)`,
+            rows: incomeCategorySummary.map((c) => ({ name: c.category, value: money(c.amount) }))
+        },
+        "School Payment": {
+            value: money(totalExpenseAmount),
+            small: `${filteredExpenses.length} payment voucher(s)`,
+            rows: expenseCategorySummary.map((c) => ({ name: c.category, value: money(c.amount) }))
+        }
     };
-    modeSummary.forEach((m) => {
-        reportCardDefs[`${m.mode} Collection`] = { value: money(m.amount), small: `${m.percentage}% of total fee collected` };
-    });
-    incomeCategorySummary.forEach((c) => {
-        reportCardDefs[`${c.category} Income`] = { value: money(c.amount), small: `${c.count} voucher(s)` };
-    });
     const activeCardNames = [...reportCardOrder];
     Object.keys(reportCardDefs).forEach((name) => { if (!activeCardNames.includes(name)) activeCardNames.push(name); });
 
@@ -691,7 +717,7 @@ function ReportsPage() {
                                 <option value="attendance-students">🧒 Student Attendance — All Records</option>
                                 <option value="exams">📝 Exams &amp; Results — All Data</option>
                                 <option value="payments">💰 Payments — All Fields</option>
-                                <option value="expenses">💸 Expenses — All Fields</option>
+                                <option value="expenses">💸 Payments — All Fields</option>
                             </select>
 
                             {/* Monthly Export Button */}
@@ -777,10 +803,66 @@ function ReportsPage() {
                         </div>
                     )}
 
+                    {/* Three EXISTING cards, promoted to big component-detail cards
+                        (no duplicates — the same names are hidden from the small grid). */}
                     <h3 className="section-title">Fee Inflow &amp; Balance Summary</h3>
+                    <div className="report-big-cards">
+                        {["Total Fees", "Fee Collected", "Pending Fees"]
+                            .filter((name) => reportCardVisible(name) && reportCardDefs[name])
+                            .map((name) => {
+                                const card = reportCardDefs[name];
+                                const key = name === "Total Fees" ? "assessed" : name === "Fee Collected" ? "collected" : "pending";
+                                return (
+                                    <div className="settings-card report-big-card" key={name}>
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10, borderBottom: "2px solid #17365d", paddingBottom: 8 }}>
+                                            <strong style={{ fontSize: 15, color: "#17365d" }}>{name}</strong>
+                                            <strong className={card.tone || ""} style={{ fontSize: 22 }}>{loading ? "..." : card.value}</strong>
+                                        </div>
+                                        {reportData.componentBreakdown.filter((c) => Math.abs(Number(c[key] || 0)) > 0.001).length === 0 ? (
+                                            <p style={{ color: "#64748B", fontSize: 12, margin: 0 }}>No fee components recorded.</p>
+                                        ) : reportData.componentBreakdown
+                                            .filter((c) => Math.abs(Number(c[key] || 0)) > 0.001)
+                                            .map((c) => (
+                                                <div key={c.key || c.name} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderTop: "1px solid #E2E8F0", fontSize: 12 }}>
+                                                    <span style={{ color: "#475569" }}>{c.name}</span>
+                                                    <strong style={{ color: Number(c[key]) < 0 ? "#15803D" : "#0F172A" }}>{money(c[key])}</strong>
+                                                </div>
+                                            ))}
+                                    </div>
+                                );
+                            })}
+                    </div>
+
+                    {/* Cards with breakdowns (Collection Mode / Receipt / Payment) */}
+                    <div className="report-big-cards">
+                        {activeCardNames
+                            .filter((name) => reportCardVisible(name) && reportCardDefs[name] && Array.isArray(reportCardDefs[name].rows))
+                            .map((name) => {
+                                const d = reportCardDefs[name];
+                                return (
+                                    <div className="settings-card report-big-card" key={name}>
+                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10, borderBottom: "2px solid #17365d", paddingBottom: 8 }}>
+                                                <strong style={{ fontSize: 14, color: "#17365d" }}>{name}</strong>
+                                                <strong className={d.tone || ""} style={{ fontSize: 22 }}>{loading ? "..." : d.value}</strong>
+                                            </div>
+                                            <small style={{ display: "block", color: "#64748B", fontSize: 11, marginBottom: 8 }}>{d.small}</small>
+                                            {d.rows.length === 0 ? (
+                                                <p style={{ color: "#64748B", fontSize: 12, margin: 0 }}>No records available.</p>
+                                            ) : d.rows.map((r) => (
+                                                <div key={r.name} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderTop: "1px solid #E2E8F0", fontSize: 12 }}>
+                                                    <span style={{ color: "#475569" }}>{r.name}</span>
+                                                    <strong style={{ color: "#0F172A" }}>{r.value}</strong>
+                                                </div>
+                                            ))}
+                                    </div>
+                                );
+                            })}
+                    </div>
+
                     <div className="report-cards">
                         {activeCardNames
-                            .filter((name) => reportCardVisible(name) && reportCardDefs[name])
+                            .filter((name) => !["Total Fees", "Fee Collected", "Pending Fees"].includes(name))
+                            .filter((name) => reportCardVisible(name) && reportCardDefs[name] && !Array.isArray(reportCardDefs[name].rows))
                             .map((name) => {
                                 const d = reportCardDefs[name];
                                 return (
@@ -831,7 +913,7 @@ function ReportsPage() {
                                             style={{ height: incomeHeight }}
                                         />
                                     </div>
-                                    <span>Incomes</span>
+                                    <span>Receipt</span>
                                 </div>
 
                                 <div className="chart-column">
@@ -841,7 +923,7 @@ function ReportsPage() {
                                             style={{ height: expenseHeight }}
                                         />
                                     </div>
-                                    <span>Expenses</span>
+                                    <span>Payment</span>
                                 </div>
                             </div>
 
@@ -852,11 +934,11 @@ function ReportsPage() {
                                 </div>
                                 <div>
                                     <span className="legend-dot income-dot" />
-                                    <span>Incomes</span>
+                                    <span>Receipt</span>
                                 </div>
                                 <div>
                                     <span className="legend-dot expense-dot" />
-                                    <span>Expenses</span>
+                                    <span>Payment</span>
                                 </div>
                             </div>
                         </div>
@@ -951,12 +1033,12 @@ function ReportsPage() {
 
                         <div className="report-panel">
                             <div className="report-panel-header">
-                                <h3>Operational Expenses by Category</h3>
+                                <h3>Payments by Category</h3>
                                 <p>{periodName}</p>
                             </div>
 
                             {expenseCategorySummary.length === 0 ? (
-                                <div className="report-empty">No expense records available</div>
+                                <div className="report-empty">No payment records available</div>
                             ) : (
                                 <div className="report-list">
                                     {expenseCategorySummary.map((item) => (

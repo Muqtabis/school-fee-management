@@ -52,7 +52,6 @@ function Sidebar() {
             onClick={closeSidebar}
             className={({ isActive }) => (isActive ? "menu-item active" : "menu-item")}
         >
-            <span className="menu-icon">{item.icon}</span>
             <span>{item.name || item.label}</span>
         </NavLink>
     );
@@ -82,8 +81,8 @@ function Sidebar() {
                         src="/logo.png"
                         alt="School Logo"
                         style={{
-                            width: "45px",
-                            height: "45px",
+                            width: "65px",
+                            height: "65px",
                             objectFit: "contain",
                             margin: "0 auto 8px",
                             display: "block"
