@@ -19,24 +19,36 @@ function Sidebar() {
     // =====================================================
     const isAdmin = user?.role === "admin";
 
-    // Pages every logged-in user gets without a grant:
-    // Settings (profile), My Attendance (own record, read-only)
-    // and My Schedule (own class timings, read-only).
-    const DEFAULT_PAGES = ["settings", "my_attendance", "my_schedule"];
+    // Pages every non-admin user gets without a grant:
+    // Settings, My Attendance, My Schedule and My Profile.
+    const DEFAULT_PAGES = ["settings", "my_attendance", "my_schedule", "my_profile"];
 
     const menuItems = APP_PAGES.filter(
-        (page) =>
-            isAdmin ||
-            DEFAULT_PAGES.includes(page.key) ||
-            allowedPages.includes(page.key)
+        (page) => isAdmin || DEFAULT_PAGES.includes(page.key) || allowedPages.includes(page.key)
     );
-    // Ungrouped items (Dashboard) pin to the top; the rest fall into
-    // collapsible sections. The section holding the current route starts open.
-    // ADMIN ONLY: other users get a flat, always-open list instead of
-    // stacked collapsible sections.
-    const topItems = menuItems.filter((i) => !i.group);
+
+    // My Profile pins to the top: first for staff, second (after Dashboard)
+    // for admin. It is never shown inside a collapsible group.
+    const pinnedKeys = ["dashboard", "my_profile"];
+    const orderMenu = (list) => {
+        const dashboard = list.find((i) => i.key === "dashboard");
+        const profile = list.find((i) => i.key === "my_profile");
+        const rest = list.filter((i) => i !== dashboard && i !== profile);
+        return (isAdmin ? [dashboard, profile] : [profile, dashboard])
+            .filter(Boolean)
+            .concat(rest);
+    };
+    const orderedItems = orderMenu(menuItems);
+
+    // The pinned items plus any other ungrouped pages sit above the groups.
+    // The section holding the current route starts open. Admin gets the
+    // collapsible groups; other users get a flat, always-open list.
+    const topItems = orderedItems.filter((i) => !i.group || pinnedKeys.includes(i.key));
     const groups = PAGE_GROUPS
-        .map((name) => ({ name, items: menuItems.filter((i) => i.group === name) }))
+        .map((name) => ({
+            name,
+            items: orderedItems.filter((i) => i.group === name && !pinnedKeys.includes(i.key))
+        }))
         .filter((g) => g.items.length);
     const activeItem = menuItems.find((i) => location.pathname.startsWith(i.path));
     const activeGroup = activeItem ? activeItem.group : null;
@@ -118,7 +130,7 @@ function Sidebar() {
                     ) : (
                         // Non-admin: flat list, every granted page visible
                         // directly (no collapsible stacked sections).
-                        menuItems.map(renderLink)
+                        orderedItems.map(renderLink)
                     )}
                 </nav>
 

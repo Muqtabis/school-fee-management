@@ -1147,6 +1147,14 @@ async function migrateDatabase() {
     // PAGE ACCESS LOCK
     // 0 = admin can edit this user's page access; 1 = frozen until unlocked.
     await addColumnIfMissing("users", "accessLocked", "INTEGER DEFAULT 0");
+    // Staff profile details (admin-managed like the student profile).
+    await addColumnIfMissing("users", "phone", "TEXT");
+    await addColumnIfMissing("users", "parentName", "TEXT");
+    await addColumnIfMissing("users", "maritalStatus", "TEXT DEFAULT 'single'");
+    await addColumnIfMissing("users", "spouseName", "TEXT");
+    await addColumnIfMissing("users", "dateOfJoining", "TEXT");
+    await addColumnIfMissing("users", "address", "TEXT");
+    await addColumnIfMissing("users", "designation", "TEXT");
 
     // TEACHER ASSIGNMENT ROLE
     // 'subject_teacher' (default) can enter marks for the class; 'class_teacher'

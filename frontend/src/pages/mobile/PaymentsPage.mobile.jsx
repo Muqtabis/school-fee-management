@@ -59,8 +59,8 @@ export default function PaymentsPageMobile() {
                 paymentDate: form.paymentDate,
                 remarks: form.remarks
             });
-            toast("Payment recorded.");
-            setSheet(false);
+            toast("Payment recorded. The form stays open — collect another or close it.");
+            setForm((f) => ({ ...f, amount: "" }));
             load();
         } catch (err) { toast(err.response?.data?.message || "Unable to save payment."); }
     };

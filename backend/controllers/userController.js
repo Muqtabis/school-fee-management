@@ -23,6 +23,76 @@ const roleLabelFor = (role) =>
 // ADMIN ONLY
 // =====================================================
 
+// =====================================================
+// MY PROFILE (any authenticated user — declared before the
+// admin gate so every role can see their own details)
+// =====================================================
+
+exports.getMyProfile = (req, res) => {
+    db.get(
+        `SELECT id, name, email, role, phone, parentName, maritalStatus, spouseName,
+                dateOfJoining, address, designation, createdAt
+         FROM users WHERE id = ?`,
+        [req.user.id],
+        (err, user) => {
+            if (err) return res.status(500).json({ success: false, message: "Database error." });
+            if (!user) return res.status(404).json({ success: false, message: "Profile not found." });
+            res.json({ success: true, user });
+        }
+    );
+};
+
+// =====================================================
+// STAFF PROFILE (admin only — route is behind requireAdmin)
+// =====================================================
+
+exports.getUserProfile = (req, res) => {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ success: false, message: "Invalid user ID." });
+    db.get(
+        `SELECT id, name, email, role, phone, parentName, maritalStatus, spouseName,
+                dateOfJoining, address, designation, createdAt
+         FROM users WHERE id = ?`,
+        [id],
+        (err, user) => {
+            if (err) return res.status(500).json({ success: false, message: "Database error." });
+            if (!user) return res.status(404).json({ success: false, message: "User not found." });
+            res.json({ success: true, user });
+        }
+    );
+};
+
+exports.updateUserProfile = (req, res) => {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ success: false, message: "Invalid user ID." });
+    const b = req.body || {};
+    const name = String(b.name || "").trim();
+    const email = String(b.email || "").trim().toLowerCase();
+    if (!name) return res.status(400).json({ success: false, message: "Name is required." });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ success: false, message: "Enter a valid email." });
+    const maritalStatus = ["single", "married"].includes(b.maritalStatus) ? b.maritalStatus : "single";
+    const spouseName = maritalStatus === "married" ? String(b.spouseName || "").trim() : "";
+    const clean = (v) => String(v == null ? "" : v).trim() || null;
+    db.run(
+        `UPDATE users SET name = ?, email = ?, phone = ?, parentName = ?, maritalStatus = ?,
+                spouseName = ?, dateOfJoining = ?, address = ?, designation = ?
+         WHERE id = ?`,
+        [name, email, clean(b.phone), clean(b.parentName), maritalStatus,
+         clean(spouseName), clean(b.dateOfJoining), clean(b.address), clean(b.designation), id],
+        function (err) {
+            if (err) {
+                if (String(err.message).includes("UNIQUE")) {
+                    return res.status(409).json({ success: false, message: "That email is already in use." });
+                }
+                return res.status(500).json({ success: false, message: "Unable to update profile." });
+            }
+            logAudit({ userId: req.user.id, action: "USER_PROFILE_UPDATED", entityType: "user", entityId: id,
+                details: { name, email } }).catch(() => {});
+            res.json({ success: true, message: "Profile updated." });
+        }
+    );
+};
+
 exports.getUsers = (
     req,
     res
@@ -1264,7 +1334,7 @@ exports.getMyPages = async (req, res) => {
         if (req.user.role === "admin") {
             return res.json({
                 success: true,
-                pageKeys: [...PAGES.map((page) => page.key), "my_attendance"]
+                pageKeys: [...PAGES.map((page) => page.key), "my_attendance", "my_profile"]
             });
         }
 
@@ -1296,6 +1366,12 @@ exports.getMyPages = async (req, res) => {
         // kept out of the assignable registry just like settings.
         if (req.user.role !== "admin" && !pageKeys.includes("notices")) {
             pageKeys.push("notices");
+        }
+
+        // My Profile is mandatory for every user — shows their details,
+        // role and live page permissions.
+        if (!pageKeys.includes("my_profile")) {
+            pageKeys.push("my_profile");
         }
 
         res.json({

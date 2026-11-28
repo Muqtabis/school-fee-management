@@ -91,90 +91,16 @@ export default function LoginPage() {
             );
 
 
-            // =================================================
-            // ADMIN
-            // =================================================
-
-            if (
-                user.role === "admin"
-            ) {
-
-                navigate(
-                    "/dashboard",
-                    {
-                        replace: true
-                    }
-                );
-
-                return;
-
+            // Admin keeps the dashboard. Every other login lands on
+            // My Profile, which shows their details, role and live
+            // page permissions.
+            if (user.role === "admin") {
+                navigate("/dashboard", { replace: true });
+            } else {
+                navigate("/my-profile", { replace: true });
             }
 
-
-            // =================================================
-            // ACCOUNTANT (formerly "receptionist")
-            // =================================================
-
-            if (
-                user.role === "accountant"
-            ) {
-
-                navigate(
-                    "/fees",
-                    {
-                        replace: true
-                    }
-                );
-
-                return;
-
-            }
-
-
-            // =================================================
-            // PRINCIPAL / MANAGER
-            // Land on Dashboard; ProtectedRoute falls back to
-            // the first page admin actually granted them.
-            // =================================================
-
-            if (
-                user.role === "principal" || user.role === "manager"
-            ) {
-
-                navigate(
-                    "/dashboard",
-                    {
-                        replace: true
-                    }
-                );
-
-                return;
-
-            }
-
-
-            // =================================================
-            // TEACHER
-            // Land on Marks Entry; ProtectedRoute falls back to
-            // the first page the teacher is actually allowed
-            // (every teacher always has "My Attendance").
-            // =================================================
-
-            if (
-                user.role === "teacher" || user.role === "supporting_teacher"
-            ) {
-
-                navigate(
-                    "/marks-entry",
-                    {
-                        replace: true
-                    }
-                );
-
-                return;
-
-            }
-
+            return;
 
             // =================================================
             // INVALID ROLE
@@ -370,7 +296,7 @@ export default function LoginPage() {
                     }
                 >
 
-                    {/* EMAIL */}
+                    {/* USER ID */}
 
                     <label
                         style={{
@@ -388,19 +314,19 @@ export default function LoginPage() {
                         }}
                     >
 
-                        Email
+                        User ID
 
                     </label>
 
 
                     <input
 
-                        type="email"
+                        type="text"
 
                         name="email"
 
                         placeholder=
-                            "Enter your email"
+                            "Enter your user ID"
 
                         value={
                             form.email

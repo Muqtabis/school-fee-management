@@ -100,12 +100,6 @@ router.get(
 );
 
 router.post(
-    "/holidays",
-    requireRole("admin"),
-    attendanceController.createHoliday
-);
-
-router.post(
     "/holidays/bulk",
     requireRole("admin"),
     attendanceController.createHolidays

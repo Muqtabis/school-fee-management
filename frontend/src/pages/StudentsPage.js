@@ -767,6 +767,89 @@ export function StudentDetailModal({ student, initialTab = "overview", onClose, 
     const computedPaid = Number(history?.totalPaid || 0);
     const computedBalance = Math.max(0, computedTotalFee - computedPaid);
 
+    // ---- Fee statement: view / download from the loaded fee account ----
+    const buildStatementHtml = () => {
+        const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+        const logo = `${window.location.origin}/logo.png`;
+        const rows = (history?.items || []).map((item) => `
+            <tr><td>${esc(item.componentName)}</td><td style="text-align:right">${money(item.amount)}</td></tr>`).join("");
+        const payments = (history?.payments || []).map((p) => `
+            <tr><td>${p.paymentDate ? new Date(p.paymentDate).toLocaleDateString("en-IN") : "-"}</td>
+                <td>${esc(p.paymentMode || "Cash")}</td>
+                <td>${p.status === "reversed" ? "Reversed" : "Completed"}</td>
+                <td style="text-align:right">${money(p.amount)}</td></tr>`).join("");
+        return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<title>Fee Statement — ${esc(student.studentName)}</title>
+<style>
+ @page { size: A4; margin: 16mm; }
+ body { font-family: Arial, sans-serif; color: #1F2937; margin: 0; padding: 28px; max-width: 820px; margin: 0 auto; }
+ .head { display:flex; align-items:center; gap:18px; border-bottom:2px solid #7A1235; padding-bottom:14px; margin-bottom:18px; }
+ .head img { width:72px; height:auto; }
+ .school { font-size:23px; font-weight:700; color:#17365d; font-family:Georgia,serif; }
+ .sub { font-size:12px; color:#6B7280; margin-top:3px; }
+ h2 { text-align:center; font-family:Georgia,serif; color:#7A1235; font-size:21px; margin:8px 0 18px; }
+ .meta { display:grid; grid-template-columns:1fr 1fr; gap:6px 24px; font-size:13px; margin-bottom:20px; }
+ .meta b { color:#374151; }
+ .cards { display:flex; gap:12px; margin-bottom:20px; }
+ .card { flex:1; border:1px solid #E2E8F0; border-radius:8px; padding:12px; }
+ .card span { display:block; font-size:11px; color:#6B7280; text-transform:uppercase; font-weight:700; }
+ .card strong { display:block; font-size:18px; margin-top:4px; }
+ table { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:20px; }
+ th,td { border:1px solid #E2E8F0; padding:8px 10px; text-align:left; }
+ th { background:#F1F5F9; font-size:11px; text-transform:uppercase; color:#475569; }
+ .total { font-weight:700; background:#F8FAFC; }
+ .foot { margin-top:28px; border-top:1px solid #E2E8F0; padding-top:10px; font-size:11px; color:#6B7280; display:flex; justify-content:space-between; }
+ .toolbar { text-align:right; margin-bottom:12px; }
+ .toolbar button { padding:8px 14px; background:#0F172A; color:#fff; border:0; border-radius:6px; cursor:pointer; font-size:12px; }
+ @media print { .toolbar { display:none; } body { padding:0; } }
+</style></head><body>
+<div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button></div>
+<div class="head"><img src="${logo}" alt="logo" /><div><div class="school">THE AGE SCHOOL</div><div class="sub">Institute of Pre, Primary and Secondary Education · BASAVAKALYAN</div></div></div>
+<h2>Fee Statement</h2>
+<div class="meta">
+ <div><b>Student:</b> ${esc(student.studentName)}</div><div><b>Class:</b> ${esc(student.className || "-")}</div>
+ <div><b>Admission No:</b> ${esc(student.admissionNumber || "-")}</div>
+ <div><b>Academic Year:</b> ${esc(history?.academicYear?.name || "-")}</div>
+ <div><b>Generated:</b> ${new Date().toLocaleDateString("en-IN")}</div><div><b>Account:</b> ${computedBalance > 0 ? "Balance Due" : "Cleared"}</div>
+</div>
+<div class="cards">
+ <div class="card"><span>Total Demand</span><strong>${money(computedTotalFee)}</strong></div>
+ <div class="card"><span>Total Paid</span><strong>${money(computedPaid)}</strong></div>
+ <div class="card"><span>Balance Due</span><strong>${money(computedBalance)}</strong></div>
+</div>
+<h3 style="font-size:14px;color:#475569">Assessed Fee Structure</h3>
+<table><thead><tr><th>Component</th><th style="text-align:right">Amount</th></tr></thead><tbody>
+ ${prevDues > 0 ? `<tr><td>Previous Dues (carry forward)</td><td style="text-align:right">${money(prevDues)}</td></tr>` : ""}
+ ${rows || '<tr><td colspan="2">No fee components recorded.</td></tr>'}
+ ${concession > 0 ? `<tr><td>Fee Concession (${esc(student.concessionReason || "Discount")})</td><td style="text-align:right">- ${money(concession)}</td></tr>` : ""}
+ <tr class="total"><td>Net Demand</td><td style="text-align:right">${money(computedTotalFee)}</td></tr>
+</tbody></table>
+<h3 style="font-size:14px;color:#475569">Transaction History</h3>
+<table><thead><tr><th>Date</th><th>Mode</th><th>Status</th><th style="text-align:right">Amount</th></tr></thead><tbody>
+ ${payments || '<tr><td colspan="4">No payments recorded.</td></tr>'}
+ <tr class="total"><td colspan="3">Total Paid</td><td style="text-align:right">${money(computedPaid)}</td></tr>
+</tbody></table>
+<div class="foot"><span>The Age School · Fee Account Statement</span><span>Generated ${new Date().toLocaleString("en-IN")}</span></div>
+</body></html>`;
+    };
+
+    const viewStatement = () => {
+        const w = window.open("", "_blank", "width=900,height=900");
+        if (!w) return toast("Allow popups to view the fee statement.");
+        w.document.open(); w.document.write(buildStatementHtml()); w.document.close();
+        w.focus();
+    };
+
+    const downloadStatement = () => {
+        const blob = new Blob([buildStatementHtml()], { type: "text/html;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `FeeStatement_${String(student.studentName || "student").replace(/\s+/g, "_")}_${String(history?.academicYear?.name || "").replace(/\s+/g, "_")}.html`;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+    };
+
     const TabButton = ({ id, children }) => (
         <button
             onClick={() => setTab(id)}
@@ -874,7 +957,11 @@ export function StudentDetailModal({ student, initialTab = "overview", onClose, 
                             <>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "#F8FAFC", padding: "10px 14px", borderRadius: "8px", border: "1px solid #E2E8F0", marginBottom: "16px" }}>
                                     <div><span style={{ fontSize: "11px", fontWeight: "600", color: "#64748B", textTransform: "uppercase" }}>Academic Session</span><div style={{ fontSize: "14px", fontWeight: "700", color: "#0F172A" }}>{history.academicYear?.name || "-"}</div></div>
-                                    <span style={{ backgroundColor: "#DCFCE7", color: "#15803D", fontSize: "11px", fontWeight: "700", padding: "3px 10px", borderRadius: "20px" }}>● Active Account</span>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                                        <span style={{ backgroundColor: "#DCFCE7", color: "#15803D", fontSize: "11px", fontWeight: "700", padding: "3px 10px", borderRadius: "20px" }}>● Active Account</span>
+                                        <button type="button" className="receipt-btn" onClick={viewStatement}>View Statement</button>
+                                        <button type="button" className="receipt-btn" onClick={downloadStatement}>⬇ Download</button>
+                                    </div>
                                 </div>
 
                                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginBottom: "20px" }}>

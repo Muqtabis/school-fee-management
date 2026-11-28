@@ -224,24 +224,4 @@ router.put(
 );
 
 
-// =====================================================
-// UPDATE DISABLED
-// =====================================================
-
-router.put(
-    "/:id",
-    paymentController.updatePayment
-);
-
-
-// =====================================================
-// DELETE DISABLED
-// =====================================================
-
-router.delete(
-    "/:id",
-    paymentController.deletePayment
-);
-
-
 module.exports = router;

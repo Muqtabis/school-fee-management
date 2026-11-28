@@ -20,6 +20,7 @@ import TeacherManagementPage from "./pages/TeacherManagementPage";
 import StudentAttendancePage from "./pages/StudentAttendancePage";
 import ExamResultsPage from "./pages/ExamResultsPage";
 import TestsPage from "./pages/TestsPage";
+import MyProfilePage from "./pages/MyProfilePage";
 import ResultsOverviewPage from "./pages/ResultsOverviewPage";
 import AttendanceOverviewPage from "./pages/AttendanceOverviewPage";
 import MarksEntryPage from "./pages/MarksEntryPage";
@@ -72,6 +73,8 @@ function App() {
                     <Route path="/exam-results" element={<ProtectedRoute pageKey="exam_results"><ExamResultsPage /></ProtectedRoute>} />
 
                     <Route path="/tests" element={<ProtectedRoute pageKey="tests"><TestsPage /></ProtectedRoute>} />
+
+                    <Route path="/my-profile" element={<ProtectedRoute><MyProfilePage /></ProtectedRoute>} />
                     <Route path="/results-overview" element={<ProtectedRoute pageKey="results_overview"><ResultsOverviewPage /></ProtectedRoute>} />
                     <Route path="/attendance-overview" element={<ProtectedRoute pageKey="attendance_overview"><AttendanceOverviewPage /></ProtectedRoute>} />
                     <Route path="/marks-entry" element={<ProtectedRoute pageKey="marks_entry"><MarksEntryPage /></ProtectedRoute>} />

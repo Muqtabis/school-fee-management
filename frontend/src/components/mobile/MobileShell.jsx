@@ -24,10 +24,20 @@ export default function MobileShell({ children }) {
     const navigate = useNavigate();
     const location = useLocation();
     const [menuOpen, setMenuOpen] = useState(false);
+    const [theme, setTheme] = useState(
+        () => document.documentElement.getAttribute("data-theme") || "light"
+    );
+    const toggleTheme = () => {
+        const next = theme === "dark" ? "light" : "dark";
+        try { localStorage.setItem("theme-preference", next); } catch (e) { /* session only */ }
+        document.documentElement.setAttribute("data-theme", next);
+        setTheme(next);
+    };
     const [pendingCount, setPendingCount] = useState(0);
 
     // Pending reverse requests badge for approvers (never touches attendance).
     const isApprover = user?.role === "admin" || user?.role === "principal";
+    const isAdmin = user?.role === "admin";
     useEffect(() => {
         if (!isApprover) return;
         const load = () => api.get("/payments/reverse-requests")
@@ -69,6 +79,13 @@ export default function MobileShell({ children }) {
                     >⌕</button>
                     <button
                         type="button"
+                        className="m-search-btn"
+                        onClick={toggleTheme}
+                        aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                        title={theme === "dark" ? "Light mode" : "Dark mode"}
+                    >{theme === "dark" ? "☀" : "☾"}</button>
+                    <button
+                        type="button"
                         className="m-avatar"
                         onClick={() => setMenuOpen(true)}
                         aria-label="Account menu"
@@ -93,11 +110,21 @@ export default function MobileShell({ children }) {
                             <button type="button" onClick={() => setMenuOpen(false)} aria-label="Close menu">✕</button>
                         </div>
                         <div className="m-menu-scroll">
-                            {APP_PAGES.filter((p) => !p.group).map((p) => (
+                            {(() => {
+                                // Same pin order as the desktop sidebar: My Profile
+                                // first for staff, second after Dashboard for admin.
+                                const pinned = ["dashboard", "my_profile"];
+                                const dashboard = allowed.find((p) => p.key === "dashboard");
+                                const profile = allowed.find((p) => p.key === "my_profile");
+                                const rest = allowed.filter((p) => !pinned.includes(p.key));
+                                const ordered = (isAdmin ? [dashboard, profile] : [profile, dashboard])
+                                    .filter(Boolean).concat(rest);
+                                return ordered.filter((p) => !p.group || pinned.includes(p.key));
+                            })().map((p) => (
                                 <MenuLink key={p.key} page={p} allowed={allowed} go={(to) => { setMenuOpen(false); navigate(to); }} />
                             ))}
                             {PAGE_GROUPS.map((group) => {
-                                const items = allowed.filter((p) => p.group === group);
+                                const items = allowed.filter((p) => p.group === group && !["dashboard", "my_profile"].includes(p.key));
                                 if (!items.length) return null;
                                 return (
                                     <div key={group} className="m-menu-group">

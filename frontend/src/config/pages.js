@@ -47,5 +47,6 @@ export const APP_PAGES = [
     { key: "timetable", label: "Timetable", path: "/timetable", icon: "🗓️", group: "Staff and Administration", description: "Set the weekly class timetable: periods, times, subjects, and teachers.", actions: ["Set Timetable","Edit Periods","Assign Subject Teacher"] },
     { key: "users", label: "Users", path: "/users", icon: "👥", group: "Staff and Administration", description: "Manage staff accounts, roles, and page access permissions.", actions: ["Add User","Edit User","Page Access","Reset Password","Lock Access"] },
     { key: "notifications", label: "Notifications", path: "/notifications", icon: "🔔", group: "Staff and Administration", description: "Send announcements, reminders, and alerts to staff and parents.", actions: ["Send Notification","Notification History"] },
-    { key: "settings", label: "Settings", path: "/settings", icon: "⚙️", group: "Staff and Administration", description: "Update your profile information and change your password.", actions: ["Change Password","Edit Profile"] }
+    { key: "settings", label: "Settings", path: "/settings", icon: "⚙️", group: "Staff and Administration", description: "Update your profile information and change your password.", actions: ["Change Password","Edit Profile"] },
+    { key: "my_profile", label: "My Profile", path: "/my-profile", icon: "👤", group: "Staff and Administration", description: "Your details, role and everything your login can access (default for every user)." }
 ];

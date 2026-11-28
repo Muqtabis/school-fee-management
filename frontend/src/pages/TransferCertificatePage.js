@@ -6,11 +6,15 @@ import api from "../services/api";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import { SkeletonTable } from "../components/Skeleton";
+import OverlayDialog from "../components/OverlayDialog";
+import { useAuth } from "../context/AuthContext";
 import { printTcReceipt } from "../utils/receipt";
 
 const money = (v) => `₹${Number(v || 0).toLocaleString("en-IN")}`;
 
 export default function TransferCertificatePage() {
+    const { user } = useAuth();
+    const canEditTc = user?.role === "admin" || user?.role === "principal";
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selected, setSelected] = useState("");
@@ -32,6 +36,9 @@ export default function TransferCertificatePage() {
     const [yearFilter, setYearFilter] = useState("All");
     const [overall, setOverall] = useState(null);
     const [issuing, setIssuing] = useState(false);
+    const [editingTc, setEditingTc] = useState(null);
+    const [editForm, setEditForm] = useState({ reason: "", leavingDate: "", conduct: "Good", amountCollected: "", paymentMode: "Cash" });
+    const [savingEdit, setSavingEdit] = useState(false);
 
     // Overall balance (includes previous year), TC-specific — other pages untouched.
     useEffect(() => {
@@ -175,6 +182,30 @@ export default function TransferCertificatePage() {
             document.body.appendChild(a); a.click(); a.remove();
             window.URL.revokeObjectURL(url);
         } catch (e) { toast(e.response?.data?.message || "Unable to download TC."); }
+    };
+
+    // Edit an issued TC using the same certificate-details fields as Issue TC.
+    const openEdit = (rec) => {
+        setEditForm({
+            reason: rec.reason || "", leavingDate: rec.leavingDate || "", conduct: rec.conduct || "Good",
+            amountCollected: rec.amountCollected ?? "", paymentMode: "Cash"
+        });
+        setEditingTc(rec);
+    };
+
+    const saveEdit = async (e) => {
+        e.preventDefault();
+        try {
+            setSavingEdit(true);
+            const r = await api.put(`/documents/records/${editingTc.id}`, editForm);
+            toast(r.data?.message || "TC details updated.");
+            setEditingTc(null);
+            await loadTCs(yearFilter);
+        } catch (err) {
+            toast(err.response?.data?.message || "Unable to update TC.");
+        } finally {
+            setSavingEdit(false);
+        }
     };
 
     // Shared details block: shown inline after the selected row on mobile,
@@ -338,6 +369,7 @@ export default function TransferCertificatePage() {
                                                     ) : <span style={{ color: "#94A3B8" }}>—</span>}
                                                 </td>
                                                 <td data-label="Download" style={{textAlign:"right"}}>
+                                                    {canEditTc && <button type="button" className="edit-btn" style={{ marginRight: 8 }} onClick={() => openEdit(r)}>Edit</button>}
                                                     <button type="button" className="primary-btn" onClick={() => downloadRecord(r)}>⬇ Download</button>
                                                 </td>
                                             </tr>
@@ -417,6 +449,72 @@ export default function TransferCertificatePage() {
                         </section>
                     </div>
                     )}
+
+                {editingTc && (
+                    <OverlayDialog onClose={() => setEditingTc(null)} ariaLabel="Edit transfer certificate">
+                        <div className="student-modal" style={{ maxWidth: 560, maxHeight: "90vh", overflowY: "auto" }}>
+                            <div className="modal-header" style={{ position: "sticky", top: 0, background: "#fff", zIndex: 10 }}>
+                                <div>
+                                    <h2>Edit Transfer Certificate</h2>
+                                    <p>TC/{new Date(editingTc.issuedAt).getFullYear()}/{String(editingTc.id).padStart(4, "0")} — {editingTc.studentName}</p>
+                                </div>
+                                <button type="button" className="close-btn" onClick={() => setEditingTc(null)}>✕</button>
+                            </div>
+                            <form className="student-form" onSubmit={saveEdit} style={{ padding: 20 }}>
+                                <h3 className="tc-section-title">Fee details (as recorded at issue)</h3>
+                                <div className="tc-fee-grid">
+                                    <div><span>Total Demand</span><strong>{money(editingTc.totalDemand)}</strong></div>
+                                    <div><span>Concession</span><strong className="positive-balance">- {money(editingTc.concession)}</strong></div>
+                                    <div><span>Paid</span><strong className="positive-balance">- {money(editingTc.totalPaid)}</strong></div>
+                                    <div><span>Balance</span><strong className={Number(editingTc.balance) > 0 ? "negative-balance" : "positive-balance"}>{money(editingTc.balance)}</strong></div>
+                                </div>
+                                <div className="tc-overall-balance">
+                                    <span>Overall outstanding</span>
+                                    <strong className={Number(editingTc.balance) > 0 ? "negative-balance" : "positive-balance"}>{money(editingTc.balance)}</strong>
+                                </div>
+                                <div className="tc-fee-grid" style={{ marginTop: 10 }}>
+                                    <div><span>Collected at counter</span><strong>{money(editingTc.amountCollected)}</strong></div>
+                                    <div><span>Conceded / written off</span><strong className="negative-balance">{money(editingTc.remainingAmount)}</strong></div>
+                                </div>
+                                <div className="tc-amount-collect" style={{ marginTop: 12 }}>
+                                    <label>Amount collecting now (₹)
+                                        <input type="number" min="0" max={editingTc.balance || 0} step="1" value={editForm.amountCollected}
+                                            onChange={(e) => setEditForm({ ...editForm, amountCollected: e.target.value })} placeholder="0" />
+                                    </label>
+                                    <label>Payment mode
+                                        <select className="filter-select" value={editForm.paymentMode}
+                                            onChange={(e) => setEditForm({ ...editForm, paymentMode: e.target.value })}>
+                                            <option>Cash</option><option>UPI</option><option>Card</option><option>Bank Transfer</option><option>Cheque</option>
+                                        </select>
+                                    </label>
+                                    <div className="tc-amount-remaining">
+                                        Remaining after collection: <strong className={Number(editingTc.balance || 0) - Number(editForm.amountCollected || 0) > 0 ? "negative-balance" : "positive-balance"}>{money(Math.max(0, Number(editingTc.balance || 0) - Number(editForm.amountCollected || 0)))}</strong>
+                                    </div>
+                                </div>
+                                <p className="tc-hint" style={{ marginTop: 8 }}>Demand, concession, paid and balance are read-only. Editing the collected amount updates the linked fee receipt.</p>
+
+                                <h3 className="tc-section-title">Certificate details</h3>
+                                <div className="exam-form-grid">
+                                    <label>Reason for leaving
+                                        <input value={editForm.reason} onChange={(e) => setEditForm({ ...editForm, reason: e.target.value })} required />
+                                    </label>
+                                    <label>Date of leaving
+                                        <input type="date" value={editForm.leavingDate} onChange={(e) => setEditForm({ ...editForm, leavingDate: e.target.value })} required />
+                                    </label>
+                                    <label>Conduct / Character
+                                        <select value={editForm.conduct} onChange={(e) => setEditForm({ ...editForm, conduct: e.target.value })}>
+                                            <option>Good</option><option>Very Good</option><option>Excellent</option><option>Satisfactory</option>
+                                        </select>
+                                    </label>
+                                </div>
+                                <div className="modal-actions" style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
+                                    <button type="button" className="cancel-btn" onClick={() => setEditingTc(null)}>Cancel</button>
+                                    <button type="submit" className="primary-btn" disabled={savingEdit}>{savingEdit ? "Saving…" : "Save Changes"}</button>
+                                </div>
+                            </form>
+                        </div>
+                    </OverlayDialog>
+                )}
                 </div>
             </div>
         </div>

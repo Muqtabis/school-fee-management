@@ -9,6 +9,7 @@ router.use(requirePage("transfer_certificate"));
 
 // TC Records (declared before "/:id" to avoid route collisions)
 router.get("/records", tc.listTCs);
+router.put("/records/:id", requireRole("admin", "principal"), tc.updateTC);
 router.get("/records/:id/pdf", tc.downloadTC);
 router.get("/balance/:id", tc.getOverallBalance);
 router.post("/issue/:id", tc.issueTC);

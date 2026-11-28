@@ -124,15 +124,6 @@ router.post(
 );
 
 // =====================================================
-// STUDENT FEE ACCOUNT
-// ADMIN + STAFF
-// =====================================================
-router.get(
-    "/student/:studentId",
-    feeController.getStudentFeeAccount
-);
-
-// =====================================================
 // DYNAMIC FEE COMPONENTS (NEW)
 // =====================================================
 

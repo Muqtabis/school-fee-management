@@ -646,7 +646,7 @@ function PaymentForm({ onClose, editPayment, onEdit, isApprover }) {
                         <h2>{editPayment ? "Edit Payment" : "Collect Fee"}</h2>
                         <p>{editPayment ? `Correcting payment #${editPayment.id} (editable once)` : "Record itemized partial or full fee collections"}</p>
                     </div>
-                    <button type="button" className="close-btn" onClick={onClose}>✕</button>
+                    <button type="button" className="close-btn" onClick={onClose}>Close</button>
                 </div>
 
                 {editPayment && !isApprover ? (
@@ -687,7 +687,7 @@ function PaymentForm({ onClose, editPayment, onEdit, isApprover }) {
                         </div>
                         {editRequestSent && (
                             <div style={{ marginBottom: 12, padding: 12, borderRadius: 8, background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", fontSize: 13 }}>
-                                ✓ Edit request submitted. An admin/principal will review it.
+                                Edit request submitted. An admin/principal will review it.
                             </div>
                         )}
                         <div className="modal-actions" style={{ marginTop: 8 }}>
@@ -702,13 +702,13 @@ function PaymentForm({ onClose, editPayment, onEdit, isApprover }) {
                 {savedReceipts.length > 0 && (
                     <div style={{ margin: "14px 20px 0", padding: 14, borderRadius: 10, border: "1px solid #BBF7D0", background: "#F0FDF4" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-                            <strong style={{ color: "#15803D", fontSize: 14 }}>✓ Payment recorded</strong>
+                            <strong style={{ color: "#15803D", fontSize: 14 }}>Payment recorded</strong>
                             <span style={{ fontSize: 12, color: "#15803D" }}>{savedReceipts.length} receipt{savedReceipts.length > 1 ? "s" : ""} saved — you can print now or close.</span>
                         </div>
                         {savedReceipts.map((r, i) => (
                             <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderTop: "1px solid #D1FAE5", flexWrap: "wrap" }}>
                                 <span style={{ fontSize: 12, color: "#475569" }}>Receipt #{r.id} · {money(r.amount)} · {r.date} · {r.mode}</span>
-                                <button type="button" className="receipt-btn" onClick={() => printReceipt(r.id)}>🧾 Print Receipt</button>
+                                <button type="button" className="receipt-btn" onClick={() => printReceipt(r.id)}>Print Receipt</button>
                                 {onEdit && <button type="button" className="edit-btn" onClick={() => onEdit({ id: r.id, studentId: formData.studentId, className: formData.className, paymentMode: r.mode, paymentDate: r.date })}>Edit</button>}
                             </div>
                         ))}
@@ -802,7 +802,7 @@ function PaymentForm({ onClose, editPayment, onEdit, isApprover }) {
                                                 <div key={idx} style={{ padding: "8px", borderRadius: "6px", border: "1px solid", borderColor: item.due === 0 && item.total > 0 ? "#86EFAC" : item.isPrevious ? "#BFDBFE" : "#E2E8F0", backgroundColor: item.due === 0 && item.total > 0 ? "#F0FDF4" : item.isPrevious ? "#EFF6FF" : "#F8FAFC" }}>
                                                     <div style={{ fontSize: "10px", fontWeight: "700", color: item.isPrevious ? "#1E40AF" : "#64748B" }}>{item.name.toUpperCase()}</div>
                                                     <div style={{ fontSize: "12px", fontWeight: "700", marginTop: "2px" }}>{money(item.total)}</div>
-                                                    <div style={{ fontSize: "11px", color: item.due === 0 && item.total > 0 ? "#16A34A" : "#DC2626", marginTop: "2px" }}>{item.due === 0 && item.total > 0 ? "✓ Cleared" : `Due: ${money(item.due)}`}</div>
+                                                    <div style={{ fontSize: "11px", color: item.due === 0 && item.total > 0 ? "#16A34A" : "#DC2626", marginTop: "2px" }}>{item.due === 0 && item.total > 0 ? "Cleared" : `Due: ${money(item.due)}`}</div>
                                                 </div>
                                             ))}
                                         </div>
@@ -883,7 +883,7 @@ function PaymentForm({ onClose, editPayment, onEdit, isApprover }) {
                                                                 {Object.keys(duesMap).map((name) => <option key={name} value={name}>{name}</option>)}
                                                             </select>
                                                             <input type="number" value={entry.amount} onChange={(e) => updateEntry(entry.id, "amount", e.target.value)} style={{ width: "85px", padding: "2px 4px", fontSize: "12px", textAlign: "right" }} />
-                                                            <button type="button" onClick={() => removeEntry(entry.id)} style={{ border: "none", background: "transparent", color: "#DC2626", cursor: "pointer", fontSize: "14px", padding: "0 4px" }} title="Remove entry">✕</button>
+                                                            <button type="button" onClick={() => removeEntry(entry.id)} style={{ border: "none", background: "transparent", color: "#DC2626", cursor: "pointer", fontSize: "14px", padding: "0 4px" }} title="Remove entry">Remove</button>
                                                         </div>
                                                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px", fontSize: "11px" }}>
                                                             <select value={entry.mode} onChange={(e) => updateEntry(entry.id, "mode", e.target.value)} style={{ padding: "2px 4px" }}>
@@ -987,7 +987,7 @@ function PaymentForm({ onClose, editPayment, onEdit, isApprover }) {
 
                     {editRequestSent && (
                         <div style={{ marginTop: 12, padding: 12, borderRadius: 8, background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", fontSize: 13 }}>
-                            ✓ Edit request submitted. An admin/principal will review it — you can close this form.
+                            Edit request submitted. An admin/principal will review it — you can close this form.
                         </div>
                     )}
 

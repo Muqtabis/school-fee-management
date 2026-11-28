@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import PromptDialog from "../components/PromptDialog";
+import OverlayDialog from "../components/OverlayDialog";
+import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 
 
@@ -19,6 +21,9 @@ const ROLE_TAB_ORDER = [
 ];
 
 function UsersPage() {
+
+    const { user: currentUser } = useAuth();
+    const isAdmin = currentUser?.role === "admin";
 
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -45,6 +50,14 @@ function UsersPage() {
     const [grantableKeys, setGrantableKeys] = useState([]);
     const [accessLocked, setAccessLocked] = useState(false);
     const [accessLoading, setAccessLoading] = useState(false);
+
+    // Staff profile modal (student-profile style), admin-only edit.
+    const [profileTarget, setProfileTarget] = useState(null);
+    const [profile, setProfile] = useState(null);
+    const [profileForm, setProfileForm] = useState({});
+    const [profileEditing, setProfileEditing] = useState(false);
+    const [profileLoading, setProfileLoading] = useState(false);
+    const [profileSaving, setProfileSaving] = useState(false);
     const [savingAccess, setSavingAccess] = useState(false);
 
     const [form, setForm] = useState({
@@ -84,6 +97,47 @@ function UsersPage() {
         loadUsers();
         loadRegistry();
     }, []);
+
+    const openProfile = async (u) => {
+        setProfileTarget(u);
+        setProfile(null);
+        setProfileEditing(false);
+        setProfileLoading(true);
+        try {
+            const res = await api.get(`/users/${u.id}/profile`);
+            const p = res.data.user || {};
+            setProfile(p);
+            setProfileForm({
+                name: p.name || "", email: p.email || "", phone: p.phone || "",
+                parentName: p.parentName || "", maritalStatus: p.maritalStatus || "single",
+                spouseName: p.spouseName || "", dateOfJoining: p.dateOfJoining || "",
+                designation: p.designation || "", address: p.address || ""
+            });
+        } catch (error) {
+            toast(error.response?.data?.message || "Unable to load profile.");
+        } finally {
+            setProfileLoading(false);
+        }
+    };
+
+    const closeProfile = () => {
+        setProfileTarget(null); setProfile(null); setProfileEditing(false);
+    };
+
+    const saveProfile = async (e) => {
+        e.preventDefault();
+        try {
+            setProfileSaving(true);
+            const res = await api.put(`/users/${profileTarget.id}/profile`, profileForm);
+            toast(res.data?.message || "Profile updated.");
+            setProfileEditing(false);
+            await Promise.all([openProfile(profileTarget), loadUsers()]);
+        } catch (error) {
+            toast(error.response?.data?.message || "Unable to update profile.");
+        } finally {
+            setProfileSaving(false);
+        }
+    };
 
 
     // =====================================================
@@ -435,6 +489,9 @@ function UsersPage() {
                                             </td>
                                             <td data-label="Created">{user.createdAt}</td>
                                             <td data-label="">
+                                                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: isManageable(user.role) ? 6 : 0 }}>
+                                                    <button type="button" className="edit-btn" onClick={() => openProfile(user)}>View Profile</button>
+                                                </div>
                                                 {isManageable(user.role) ? (
                                                     <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                                                         <button type="button" onClick={() => openAccess(user)}>
@@ -581,6 +638,84 @@ function UsersPage() {
                 confirmLabel="Reset Password"
                 busy={pwBusy}
             />
+
+            {profileTarget && (
+                <OverlayDialog onClose={closeProfile} ariaLabel="Staff profile">
+                    <div className="student-modal" style={{ maxWidth: 640, maxHeight: "90vh", overflowY: "auto" }}>
+                        <div className="modal-header" style={{ position: "sticky", top: 0, background: "#fff", zIndex: 10 }}>
+                            <div>
+                                <h2>Staff Profile</h2>
+                                <p>{profileTarget.name} · {labelForRole(profileTarget.role)}</p>
+                            </div>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                {isAdmin && !profileEditing && profile && (
+                                    <button type="button" className="edit-btn" onClick={() => setProfileEditing(true)}>Edit Profile</button>
+                                )}
+                                <button type="button" className="close-btn" onClick={closeProfile}>✕</button>
+                            </div>
+                        </div>
+
+                        <div style={{ padding: 20 }}>
+                            {profileLoading ? (
+                                <p style={{ color: "#666" }}>Loading profile…</p>
+                            ) : !profile ? (
+                                <p style={{ color: "#666" }}>No profile found.</p>
+                            ) : profileEditing ? (
+                                <form onSubmit={saveProfile}>
+                                    <h3 style={{ fontSize: 15, color: "#334155", margin: "0 0 14px" }}>Basic Details</h3>
+                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                                        <label style={{ fontSize: 13 }}>Full Name<input value={profileForm.name} onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })} required /></label>
+                                        <label style={{ fontSize: 13 }}>Email<input type="email" value={profileForm.email} onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })} required /></label>
+                                        <label style={{ fontSize: 13 }}>Phone Number<input value={profileForm.phone} onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })} placeholder="10-digit mobile" /></label>
+                                        <label style={{ fontSize: 13 }}>Parent's Name<input value={profileForm.parentName} onChange={(e) => setProfileForm({ ...profileForm, parentName: e.target.value })} /></label>
+                                        <label style={{ fontSize: 13 }}>Marital Status
+                                            <select value={profileForm.maritalStatus} onChange={(e) => setProfileForm({ ...profileForm, maritalStatus: e.target.value })}>
+                                                <option value="single">Single</option><option value="married">Married</option>
+                                            </select>
+                                        </label>
+                                        <label style={{ fontSize: 13 }}>Spouse Name
+                                            <input value={profileForm.spouseName} disabled={profileForm.maritalStatus !== "married"}
+                                                onChange={(e) => setProfileForm({ ...profileForm, spouseName: e.target.value })} placeholder={profileForm.maritalStatus === "married" ? "Spouse name" : "Only if married"} />
+                                        </label>
+                                        <label style={{ fontSize: 13 }}>Date of Joining<input type="date" value={profileForm.dateOfJoining || ""} onChange={(e) => setProfileForm({ ...profileForm, dateOfJoining: e.target.value })} /></label>
+                                        <label style={{ fontSize: 13 }}>Designation<input value={profileForm.designation || ""} onChange={(e) => setProfileForm({ ...profileForm, designation: e.target.value })} /></label>
+                                    </div>
+                                    <label style={{ fontSize: 13, display: "block", marginTop: 12 }}>Address
+                                        <textarea rows={3} value={profileForm.address || ""} onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })} style={{ width: "100%" }} />
+                                    </label>
+                                    <div className="modal-actions" style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
+                                        <button type="button" className="cancel-btn" onClick={() => setProfileEditing(false)}>Cancel</button>
+                                        <button type="submit" className="primary-btn" disabled={profileSaving}>{profileSaving ? "Saving…" : "Save Profile"}</button>
+                                    </div>
+                                </form>
+                            ) : (
+                                <>
+                                    <h3 style={{ fontSize: 15, color: "#334155", margin: "0 0 12px" }}>Basic Details</h3>
+                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 24px", fontSize: 14 }}>
+                                        {[
+                                            ["Full Name", profile.name],
+                                            ["Email", profile.email],
+                                            ["Phone Number", profile.phone],
+                                            ["Parent's Name", profile.parentName],
+                                            ["Marital Status", profile.maritalStatus === "married" ? "Married" : "Single"],
+                                            ["Spouse Name", profile.maritalStatus === "married" ? profile.spouseName : "-"],
+                                            ["Date of Joining", profile.dateOfJoining],
+                                            ["Designation", profile.designation],
+                                            ["Address", profile.address]
+                                        ].map(([label, value]) => (
+                                            <div key={label} style={{ padding: "6px 0", borderBottom: "1px solid #F1F5F9" }}>
+                                                <span style={{ fontSize: 11, color: "#64748B", textTransform: "uppercase", fontWeight: 600 }}>{label}</span>
+                                                <div style={{ color: "#0F172A", marginTop: 2 }}>{value || "-"}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <p style={{ color: "#94A3B8", fontSize: 12, marginTop: 16 }}>Profile can be edited by an admin.</p>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </OverlayDialog>
+            )}
 
         </div>
     );

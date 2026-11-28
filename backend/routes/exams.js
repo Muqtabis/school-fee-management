@@ -83,9 +83,6 @@ router.delete(
     examController.deleteExamDefinition
 );
 
-// A student's structured result history across exams.
-router.get("/students/:studentId/results", examAdmin, resultController.getStudentResultHistory);
-
 // Create an exam (definition + one child exam per class).
 router.post("/", examAdmin, examController.createExam);
 

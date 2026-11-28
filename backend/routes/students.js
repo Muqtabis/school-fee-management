@@ -120,18 +120,6 @@ router.post(
     studentController.restoreStudent
 );
 
-// =====================================================
-// PERMANENT DELETE DISABLED
-// =====================================================
-router.delete(
-    "/:id",
-    requireAdmin,
-    (req, res) => {
-        return res.status(405).json({
-            success: false,
-            message: "Permanent student deletion is disabled. Use Archive instead."
-        });
-    }
-);
+
 
 module.exports = router;

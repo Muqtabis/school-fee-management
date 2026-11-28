@@ -12,20 +12,6 @@ const {
 
 
 // =====================================================
-// MY ASSIGNED CLASSES
-// TEACHER or ADMIN — must come before the admin gate.
-// Used by the Marks Entry page to know which classes
-// the logged-in teacher may work on.
-// =====================================================
-
-router.get(
-    "/my-classes",
-    requireTeacher,
-    teacherController.getMyClasses
-);
-
-
-// =====================================================
 // EVERYTHING BELOW IS TEACHER MANAGEMENT
 // Role gate: admin, or principal/manager. The page
 // permission is applied PER ROUTE because the subjects

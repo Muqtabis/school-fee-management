@@ -37,9 +37,8 @@ router.use(requirePage("class_management"));
 // CLASSES MANAGEMENT ROUTES
 // =====================================================
 
-// CREATE CLASS (Supports both standard and /add paths)
+// CREATE CLASS
 router.post("/", classController.createClass);
-router.post("/add", classController.createClass);
 
 // UPDATE CLASS
 router.put("/:id", classController.updateClass);

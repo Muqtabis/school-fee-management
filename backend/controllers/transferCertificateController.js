@@ -147,6 +147,91 @@ exports.listTCs = (req, res) => {
     });
 };
 
+// Edit an issued TC: certificate details + the amount collected at the
+// counter. The payment/receipt is corrected too so fee totals stay in sync.
+exports.updateTC = (req, res) => {
+    const id = Number(req.params.id);
+    const reason = String(req.body?.reason || "").trim();
+    const leavingDate = String(req.body?.leavingDate || "").trim();
+    const conduct = String(req.body?.conduct || "").trim();
+    if (!id) return res.status(400).json({ success: false, message: "Invalid TC ID." });
+    if (!reason) return res.status(400).json({ success: false, message: "Reason for leaving is required." });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(leavingDate)) return res.status(400).json({ success: false, message: "A valid leaving date is required." });
+    const CONDUCTS = ["Good", "Very Good", "Excellent", "Satisfactory"];
+    if (!CONDUCTS.includes(conduct)) return res.status(400).json({ success: false, message: "Select a valid conduct." });
+
+    const rawCollected = req.body?.amountCollected;
+    const hasCollected = rawCollected !== undefined && rawCollected !== null && String(rawCollected).trim() !== "";
+    const paymentMode = String(req.body?.paymentMode || "Cash").trim() || "Cash";
+    const MODES = ["Cash", "UPI", "Card", "Bank Transfer", "Cheque"];
+    if (!MODES.includes(paymentMode)) return res.status(400).json({ success: false, message: "Select a valid payment mode." });
+
+    db.get(`SELECT * FROM transfer_certificates WHERE id = ?`, [id], (gErr, rec) => {
+        if (gErr) return res.status(500).json({ success: false, message: "Database error." });
+        if (!rec) return res.status(404).json({ success: false, message: "TC record not found." });
+
+        const balance = Number(rec.balance || 0);
+        const collected = hasCollected ? Number(rawCollected) : Number(rec.amountCollected || 0);
+        if (!Number.isFinite(collected) || collected < 0 || collected > balance) {
+            return res.status(400).json({ success: false, message: `Amount must be between 0 and ${balance}.` });
+        }
+        const remaining = Math.max(0, balance - collected);
+
+        const finish = (paymentId) => {
+            db.run(
+                `UPDATE transfer_certificates
+                 SET reason = ?, leavingDate = ?, conduct = ?, amountCollected = ?, remainingAmount = ?, paymentId = ?
+                 WHERE id = ?`,
+                [reason, leavingDate, conduct, collected, remaining, paymentId || rec.paymentId || null, id],
+                function (err) {
+                    if (err) return res.status(500).json({ success: false, message: "Unable to update TC." });
+                    logAudit({ userId: req.user.id, action: "TC_UPDATED", entityType: "transfer_certificate", entityId: id,
+                        details: { reason, leavingDate, conduct, collected, remaining, paymentMode } }).catch(() => {});
+                    res.json({ success: true, paymentId: paymentId || rec.paymentId || null, message: "TC details updated." });
+                }
+            );
+        };
+
+        if (rec.paymentId) {
+            // Correct the linked payment and its itemised line so reports and
+            // the shared receipt printer show the edited amount/mode.
+            db.run(`UPDATE payments SET amount = ?, paymentMode = ? WHERE id = ?`,
+                [collected, paymentMode, rec.paymentId], () => {
+                    db.run(`UPDATE payment_line_items SET amount = ?, mode = ? WHERE paymentId = ?`,
+                        [collected, paymentMode, rec.paymentId], () => finish(rec.paymentId));
+                });
+            return;
+        }
+
+        if (collected > 0) {
+            // No payment existed (earlier zero collection) — create one now.
+            db.get(`
+                SELECT sfa.id AS feeAccountId FROM student_fee_accounts sfa
+                INNER JOIN student_enrollments se ON se.id = sfa.enrollmentId
+                WHERE se.studentId = ? AND se.academicYearId = (
+                    SELECT id FROM academic_years WHERE status='active' ORDER BY id DESC LIMIT 1
+                ) LIMIT 1`, [rec.studentId], (aErr, acc) => {
+                    if (aErr) return res.status(500).json({ success: false, message: "Database error." });
+                    if (!acc) return finish(null);
+                    const paymentDate = new Date().toISOString().slice(0, 10);
+                    db.run(`INSERT INTO payments (studentId, feeAccountId, paymentDate, amount, paymentMode, remarks, status)
+                            VALUES (?, ?, ?, ?, ?, ?, 'completed')`,
+                        [rec.studentId, acc.feeAccountId, paymentDate, collected, paymentMode, "Fee collected at TC counter"],
+                        function (pErr) {
+                            if (pErr) return res.status(500).json({ success: false, message: "Unable to record payment." });
+                            const pid = this.lastID;
+                            db.run(`INSERT INTO payment_line_items (paymentId, componentName, amount, mode, paidOn, reference, remark)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                                [pid, "Fee Collection (TC)", collected, paymentMode, paymentDate, "", "Collected at TC counter"],
+                                () => finish(pid));
+                        });
+                });
+            return;
+        }
+        finish(null);
+    });
+};
+
 // Download a TC PDF from a stored record (regenerates from snapshot).
 exports.downloadTC = (req, res) => {
     const tcId = Number(req.params.id);

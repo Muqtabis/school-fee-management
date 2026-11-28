@@ -26,6 +26,12 @@ router.put(
     userController.changeOwnPassword
 );
 
+// My Profile — readable by every logged-in user.
+router.get(
+    "/me/profile",
+    userController.getMyProfile
+);
+
 
 // =====================================================
 // ALL REMAINING USER ROUTES
@@ -84,6 +90,17 @@ router.delete(
 // Same gate as above (admin, or principal/manager granted
 // the "users" page).
 // =====================================================
+
+// Staff profile (like the student profile) — admin only.
+router.get(
+    "/:id/profile",
+    userController.getUserProfile
+);
+
+router.put(
+    "/:id/profile",
+    userController.updateUserProfile
+);
 
 // Master list of assignable pages
 router.get(

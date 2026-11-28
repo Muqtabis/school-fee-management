@@ -161,17 +161,6 @@ router.post(
 
 
 // =====================================================
-// EDIT INCOME
-// ADMIN + STAFF
-// =====================================================
-
-router.put(
-    "/:id",
-    incomeController.updateIncome
-);
-
-
-// =====================================================
 // REVERSE INCOME
 // ADMIN + PRINCIPAL reverse directly; other staff submit
 // a request for approval.
@@ -183,28 +172,7 @@ router.post(
 );
 
 
-// =====================================================
-// DELETE DISABLED
-// =====================================================
 
-router.delete(
-    "/:id",
-    (
-        req,
-        res
-    ) => {
-
-        return res.status(405).json({
-
-            success: false,
-
-            message:
-                "Incomes cannot be permanently deleted. Use reversal instead."
-
-        });
-
-    }
-);
 
 
 module.exports = router;

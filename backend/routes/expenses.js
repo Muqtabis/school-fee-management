@@ -161,17 +161,6 @@ router.post(
 
 
 // =====================================================
-// EDIT EXPENSE
-// ADMIN + STAFF
-// =====================================================
-
-router.put(
-    "/:id",
-    expenseController.updateExpense
-);
-
-
-// =====================================================
 // REVERSE EXPENSE
 // ADMIN + PRINCIPAL reverse directly; other staff submit
 // a request for approval.
@@ -180,30 +169,6 @@ router.put(
 router.post(
     "/:id/reverse",
     financeReverse.reverseExpense
-);
-
-
-// =====================================================
-// DELETE DISABLED
-// =====================================================
-
-router.delete(
-    "/:id",
-    (
-        req,
-        res
-    ) => {
-
-        return res.status(405).json({
-
-            success: false,
-
-            message:
-                "Expenses cannot be permanently deleted. Use reversal instead."
-
-        });
-
-    }
 );
 
 

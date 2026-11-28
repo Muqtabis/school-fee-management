@@ -28,6 +28,7 @@ const PAGE_TITLES = {
   "/timetable": "Timetable",
   "/notifications": "Notifications",
   "/settings": "Settings",
+  "/my-profile": "My Profile",
   "/users": "User Management",
 };
 

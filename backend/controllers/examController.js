@@ -564,10 +564,21 @@ exports.getExamDefinition = async (req, res) => {
             return res.status(404).json({ success: false, message: "Exam not found." });
         }
 
+        // A parent shown in the list may group several definitions with the
+        // same name/type/year. Opening it must show ALL their class exams,
+        // not only the ones under the first definition id.
+        const groupDefs = await allQuery(
+            `SELECT id FROM exam_definitions
+             WHERE name = ? AND COALESCE(examType, '') = COALESCE(?, '')
+               AND COALESCE(academicYearId, 0) = COALESCE(?, 0)`,
+            [defs[0].name, defs[0].examType, defs[0].academicYearId]
+        );
+        const groupIds = groupDefs.map((g) => g.id);
         const children = await allQuery(
             `SELECT id, className, status, lockedAt, publishedAt FROM exams
-             WHERE examDefinitionId = ? ORDER BY className`,
-            [definitionId]
+             WHERE examDefinitionId IN (${groupIds.map(() => "?").join(",")})
+             ORDER BY className`,
+            groupIds
         );
 
         // Marks completion per child class.
